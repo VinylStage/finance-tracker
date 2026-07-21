@@ -97,6 +97,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_interest_log_debt ON debt_interest_log(debt_id);
   CREATE INDEX IF NOT EXISTS idx_interest_log_date ON debt_interest_log(log_date);
 
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS savings_products (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
