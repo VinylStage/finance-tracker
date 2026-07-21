@@ -1,0 +1,30 @@
+name: 기능 요청
+description: 새 기능 또는 개선 제안
+labels: ["enhancement", "status:planning"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 해결하려는 문제
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: 제안 솔루션
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 인수 기준 (Acceptance Criteria)
+      placeholder: "- [ ] AC1\n- [ ] AC2"
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: 대상 Phase
+      options: ["Phase 3", "Phase 4", "Phase 5", "Phase 6", "Maintenance"]
+    validations:
+      required: true

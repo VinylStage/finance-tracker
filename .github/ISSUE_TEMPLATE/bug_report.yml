@@ -1,0 +1,33 @@
+name: 버그 리포트
+description: 버그 또는 오동작 신고
+labels: ["bug", "status:triage"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 문제 설명
+      placeholder: 어떤 문제가 발생했나요?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 방법
+      placeholder: "1. ... 2. ... 3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 심각도
+      options: ["Critical", "High", "Medium", "Low"]
+    validations:
+      required: true

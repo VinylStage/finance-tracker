@@ -1,0 +1,17 @@
+name: 기술 작업
+description: 의존성 업데이트, 리팩토링, 기술 부채
+labels: ["chore", "status:planning"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 작업 내용
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 완료 기준
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
