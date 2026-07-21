@@ -1,55 +1,55 @@
-# Roadmap
+# 개발 로드맵
 
-## Phase 0 — Foundation ✅
-- [x] Express + better-sqlite3 scaffold
-- [x] DB schema (7 tables)
-- [x] tracker_v5.xlsx → SQLite migration (219 records)
-- [x] REST API: transactions, categories, payment-methods CRUD
-- [x] Category auto-suggest endpoint
+## Phase 0 — 기반 구축 ✅
+- [x] Express + better-sqlite3 프로젝트 스캐폴딩
+- [x] DB 스키마 생성 (7개 테이블)
+- [x] tracker_v5.xlsx → SQLite 마이그레이션 (219건)
+- [x] REST API: 거래·카테고리·결제수단 CRUD
+- [x] 카테고리 자동제안 엔드포인트
 
-**Done when:** 219 records migrated, API returns correct totals
+**완료 기준:** 219건 이관 완료, API 합계가 기존 엑셀과 일치
 
-## Phase 1 — Core UI ✅
-- [x] React + Vite client setup
-- [x] Dashboard: income/expense/available cash cards, budget vs actual
-- [x] Transactions: list + quick-entry form
-- [x] Category auto-suggest on merchant blur
-- [x] Dark theme (Tailwind gray-900/800)
+## Phase 1 — 핵심 UI ✅
+- [x] React + Vite 클라이언트 설정
+- [x] 대시보드: 수입/지출/가용현금 카드, 예산 대비 실적
+- [x] 거래 내역: 리스트 + 빠른 입력 폼
+- [x] 가맹점 blur 시 카테고리 자동제안
+- [x] 다크 테마 (Tailwind gray-900/800)
 
-**Done when:** New transaction saves and dashboard updates immediately
+**완료 기준:** 신규 거래 저장 후 대시보드 즉시 갱신
 
-## Phase 2 — Installments · Revolving · Debts
-- [ ] Installments registration form + monthly billing aggregation
-- [ ] Revolving ledger page (monthly carry-forward tracking)
-- [ ] Debt status page (manual entries + auto aggregation)
-- [ ] Double-counting validation (design doc §5)
+## Phase 2 — 할부·리볼빙·부채
+- [ ] 할부 등록 화면 + 이번달 청구 자동 집계
+- [ ] 리볼빙 원장 화면 (월별 이월잔액 추적)
+- [ ] 부채 현황 화면 (수동 + 자동 집계)
+- [ ] 이중계산 방지 로직 검증 (설계문서 §5)
 
-**Done when:** Installment/revolving entries are correctly isolated from expense totals
+**완료 기준:** 할부/리볼빙 항목이 소비 통계와 정확히 분리됨
 
-## Phase 3 — Category Auto-Suggest
-- [ ] Auto-suggest polished in transaction form (visual indicator)
-- [ ] Bulk re-categorization tool
-- [ ] Merchant alias management
+## Phase 3 — 카테고리 자동제안 고도화
+- [ ] 자동제안 UX 개선 (로딩 표시, 신뢰도 배지)
+- [ ] 최근 가맹점 10건 자동완성
+- [ ] 가맹점 별칭 관리
 
-**Done when:** Returning merchant fills category in <100ms without user action
+**완료 기준:** 동일 가맹점 재입력 시 카테고리 자동 선택, 100ms 이내
 
-## Phase 4 — Cash Flow Graphs
-- [ ] Daily/weekly/monthly/yearly aggregation API (`/api/cashflow`)
-- [ ] Recharts LineChart (balance trend)
-- [ ] Category expense bar chart with period comparison
-- [ ] React Query for real-time invalidation
+## Phase 4 — 현금흐름·지출 그래프
+- [ ] 일/주/월/연 단위 집계 API (`/api/cashflow`)
+- [ ] Recharts LineChart (잔액 추이)
+- [ ] 카테고리별 지출 막대 그래프 + 기간 비교
+- [ ] React Query invalidate로 실시간 갱신
 
-**Done when:** Graph updates without page refresh after any transaction change
+**완료 기준:** 거래 입력 직후 그래프 새로고침 없이 즉시 반영
 
-## Phase 5 — Simulator · Savings
-- [ ] Balance simulator (N-month projection with assumption inputs)
-- [ ] Savings/insurance product ledger + maturity handling
-- [ ] Maturity payout: principal recovery + interest-only income split
+## Phase 5 — 시뮬레이터·저축
+- [ ] 예상잔액 시뮬레이터 (가정값 → N개월 후 잔액)
+- [ ] 적금/저축성보험 원장 + 만기 처리
+- [ ] 만기 지급: 원금 회수 + 이자만 수입으로 분리
 
-**Done when:** Simulator results match dashboard balance logic
+**완료 기준:** 시뮬레이터 결과가 대시보드 잔액 계산 로직과 일치
 
-## Phase 6 — Polish
-- [ ] CSV / JSON export
-- [ ] Settings page (categories, payment methods, budget config)
-- [ ] Mobile browser responsive check
-- [ ] Performance test (5,000 records, all queries < 1s)
+## Phase 6 — 마무리
+- [ ] CSV/JSON 내보내기
+- [ ] 설정 화면 (카테고리·결제수단·예산 관리)
+- [ ] 모바일 브라우저 반응형 점검
+- [ ] 성능 테스트 (5,000건, 모든 조회 1초 이내)
