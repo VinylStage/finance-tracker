@@ -29,6 +29,221 @@ router.get('/', (req, res) => {
   }
 });
 
+// --- 기간 비교 (period-comparison) 헬퍼 ---
+const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
+const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
+
+function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); } // month: 1-indexed
+function fmtYMD(y, m, d) { return `${y}-${pad2(m)}-${pad2(d)}`; }
+function fmtDateObj(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
+function rangeTotalsByDate(from, to) {
+  const rows = db.prepare(`
+    SELECT t.date AS date,
+      COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+      COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+    FROM transactions t
+    JOIN categories c ON t.category_id = c.id
+    WHERE t.date >= ? AND t.date <= ?
+    GROUP BY t.date
+  `).all(from, to);
+  return new Map(rows.map(r => [r.date, r]));
+}
+
+function totalsForRange(from, to) {
+  return db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+      COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+    FROM transactions t
+    JOIN categories c ON t.category_id = c.id
+    WHERE t.date >= ? AND t.date <= ?
+  `).get(from, to);
+}
+
+function pctDelta(a, b) { return b === 0 ? null : Math.round(((a - b) / b) * 100); }
+
+function buildComparisonSummary(curTotals, prevTotals) {
+  const curNet = curTotals.income - curTotals.expense;
+  const prevNet = prevTotals.income - prevTotals.expense;
+  return {
+    currentIncome: curTotals.income, previousIncome: prevTotals.income,
+    incomeDiff: curTotals.income - prevTotals.income, incomeDiffPercent: pctDelta(curTotals.income, prevTotals.income),
+    currentExpense: curTotals.expense, previousExpense: prevTotals.expense,
+    expenseDiff: curTotals.expense - prevTotals.expense, expenseDiffPercent: pctDelta(curTotals.expense, prevTotals.expense),
+    currentNet: curNet, previousNet: prevNet,
+    netDiff: curNet - prevNet, netDiffPercent: pctDelta(curNet, prevNet),
+  };
+}
+
+function periodComparisonDaily(anchor) {
+  const y = anchor.getFullYear(), m = anchor.getMonth() + 1;
+  const prevAnchor = new Date(y, m - 2, 1);
+  const py = prevAnchor.getFullYear(), pm = prevAnchor.getMonth() + 1;
+  const curDays = daysInMonth(y, m);
+  const prevDays = daysInMonth(py, pm);
+  const curFrom = fmtYMD(y, m, 1), curTo = fmtYMD(y, m, curDays);
+  const prevFrom = fmtYMD(py, pm, 1), prevTo = fmtYMD(py, pm, prevDays);
+  const curMap = rangeTotalsByDate(curFrom, curTo);
+  const prevMap = rangeTotalsByDate(prevFrom, prevTo);
+
+  const maxDays = Math.max(curDays, prevDays);
+  const data = [];
+  for (let d = 1; d <= maxDays; d++) {
+    const cDate = d <= curDays ? fmtYMD(y, m, d) : null;
+    const pDate = d <= prevDays ? fmtYMD(py, pm, d) : null;
+    const c = cDate ? (curMap.get(cDate) || { income: 0, expense: 0 }) : null;
+    const p = pDate ? (prevMap.get(pDate) || { income: 0, expense: 0 }) : null;
+    data.push({
+      label: String(d), currentDate: cDate, previousDate: pDate,
+      currentIncome: c ? c.income : null, currentExpense: c ? c.expense : null,
+      previousIncome: p ? p.income : null, previousExpense: p ? p.expense : null,
+    });
+  }
+  return {
+    currentLabel: `${y}-${pad2(m)}`, previousLabel: `${py}-${pad2(pm)}`,
+    currentRange: [curFrom, curTo], previousRange: [prevFrom, prevTo], data,
+  };
+}
+
+function periodComparisonWeekly(anchor) {
+  const curMonday = mondayOf(anchor);
+  const prevMonday = new Date(curMonday); prevMonday.setDate(curMonday.getDate() - 7);
+  const curSunday = new Date(curMonday); curSunday.setDate(curMonday.getDate() + 6);
+  const prevSunday = new Date(prevMonday); prevSunday.setDate(prevMonday.getDate() + 6);
+
+  const curFrom = fmtDateObj(curMonday), curTo = fmtDateObj(curSunday);
+  const prevFrom = fmtDateObj(prevMonday), prevTo = fmtDateObj(prevSunday);
+  const curMap = rangeTotalsByDate(curFrom, curTo);
+  const prevMap = rangeTotalsByDate(prevFrom, prevTo);
+
+  const data = WEEKDAY_LABELS.map((label, i) => {
+    const cDate = new Date(curMonday); cDate.setDate(curMonday.getDate() + i);
+    const pDate = new Date(prevMonday); pDate.setDate(prevMonday.getDate() + i);
+    const cKey = fmtDateObj(cDate), pKey = fmtDateObj(pDate);
+    const c = curMap.get(cKey) || { income: 0, expense: 0 };
+    const p = prevMap.get(pKey) || { income: 0, expense: 0 };
+    return {
+      label, currentDate: cKey, previousDate: pKey,
+      currentIncome: c.income, currentExpense: c.expense,
+      previousIncome: p.income, previousExpense: p.expense,
+    };
+  });
+
+  return {
+    currentLabel: `${curFrom}~${curTo}`, previousLabel: `${prevFrom}~${prevTo}`,
+    currentRange: [curFrom, curTo], previousRange: [prevFrom, prevTo], data,
+  };
+}
+
+function periodComparisonMonthly(anchor) {
+  const y = anchor.getFullYear();
+  const py = y - 1;
+  const curFrom = `${y}-01-01`, curTo = `${y}-12-31`;
+  const prevFrom = `${py}-01-01`, prevTo = `${py}-12-31`;
+
+  const monthRowsFor = (year) => {
+    const rows = db.prepare(`
+      SELECT strftime('%m', t.date) AS m,
+        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE strftime('%Y', t.date) = ?
+      GROUP BY m
+    `).all(String(year));
+    return new Map(rows.map(r => [r.m, r]));
+  };
+  const curMap = monthRowsFor(y);
+  const prevMap = monthRowsFor(py);
+
+  const data = MONTH_LABELS.map((label, i) => {
+    const mm = pad2(i + 1);
+    const c = curMap.get(mm) || { income: 0, expense: 0 };
+    const p = prevMap.get(mm) || { income: 0, expense: 0 };
+    return {
+      label, currentMonth: `${y}-${mm}`, previousMonth: `${py}-${mm}`,
+      currentIncome: c.income, currentExpense: c.expense,
+      previousIncome: p.income, previousExpense: p.expense,
+    };
+  });
+
+  return {
+    currentLabel: String(y), previousLabel: String(py),
+    currentRange: [curFrom, curTo], previousRange: [prevFrom, prevTo], data,
+  };
+}
+
+function periodComparisonYearly(anchor) {
+  const y = anchor.getFullYear();
+  const curYears = Array.from({ length: 5 }, (_, i) => y - 4 + i);
+  const prevYears = curYears.map(yr => yr - 5);
+
+  const yearRowsFor = (years) => {
+    const from = `${years[0]}-01-01`, to = `${years[4]}-12-31`;
+    const rows = db.prepare(`
+      SELECT strftime('%Y', t.date) AS yr,
+        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE t.date >= ? AND t.date <= ?
+      GROUP BY yr
+    `).all(from, to);
+    return new Map(rows.map(r => [r.yr, r]));
+  };
+  const curMap = yearRowsFor(curYears);
+  const prevMap = yearRowsFor(prevYears);
+
+  const data = curYears.map((yr, i) => {
+    const pyr = prevYears[i];
+    const c = curMap.get(String(yr)) || { income: 0, expense: 0 };
+    const p = prevMap.get(String(pyr)) || { income: 0, expense: 0 };
+    return {
+      label: `${i + 1}년차`, currentYear: yr, previousYear: pyr,
+      currentIncome: c.income, currentExpense: c.expense,
+      previousIncome: p.income, previousExpense: p.expense,
+    };
+  });
+
+  return {
+    currentLabel: `${curYears[0]}~${curYears[4]}`, previousLabel: `${prevYears[0]}~${prevYears[4]}`,
+    currentRange: [`${curYears[0]}-01-01`, `${curYears[4]}-12-31`],
+    previousRange: [`${prevYears[0]}-01-01`, `${prevYears[4]}-12-31`], data,
+  };
+}
+
+// GET /api/transactions/period-comparison?period=daily|weekly|monthly|yearly&date=YYYY-MM-DD
+// 등록 순서 중요: 아래 `/:id` 라우트보다 반드시 앞에 있어야 함 (동일 segment 매칭 충돌)
+router.get('/period-comparison', (req, res) => {
+  try {
+    const { period = 'monthly', date } = req.query;
+    const anchor = date ? new Date(date) : new Date();
+    if (isNaN(anchor.getTime())) return res.status(400).json({ error: 'invalid date' });
+
+    let result;
+    if (period === 'daily') result = periodComparisonDaily(anchor);
+    else if (period === 'weekly') result = periodComparisonWeekly(anchor);
+    else if (period === 'yearly') result = periodComparisonYearly(anchor);
+    else if (period === 'monthly') result = periodComparisonMonthly(anchor);
+    else return res.status(400).json({ error: 'period must be one of daily|weekly|monthly|yearly' });
+
+    const curTotals = totalsForRange(...result.currentRange);
+    const prevTotals = totalsForRange(...result.previousRange);
+
+    res.json({
+      period,
+      anchorDate: fmtDateObj(anchor),
+      currentLabel: result.currentLabel,
+      previousLabel: result.previousLabel,
+      data: result.data,
+      summary: buildComparisonSummary(curTotals, prevTotals),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/transactions/:id
 router.get('/:id', (req, res) => {
   const row = db.prepare(`
