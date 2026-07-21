@@ -81,12 +81,57 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function lastNDates(n) {
+  const arr = [];
+  const today = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    arr.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`);
+  }
+  return arr;
+}
+
+function mondayOf(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function lastNWeeks(n) {
+  const weeks = [];
+  const thisMonday = mondayOf(new Date());
+  for (let i = n - 1; i >= 0; i--) {
+    const start = new Date(thisMonday);
+    start.setDate(thisMonday.getDate() - i * 7);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    const fmtDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    weeks.push({ week: fmtDate(start), start: fmtDate(start), end: fmtDate(end) });
+  }
+  return weeks;
+}
+
+function lastNMonths(n) {
+  const arr = [];
+  const today = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    arr.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
+  }
+  return arr;
+}
+
 // GET /api/transactions/summary/dashboard — 대시보드 집계
 router.get('/summary/dashboard', (req, res) => {
   try {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-    
+
     const income = db.prepare(`
       SELECT COALESCE(SUM(t.amount),0) AS total
       FROM transactions t
@@ -123,10 +168,81 @@ router.get('/summary/dashboard', (req, res) => {
       GROUP BY c.id
     `).all(thisMonth);
 
+    // 카테고리별 지출 분석 (도넛 차트용)
+    const categoryBreakdown = db.prepare(`
+      SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total, c.monthly_budget AS budget
+      FROM categories c
+      LEFT JOIN transactions t ON t.category_id = c.id AND strftime('%Y-%m', t.date) = ?
+        AND t.payment_style NOT IN ('할부','리볼빙')
+      WHERE c.is_active = 1 AND c.major_type != '수입'
+      GROUP BY c.id
+      HAVING total > 0
+      ORDER BY total DESC
+    `).all(thisMonth);
+
+    // 최근 30일 일별 수입/지출
+    const dailyRows = db.prepare(`
+      SELECT t.date AS date,
+        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE t.date >= date('now', '-29 days')
+      GROUP BY t.date
+    `).all();
+    const dailyMap = Object.fromEntries(dailyRows.map(r => [r.date, r]));
+    const dailyTrend = lastNDates(30).map(date => ({
+      date,
+      income: dailyMap[date]?.income || 0,
+      expense: dailyMap[date]?.expense || 0,
+    }));
+
+    // 최근 12주 주별 수입/지출
+    const rangeStmt = db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE t.date >= ? AND t.date <= ?
+    `);
+    const weeklyTrend = lastNWeeks(12).map(w => {
+      const r = rangeStmt.get(w.start, w.end);
+      return { week: w.week, income: r.income, expense: r.expense };
+    });
+
+    // 최근 12개월 월별 수입/지출
+    const monthStmt = db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE strftime('%Y-%m', t.date) = ?
+    `);
+    const monthlyTrend = lastNMonths(12).map(month => {
+      const r = monthStmt.get(month);
+      return { month, income: r.income, expense: r.expense };
+    });
+
+    // 이번 달 상위 5 가맹점
+    const topMerchants = db.prepare(`
+      SELECT t.merchant AS merchant, SUM(t.amount) AS total
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE strftime('%Y-%m', t.date) = ? AND c.major_type != '수입'
+        AND t.payment_style NOT IN ('할부','리볼빙')
+        AND t.merchant IS NOT NULL AND t.merchant != ''
+      GROUP BY t.merchant
+      ORDER BY total DESC
+      LIMIT 5
+    `).all(thisMonth);
+
     res.json({
       thisMonth, income, expense,
       available: income - expense - installmentsDue - revolvingPaid,
       installmentsDue, revolvingPaid, budgets,
+      categoryBreakdown, dailyTrend, weeklyTrend, monthlyTrend, topMerchants,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });

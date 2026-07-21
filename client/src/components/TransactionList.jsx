@@ -13,13 +13,13 @@ function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
 }
 
-export default function TransactionList({ items, onEdit, onDelete }) {
+export default function TransactionList({ items, onEdit, onDelete, bare = false }) {
   if (!items.length) {
-    return <div className="text-slate-500 text-center py-10">거래 내역이 없습니다.</div>;
+    return <div className="text-slate-500 text-center py-10 text-sm">거래 내역이 없습니다.</div>;
   }
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
+    <div className={bare ? 'overflow-hidden' : 'bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden'}>
       <table className="w-full text-sm">
         <thead className="bg-slate-50">
           <tr className="border-b border-slate-200">

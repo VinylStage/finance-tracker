@@ -82,6 +82,21 @@ db.exec(`
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS debt_interest_log (
+    id INTEGER PRIMARY KEY,
+    debt_id INTEGER NOT NULL REFERENCES debts(id),
+    log_date TEXT NOT NULL,
+    rate_at_time REAL NOT NULL,
+    interest_amount INTEGER NOT NULL,
+    balance_before INTEGER NOT NULL,
+    balance_after INTEGER NOT NULL,
+    memo TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_interest_log_debt ON debt_interest_log(debt_id);
+  CREATE INDEX IF NOT EXISTS idx_interest_log_date ON debt_interest_log(log_date);
+
   CREATE TABLE IF NOT EXISTS savings_products (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -92,5 +107,11 @@ db.exec(`
     status TEXT DEFAULT '진행중'
   );
 `);
+
+// --- migrations: additive column changes on pre-existing tables ---
+const debtsColumns = db.prepare(`PRAGMA table_info(debts)`).all().map(c => c.name);
+if (!debtsColumns.includes('type')) {
+  db.exec(`ALTER TABLE debts ADD COLUMN type TEXT DEFAULT '일반'`);
+}
 
 module.exports = db;
