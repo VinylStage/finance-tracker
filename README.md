@@ -1,73 +1,73 @@
 # Finance Tracker
 
-Personal finance tracker web app — replaces Google Sheets / Excel with a local web app featuring real-time graphs and smart category suggestions.
+구글 시트 / 엑셀 대체용 로컬 가계부 웹앱. 실시간 차트와 스마트 카테고리 자동제안 기능 포함.
 
-## Tech Stack
+## 기술 스택
 
-| Layer | Choice |
+| 영역 | 선택 |
 |---|---|
-| Runtime | Node.js |
-| Backend | Express |
-| Database | SQLite (better-sqlite3) |
-| Frontend | React + Vite |
-| Charts | Recharts |
-| Styling | Tailwind CSS |
+| 런타임 | Node.js |
+| 백엔드 | Express |
+| 데이터베이스 | SQLite (better-sqlite3) |
+| 프론트엔드 | React + Vite |
+| 차트 | Recharts |
+| 스타일 | Tailwind CSS |
 
-## Quick Start
+## 빠른 시작
 
 ```bash
-# 1. Install backend deps
+# 1. 백엔드 의존성 설치
 npm install
 
-# 2. Install frontend deps
+# 2. 프론트엔드 의존성 설치
 cd client && npm install && cd ..
 
-# 3. Run migration (first time only — imports tracker_v5.xlsx)
+# 3. 데이터 마이그레이션 (최초 1회 — tracker_v5.xlsx 임포트)
 npm run db:migrate
 
-# 4. Build frontend
+# 4. 프론트엔드 빌드
 npm run build
 
-# 5. Start server
+# 5. 서버 시작
 npm start
 # → http://localhost:3000
 ```
 
-## Development
+## 개발 모드
 
 ```bash
-# Backend (watch mode)
+# 백엔드 (watch 모드)
 npm run dev
 
-# Frontend (Vite HMR)
+# 프론트엔드 (Vite HMR)
 cd client && npm run dev
-# → http://localhost:5173  (proxies /api → localhost:3000)
+# → http://localhost:5173  (/api 요청은 localhost:3000으로 프록시)
 ```
 
-## Project Structure
+## 프로젝트 구조
 
 ```
 finace-tracker/
 ├── src/
-│   ├── server.js           # Express entry point
-│   ├── db/init.js          # SQLite schema + connection
-│   └── routes/             # REST API routes
+│   ├── server.js           # Express 진입점
+│   ├── db/init.js          # SQLite 스키마 + 연결
+│   └── routes/             # REST API 라우터
 ├── scripts/
-│   └── migrate-xlsx.js     # One-time data migration
-├── client/                 # React + Vite frontend
+│   └── migrate-xlsx.js     # 1회성 데이터 마이그레이션
+├── client/                 # React + Vite 프론트엔드
 │   └── src/
-│       ├── pages/          # Dashboard, Transactions
-│       └── components/     # Forms, Lists
-├── data/                   # SQLite DB (gitignored)
-├── ref/                    # Source xlsx (gitignored)
-└── docs/                   # Engineering docs
+│       ├── pages/          # Dashboard, Transactions 등
+│       └── components/     # 폼, 리스트 컴포넌트
+├── data/                   # SQLite DB 파일 (git 제외)
+├── ref/                    # 원본 xlsx (git 제외)
+└── docs/                   # 엔지니어링 문서
 ```
 
-## Data Migration
+## 데이터 마이그레이션
 
-Source: `ref/tracker_v5.xlsx` → SQLite  
-Records: 219 transactions + categories + payment methods from v5
+원본: `ref/tracker_v5.xlsx` → SQLite  
+이관 데이터: 거래 219건 + 카테고리 43개 + 결제수단 10개
 
-## Roadmap
+## 로드맵
 
-See [docs/ROADMAP.md](docs/ROADMAP.md)
+[docs/ROADMAP.md](docs/ROADMAP.md) 참조
