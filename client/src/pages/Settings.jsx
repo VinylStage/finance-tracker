@@ -237,10 +237,11 @@ function ExportSection() {
   const [to, setTo] = useState('');
 
   const handleExport = (format) => {
-    const params = new URLSearchParams({ format });
+    const params = new URLSearchParams();
     if (from) params.set('from', from);
     if (to) params.set('to', to);
-    window.location.href = `/api/export?${params.toString()}`;
+    const query = params.toString();
+    window.location.href = `/api/export/${format}${query ? `?${query}` : ''}`;
   };
 
   return (
