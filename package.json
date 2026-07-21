@@ -1,0 +1,19 @@
+{
+  "name": "finance-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal finance tracker — local web app (Express + SQLite + React)",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "build": "cd client && npm run build",
+    "db:migrate": "node scripts/migrate-xlsx.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "express": "^4.21.2",
+    "xlsx": "^0.18.5"
+  }
+}

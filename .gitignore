@@ -1,0 +1,13 @@
+node_modules/
+data/
+dist/
+.env
+.DS_Store
+*.log
+ref/
+client/node_modules/
+client/dist/
+docs/01_*
+docs/02_*
+docs/03_*
+.claude/
