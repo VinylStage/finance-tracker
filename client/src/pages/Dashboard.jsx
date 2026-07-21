@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
-  AreaChart, Area, LineChart, Line,
+  AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 
@@ -16,6 +16,115 @@ function shortFmt(n) {
   const v = Number(n || 0);
   if (Math.abs(v) >= 10000) return `${Math.round(v / 10000)}만`;
   return v.toLocaleString('ko-KR');
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function monthRange(offset) {
+  const today = new Date();
+  const d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+  const from = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const isCurrent = offset === 0;
+  const to = isCurrent
+    ? today.toISOString().slice(0, 10)
+    : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(lastDay)}`;
+  return { from, to };
+}
+
+function CategoryComparison() {
+  const [periodMode, setPeriodMode] = useState('this');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [chartType, setChartType] = useState('bar');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const range = useMemo(() => {
+    if (periodMode === 'this') return monthRange(0);
+    if (periodMode === 'last') return monthRange(-1);
+    return { from: customFrom, to: customTo };
+  }, [periodMode, customFrom, customTo]);
+
+  useEffect(() => {
+    if (!range.from || !range.to) { setRows([]); setLoading(false); return; }
+    setLoading(true);
+    fetch(`/api/transactions/summary/category-breakdown?from=${range.from}&to=${range.to}`)
+      .then(r => r.json())
+      .then(d => { setRows(d.data || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [range]);
+
+  return (
+    <Section
+      title="카테고리별 지출 비교"
+      caption={
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1">
+            {[['this', '이번달'], ['last', '지난달'], ['custom', '기간지정']].map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setPeriodMode(mode)}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  periodMode === mode ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 border-l border-slate-200 pl-3">
+            {[['bar', '막대'], ['line', '라인']].map(([type, label]) => (
+              <button
+                key={type}
+                onClick={() => setChartType(type)}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  chartType === type ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      }
+    >
+      {periodMode === 'custom' && (
+        <div className="flex items-center gap-2 mb-4 text-xs">
+          <input type="date" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
+          <span className="text-slate-400">~</span>
+          <input type="date" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customTo} onChange={e => setCustomTo(e.target.value)} />
+        </div>
+      )}
+      {loading ? (
+        <div className="text-slate-400 text-sm text-center py-10">로딩 중...</div>
+      ) : rows.length === 0 ? (
+        <div className="text-slate-400 text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={240}>
+          {chartType === 'bar' ? (
+            <BarChart data={rows}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="category" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
+              <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip formatter={(v) => fmt(v)} />
+              <Bar dataKey="total" name="지출" radius={[3, 3, 0, 0]}>
+                {rows.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+              </Bar>
+            </BarChart>
+          ) : (
+            <LineChart data={rows}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="category" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
+              <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip formatter={(v) => fmt(v)} />
+              <Line type="monotone" dataKey="total" name="지출" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          )}
+        </ResponsiveContainer>
+      )}
+    </Section>
+  );
 }
 
 function StatCard({ label, value, sub, color = 'text-slate-800' }) {
@@ -200,6 +309,8 @@ export default function Dashboard() {
           )}
         </Section>
       </div>
+
+      <CategoryComparison />
 
       {/* 흐름 분석 */}
       <Section

@@ -249,6 +249,27 @@ router.get('/summary/dashboard', (req, res) => {
   }
 });
 
+// GET /api/transactions/summary/category-breakdown?from=&to= — 임의 기간 카테고리별 지출
+router.get('/summary/category-breakdown', (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from, to required' });
+    const data = db.prepare(`
+      SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total
+      FROM categories c
+      LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date <= ?
+        AND t.payment_style NOT IN ('할부','리볼빙')
+      WHERE c.is_active = 1 AND c.major_type != '수입'
+      GROUP BY c.id
+      HAVING total > 0
+      ORDER BY total DESC
+    `).all(from, to);
+    res.json({ data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/transactions/suggest/category?merchant=
 router.get('/suggest/category', (req, res) => {
   const { merchant } = req.query;
