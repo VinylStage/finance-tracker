@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  AreaChart, Area, LineChart, Line,
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 
@@ -232,12 +232,18 @@ export default function Dashboard() {
         <div className="mt-5">
           <h3 className="text-xs font-medium text-slate-500 mb-2">일별 지출 (최근 30일)</h3>
           <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={data.dailyTrend}>
+            <AreaChart data={data.dailyTrend}>
+              <defs>
+                <linearGradient id="dailyExpenseGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
               <XAxis dataKey="date" tickFormatter={(v) => v.slice(5).replace('-', '/')} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} interval={4} />
               <YAxis tickFormatter={shortFmt} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={36} />
               <Tooltip formatter={(v) => fmt(v)} />
-              <Bar dataKey="expense" name="지출" fill="#f43f5e" radius={[3, 3, 0, 0]} />
-            </BarChart>
+              <Area type="monotone" dataKey="expense" name="지출" stroke="#f43f5e" fill="url(#dailyExpenseGrad)" strokeWidth={2} />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </Section>
