@@ -252,16 +252,31 @@ router.get('/summary/dashboard', (req, res) => {
 // GET /api/transactions/suggest/category?merchant=
 router.get('/suggest/category', (req, res) => {
   const { merchant } = req.query;
-  if (!merchant) return res.json({ category_id: null });
+  if (!merchant) return res.json({ category_id: null, confidence: '없음' });
   const exact = db.prepare(`
     SELECT category_id FROM transactions WHERE merchant = ? ORDER BY date DESC LIMIT 1
   `).get(merchant);
-  if (exact) return res.json({ category_id: exact.category_id });
+  if (exact) return res.json({ category_id: exact.category_id, confidence: '완전일치' });
   const partial = db.prepare(`
     SELECT category_id, COUNT(*) as cnt FROM transactions
     WHERE merchant LIKE ? GROUP BY category_id ORDER BY cnt DESC LIMIT 1
   `).get(`%${merchant}%`);
-  res.json({ category_id: partial ? partial.category_id : null });
+  if (partial) return res.json({ category_id: partial.category_id, confidence: '부분일치' });
+  res.json({ category_id: null, confidence: '없음' });
+});
+
+// GET /api/transactions/suggest/merchants?limit=10 — 최근 사용 가맹점 (자동완성용)
+router.get('/suggest/merchants', (req, res) => {
+  const limit = Number(req.query.limit) || 10;
+  const rows = db.prepare(`
+    SELECT merchant, MAX(date) AS last_date
+    FROM transactions
+    WHERE merchant IS NOT NULL AND merchant != ''
+    GROUP BY merchant
+    ORDER BY last_date DESC
+    LIMIT ?
+  `).all(limit);
+  res.json({ data: rows.map(r => r.merchant) });
 });
 
 module.exports = router;

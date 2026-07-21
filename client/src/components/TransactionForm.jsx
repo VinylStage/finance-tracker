@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 
 const PAYMENT_STYLES = ['일시불', '할부', '리볼빙', '해당없음'];
 
+const CONFIDENCE_STYLE = {
+  '완전일치': 'bg-emerald-50 text-emerald-700',
+  '부분일치': 'bg-amber-50 text-amber-700',
+  '없음': 'bg-slate-100 text-slate-500',
+};
+
 export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
@@ -22,16 +28,37 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       memo: initial.memo || '',
     } : {}),
   });
+  const [suggesting, setSuggesting] = useState(false);
+  const [confidence, setConfidence] = useState(null);
+  const [recentMerchants, setRecentMerchants] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/transactions/suggest/merchants?limit=10')
+      .then(r => r.json())
+      .then(d => setRecentMerchants(d.data || []))
+      .catch(() => {});
+  }, []);
 
   const majorTypes = [...new Set(categories.map(c => c.major_type))];
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  const handleMerchantChange = (v) => {
+    set('merchant', v);
+    setConfidence(null);
+  };
+
   const handleMerchantBlur = async () => {
     if (!form.merchant || form.category_id) return;
-    const r = await fetch(`/api/transactions/suggest/category?merchant=${encodeURIComponent(form.merchant)}`);
-    const { category_id } = await r.json();
-    if (category_id) set('category_id', String(category_id));
+    setSuggesting(true);
+    try {
+      const r = await fetch(`/api/transactions/suggest/category?merchant=${encodeURIComponent(form.merchant)}`);
+      const { category_id, confidence: conf } = await r.json();
+      setConfidence(conf);
+      if (category_id) set('category_id', String(category_id));
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -67,7 +94,14 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1">카테고리 *</label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+            카테고리 *
+            {confidence && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${CONFIDENCE_STYLE[confidence]}`}>
+                {confidence}
+              </span>
+            )}
+          </label>
           <select className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)} required>
             <option value="">선택...</option>
             {majorTypes.map(mt => (
@@ -98,13 +132,20 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1">가맹점/내용</label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+            가맹점/내용
+            {suggesting && <span className="text-indigo-500 text-[10px]">제안 중...</span>}
+          </label>
           <input
             type="text" className={inp} placeholder="가맹점명 (자동 카테고리 제안)"
+            list="recent-merchants"
             value={form.merchant}
-            onChange={e => set('merchant', e.target.value)}
+            onChange={e => handleMerchantChange(e.target.value)}
             onBlur={handleMerchantBlur}
           />
+          <datalist id="recent-merchants">
+            {recentMerchants.map(m => <option key={m} value={m} />)}
+          </datalist>
         </div>
       </div>
 
