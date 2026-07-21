@@ -1,67 +1,67 @@
-# Requirements
+# 요구사항 정의서
 
-## Background
+## 배경
 
-Replace Google Sheets / Excel tracker (v1–v5) with a local web app.
-Core problems to solve vs. spreadsheet:
-1. Real-time cash flow / expense graphs (daily/weekly/monthly/yearly)
-2. Payment method list managed without code changes
-3. Category auto-suggest + manual override
+기존 Google Sheets / Excel 가계부(v1~v5)를 로컬 웹 앱으로 대체한다.
+스프레드시트 대비 해결해야 할 핵심 문제:
+1. 실시간 현금흐름 / 지출 그래프 (일/주/월/연 단위)
+2. 코드 수정 없이 관리 가능한 결제수단 목록
+3. 카테고리 자동제안 + 수동 override
 
-Single user, local-only, no auth, no cloud.
+단일 사용자, 로컬 전용, 인증 없음, 클라우드 미사용.
 
-## Functional Requirements
+## 기능 요구사항
 
-### FR-1 Transaction Entry
-Fields: date, major_type, category, amount, payment_method, payment_style, merchant, memo.
-Payment style = 할부 → redirect to installment registration.
-Payment style = 리볼빙 → link to revolving ledger.
-Recent categories/methods shown first.
+### FR-1 거래 입력
+필드: date, major_type, category, amount, payment_method, payment_style, merchant, memo.
+결제방식 = 할부 → 할부 등록 화면으로 연결.
+결제방식 = 리볼빙 → 리볼빙 원장으로 연결.
+최근 사용한 카테고리/결제수단을 상단에 우선 노출.
 
-### FR-2 Category Auto-Suggest
-On merchant name entry: exact match → most recent category; partial match → most frequent; no match → empty.
-Pre-selected but overridable.
+### FR-2 카테고리 자동제안
+가맹점명 입력 시: 완전 일치 → 최근 사용 카테고리, 부분 일치 → 최빈 카테고리, 미일치 → 공란.
+자동 선택되지만 수동 변경 가능.
 
-### FR-3 Payment Method Management
-Settings: add card (name, type: 신용/체크/이체/현금성).
-No hard delete — soft-delete (is_active=0).
-Seed: 하나/삼성/현대/신한/롯데/농협카드, 현금성결제, 현금, 자동이체, 계좌이체.
+### FR-3 결제수단 관리
+설정에서 카드 추가 (이름, 유형: 신용/체크/이체/현금성).
+하드 삭제 없음 — soft-delete(`is_active=0`) 처리.
+시드 데이터: 하나/삼성/현대/신한/롯데/농협카드, 현금성결제, 현금, 자동이체, 계좌이체.
 
-### FR-4 Installment Management
-Register: merchant, total, months, card, start billing month.
-Monthly amount auto-calculated (+ fee if provided).
-Dashboard shows this month's due installments.
-Auto-complete when remaining months = 0.
+### FR-4 할부 관리
+등록 항목: 가맹점, 총액, 개월수, 카드, 청구 시작월.
+월 납입액 자동 계산 (수수료 입력 시 반영).
+대시보드에 이번달 청구 예정 할부 표시.
+잔여 개월 0 도달 시 자동 완료 처리.
 
-### FR-5 Revolving Management
-Monthly record: carried balance, new charges, payment, interest.
-Interest auto-classified as 대출이자 (separated from spending stats).
+### FR-5 리볼빙 관리
+월별 기록: 이월잔액, 신규사용액, 결제액, 이자.
+이자는 대출이자로 자동 분류 (소비 통계와 분리).
 
-### FR-6 Debt Status
-Manual entry: loan balance + interest rate → monthly interest auto-calc.
-Auto-aggregate: card unpaid + installment remaining + revolving remaining.
+### FR-6 부채 현황
+수동 입력: 대출 잔액 + 이자율 → 월 이자 자동 계산.
+자동 집계: 카드 미결제액 + 할부 잔여 + 리볼빙 잔여.
 
-### FR-7 Savings / Insurance
-Register: name, monthly contribution, start, maturity, expected payout.
-Contribution records as 저축 category.
-Maturity: principal recovery (저축 negative) + interest-only as 수입.
+### FR-7 저축 / 보험
+등록 항목: 상품명, 월 납입액, 시작일, 만기일, 예상 수령액.
+납입 기록은 저축 카테고리로 분류.
+만기 시: 원금 회수(저축 마이너스 처리) + 이자분만 수입으로 분리 기록.
 
-### FR-8 Dashboard
-- Net worth = available cash + investments + accumulated savings − total debts
-- This month's scheduled payments (installments + revolving + fixed + debt payments)
-- Budget vs actual (by category, this month)
-- Simulator: input assumptions → N-month balance projection
+### FR-8 대시보드
+- 순자산 = 가용현금 + 투자자산 + 누적저축 − 총부채
+- 이번달 예정 지출 (할부 + 리볼빙 + 고정비 + 부채상환)
+- 예산 대비 실적 (카테고리별, 이번달 기준)
+- 시뮬레이터: 가정값 입력 → N개월 후 잔액 예측
 
-### FR-9 Cash Flow / Expense Graphs
-Tabs: daily / weekly / monthly / yearly.
-Cash flow: line chart (balance over time).
-Expense: category stacked bar or line, switchable.
-Updates immediately on new transaction (no page refresh).
+### FR-9 현금흐름 / 지출 그래프
+탭 구성: 일 / 주 / 월 / 연.
+현금흐름: 잔액 추이 라인 차트.
+지출: 카테고리별 누적 막대 또는 라인, 전환 가능.
+신규 거래 입력 시 새로고침 없이 즉시 반영.
 
-## Non-Functional
+## 비기능 요구사항
 
-- Runtime: Node.js, `npm start` → localhost:PORT
-- Storage: SQLite single file, local
-- Backup: file copy only; export button (CSV/JSON)
-- Responsive: PC first, mobile input capable
-- Performance: 5,000 records, all queries < 1s
+- 실행환경: Node.js, `npm start` → localhost:PORT
+- 저장소: SQLite 단일 파일, 로컬 저장
+- 백업: 파일 복사 방식만 지원, 내보내기 버튼(CSV/JSON) 제공
+- 반응형: PC 우선, 모바일 입력 가능
+- 성능: 5,000건 기준 모든 조회 1초 이내
