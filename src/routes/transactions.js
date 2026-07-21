@@ -108,6 +108,12 @@ router.get('/summary/dashboard', (req, res) => {
       WHERE start_billing_month <= ? AND status = '진행중'
     `).get(thisMonth).total;
 
+    const revolvingPaid = db.prepare(`
+      SELECT COALESCE(SUM(paid_amount), 0) AS total
+      FROM revolving_history
+      WHERE month = ?
+    `).get(thisMonth).total;
+
     const budgets = db.prepare(`
       SELECT c.name, c.major_type, c.monthly_budget,
         COALESCE(SUM(t.amount),0) AS spent
@@ -117,7 +123,11 @@ router.get('/summary/dashboard', (req, res) => {
       GROUP BY c.id
     `).all(thisMonth);
 
-    res.json({ thisMonth, income, expense, available: income - expense - installmentsDue, installmentsDue, budgets });
+    res.json({
+      thisMonth, income, expense,
+      available: income - expense - installmentsDue - revolvingPaid,
+      installmentsDue, revolvingPaid, budgets,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

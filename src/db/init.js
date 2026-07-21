@@ -70,6 +70,9 @@ db.exec(`
     payment_method_id INTEGER REFERENCES payment_methods(id)
   );
 
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_revolving_month_pm
+    ON revolving_history(month, payment_method_id);
+
   CREATE TABLE IF NOT EXISTS debts (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,

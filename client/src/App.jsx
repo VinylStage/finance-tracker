@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
+import Installments from './pages/Installments';
+import Revolving from './pages/Revolving';
+import Debts from './pages/Debts';
 
 const NAV = [
   { id: 'dashboard', label: '대시보드' },
   { id: 'transactions', label: '거래입력' },
+  { id: 'installments', label: '할부' },
+  { id: 'revolving', label: '리볼빙' },
+  { id: 'debts', label: '부채' },
 ];
 
 export default function App() {
@@ -34,6 +40,9 @@ export default function App() {
       <main className="max-w-6xl mx-auto px-4 py-6">
         {page === 'dashboard' && <Dashboard />}
         {page === 'transactions' && <Transactions />}
+        {page === 'installments' && <Installments />}
+        {page === 'revolving' && <Revolving />}
+        {page === 'debts' && <Debts />}
       </main>
     </div>
   );

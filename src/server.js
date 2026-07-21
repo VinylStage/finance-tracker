@@ -10,6 +10,9 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/categories',   require('./routes/categories'));
 app.use('/api/payment-methods', require('./routes/paymentMethods'));
+app.use('/api/installments', require('./routes/installments'));
+app.use('/api/revolving',    require('./routes/revolving'));
+app.use('/api/debts',        require('./routes/debts'));
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
