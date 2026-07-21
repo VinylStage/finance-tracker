@@ -104,6 +104,7 @@ db.exec(`
     start_date TEXT NOT NULL,
     maturity_date TEXT,
     expected_payout INTEGER,
+    category_id INTEGER REFERENCES categories(id),
     status TEXT DEFAULT '진행중'
   );
 `);
@@ -112,6 +113,11 @@ db.exec(`
 const debtsColumns = db.prepare(`PRAGMA table_info(debts)`).all().map(c => c.name);
 if (!debtsColumns.includes('type')) {
   db.exec(`ALTER TABLE debts ADD COLUMN type TEXT DEFAULT '일반'`);
+}
+
+const savingsColumns = db.prepare(`PRAGMA table_info(savings_products)`).all().map(c => c.name);
+if (!savingsColumns.includes('category_id')) {
+  db.exec(`ALTER TABLE savings_products ADD COLUMN category_id INTEGER REFERENCES categories(id)`);
 }
 
 module.exports = db;
