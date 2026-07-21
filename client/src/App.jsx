@@ -4,6 +4,7 @@ import Transactions from './pages/Transactions';
 import Installments from './pages/Installments';
 import Revolving from './pages/Revolving';
 import Debts from './pages/Debts';
+import Simulator from './pages/Simulator';
 
 const NAV = [
   { id: 'dashboard', label: '대시보드' },
@@ -11,6 +12,7 @@ const NAV = [
   { id: 'installments', label: '할부' },
   { id: 'revolving', label: '리볼빙' },
   { id: 'debts', label: '부채' },
+  { id: 'simulator', label: '시뮬레이터' },
 ];
 
 export default function App() {
@@ -43,6 +45,7 @@ export default function App() {
         {page === 'installments' && <Installments />}
         {page === 'revolving' && <Revolving />}
         {page === 'debts' && <Debts />}
+        {page === 'simulator' && <Simulator />}
       </main>
     </div>
   );
