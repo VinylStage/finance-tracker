@@ -13,6 +13,7 @@ app.use('/api/payment-methods', require('./routes/paymentMethods'));
 app.use('/api/installments', require('./routes/installments'));
 app.use('/api/revolving',    require('./routes/revolving'));
 app.use('/api/debts',        require('./routes/debts'));
+app.use('/api/cashflow',     require('./routes/cashflow'));
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));

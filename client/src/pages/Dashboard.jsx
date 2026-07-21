@@ -97,6 +97,18 @@ export default function Dashboard() {
     return data.monthlyTrend.map(m => ({ month: m.month, debt: totalDebt }));
   }, [data, totalDebt]);
 
+  const monthComparison = useMemo(() => {
+    const mt = data?.monthlyTrend;
+    if (!mt || mt.length < 2) return null;
+    const curr = mt[mt.length - 1];
+    const prev = mt[mt.length - 2];
+    const pctDelta = (a, b) => (b === 0 ? null : Math.round(((a - b) / b) * 100));
+    return {
+      income: { curr: curr.income, prev: prev.income, pct: pctDelta(curr.income, prev.income) },
+      expense: { curr: curr.expense, prev: prev.expense, pct: pctDelta(curr.expense, prev.expense) },
+    };
+  }, [data]);
+
   if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
   if (!data) return <div className="text-rose-600 text-center py-20">데이터를 불러올 수 없습니다.</div>;
 
@@ -208,6 +220,27 @@ export default function Dashboard() {
           </div>
         }
       >
+        {monthComparison && (
+          <div className="flex flex-wrap gap-4 mb-4 text-xs">
+            <span className="text-slate-400">전월 대비</span>
+            <span className="text-slate-600">
+              수입 <span className="text-emerald-600 font-medium">{fmt(monthComparison.income.curr)}</span>
+              {monthComparison.income.pct !== null && (
+                <span className={monthComparison.income.pct >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                  {' '}({monthComparison.income.pct >= 0 ? '+' : ''}{monthComparison.income.pct}%)
+                </span>
+              )}
+            </span>
+            <span className="text-slate-600">
+              지출 <span className="text-rose-600 font-medium">{fmt(monthComparison.expense.curr)}</span>
+              {monthComparison.expense.pct !== null && (
+                <span className={monthComparison.expense.pct <= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                  {' '}({monthComparison.expense.pct >= 0 ? '+' : ''}{monthComparison.expense.pct}%)
+                </span>
+              )}
+            </span>
+          </div>
+        )}
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={flowRows}>
             <defs>
