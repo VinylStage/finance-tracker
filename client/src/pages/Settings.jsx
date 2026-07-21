@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
-const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성'];
+const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';

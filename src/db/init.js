@@ -125,4 +125,34 @@ if (!savingsColumns.includes('category_id')) {
   db.exec(`ALTER TABLE savings_products ADD COLUMN category_id INTEGER REFERENCES categories(id)`);
 }
 
+// --- initial seed: 최초 실행(빈 DB)에서만 범용 카테고리/결제수단 생성 ---
+const categoryCount = db.prepare(`SELECT COUNT(*) AS c FROM categories`).get().c;
+if (categoryCount === 0) {
+  const SEED_CATEGORIES = [
+    ['수입', '급여'], ['수입', '부업/프리랜서'], ['수입', '금융수입(이자·배당)'], ['수입', '기타수입'],
+    ['고정지출', '주거비(월세·관리비)'], ['고정지출', '통신비'], ['고정지출', '보험료'], ['고정지출', '구독서비스'],
+    ['변동필수', '식비'], ['변동필수', '교통비'], ['변동필수', '의료비'], ['변동필수', '생활용품'],
+    ['선택지출', '외식·카페'], ['선택지출', '쇼핑·의류'], ['선택지출', '문화·여가'], ['선택지출', '여행'], ['선택지출', '미용·뷰티'], ['선택지출', '교육·자기계발'],
+    ['저축', '비상금'], ['저축', '목돈저축'], ['저축', '투자'],
+    ['부채상환', '대출상환'], ['부채상환', '카드대금'],
+  ];
+  const insertCategory = db.prepare(`INSERT INTO categories (major_type, name) VALUES (?, ?)`);
+  const seedCategories = db.transaction(() => {
+    for (const [majorType, name] of SEED_CATEGORIES) insertCategory.run(majorType, name);
+  });
+  seedCategories();
+}
+
+const paymentMethodCount = db.prepare(`SELECT COUNT(*) AS c FROM payment_methods`).get().c;
+if (paymentMethodCount === 0) {
+  const SEED_PAYMENT_METHODS = [
+    ['신용카드', '신용'], ['체크카드', '체크'], ['현금', '현금성'], ['계좌이체', '이체'], ['간편결제', '간편결제'],
+  ];
+  const insertPaymentMethod = db.prepare(`INSERT INTO payment_methods (name, type) VALUES (?, ?)`);
+  const seedPaymentMethods = db.transaction(() => {
+    for (const [name, type] of SEED_PAYMENT_METHODS) insertPaymentMethod.run(name, type);
+  });
+  seedPaymentMethods();
+}
+
 module.exports = db;

@@ -22,16 +22,15 @@ npm install
 # 2. 프론트엔드 의존성 설치
 cd client && npm install && cd ..
 
-# 3. 데이터 마이그레이션 (최초 1회 — tracker_v5.xlsx 임포트)
-npm run db:migrate
-
-# 4. 프론트엔드 빌드
+# 3. 프론트엔드 빌드
 npm run build
 
-# 5. 서버 시작
+# 4. 서버 시작
 npm start
 # → http://localhost:3000
 ```
+
+처음 실행 시 빈 DB로 시작합니다. 기본 카테고리(수입/고정지출/변동필수/선택지출/저축/부채상환)와 결제수단(신용카드/체크카드/현금/계좌이체/간편결제)이 자동으로 세팅되며, **설정** 페이지에서 자유롭게 추가·수정할 수 있습니다.
 
 ## 개발 모드
 
@@ -50,23 +49,15 @@ cd client && npm run dev
 finace-tracker/
 ├── src/
 │   ├── server.js           # Express 진입점
-│   ├── db/init.js          # SQLite 스키마 + 연결
+│   ├── db/init.js          # SQLite 스키마 + 연결 + 초기 시드
 │   └── routes/             # REST API 라우터
-├── scripts/
-│   └── migrate-xlsx.js     # 1회성 데이터 마이그레이션
 ├── client/                 # React + Vite 프론트엔드
 │   └── src/
 │       ├── pages/          # Dashboard, Transactions 등
 │       └── components/     # 폼, 리스트 컴포넌트
 ├── data/                   # SQLite DB 파일 (git 제외)
-├── ref/                    # 원본 xlsx (git 제외)
 └── docs/                   # 엔지니어링 문서
 ```
-
-## 데이터 마이그레이션
-
-원본: `ref/tracker_v5.xlsx` → SQLite  
-이관 데이터: 거래 219건 + 카테고리 43개 + 결제수단 10개
 
 ## 로드맵
 

@@ -33,14 +33,11 @@ finace-tracker/
 │       ├── transactions.js    # 거래 CRUD + 대시보드 집계
 │       ├── categories.js      # 카테고리 CRUD
 │       └── paymentMethods.js  # 결제수단 CRUD
-├── scripts/
-│   └── migrate-xlsx.js        # 1회성 엑셀 마이그레이션
 ├── client/                    # React + Vite 프론트엔드
 │   └── src/
 │       ├── pages/             # Dashboard, Transactions
 │       └── components/        # TransactionForm, TransactionList
 ├── data/                      # SQLite DB 파일 (git 제외)
-├── ref/                       # 원본 xlsx (git 제외)
 ├── docs/                      # 엔지니어링 문서
 ├── public/                    # Vite 빌드 결과물
 └── package.json
