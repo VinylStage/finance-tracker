@@ -24,7 +24,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOS
 // Serve React build (Phase 1+)
 const PUBLIC = path.join(__dirname, '../public');
 app.use(express.static(PUBLIC));
-app.get('*', (_req, res) => {
+app.use((_req, res) => {
   const index = path.join(PUBLIC, 'index.html');
   const fs = require('fs');
   if (fs.existsSync(index)) {
