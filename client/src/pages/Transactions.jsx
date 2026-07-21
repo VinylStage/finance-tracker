@@ -53,7 +53,7 @@ export default function Transactions() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-100">거래 내역</h1>
+        <h1 className="text-xl font-semibold text-slate-800">거래 내역</h1>
         <button
           onClick={() => { setEditItem(null); setShowForm(true); }}
           className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
@@ -73,7 +73,7 @@ export default function Transactions() {
       )}
 
       {loading ? (
-        <div className="text-gray-400 text-center py-10">로딩 중...</div>
+        <div className="text-slate-500 text-center py-10">로딩 중...</div>
       ) : (
         <TransactionList
           items={transactions}
