@@ -90,6 +90,9 @@ function AppSettingsSection({ initial, onSaved }) {
 function CategorySection({ categories, onChanged }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ major_type: '선택지출', name: '', monthly_budget: '' });
+  const [showInactive, setShowInactive] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -118,11 +121,59 @@ function CategorySection({ categories, onChanged }) {
     onChanged();
   };
 
+  const handleEditStart = (cat) => {
+    setEditing(cat.id);
+    setEditForm({ major_type: cat.major_type, name: cat.name, monthly_budget: cat.monthly_budget });
+  };
+
+  const handleEditCancel = () => {
+    setEditing(null);
+    setEditForm({});
+  };
+
+  const handleEditSave = async (cat) => {
+    await fetch(`/api/categories/${cat.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...cat, ...editForm }),
+    });
+    setEditing(null);
+    setEditForm({});
+    onChanged();
+  };
+
+  const handleReActivate = async (id) => {
+    if (!confirm('재활성화하시겠습니까?')) return;
+    await fetch(`/api/categories/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: 1 }),
+    });
+    onChanged();
+  };
+
+  const filteredCategories = showInactive 
+    ? categories 
+    : categories.filter(c => c.is_active);
+
   return (
     <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-700">카테고리 관리</h2>
-        <button onClick={() => setShowForm(s => !s)} className="text-xs text-indigo-600 hover:text-indigo-700">+ 추가</button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowForm(s => !s)} 
+            className="text-xs text-indigo-600 hover:text-indigo-700"
+          >
+            + 추가
+          </button>
+          <button 
+            onClick={() => setShowInactive(s => !s)} 
+            className="text-xs text-slate-500 hover:text-slate-700"
+          >
+            {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
+          </button>
+        </div>
       </div>
       {showForm && (
         <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
@@ -154,20 +205,61 @@ function CategorySection({ categories, onChanged }) {
             </tr>
           </thead>
           <tbody>
-            {categories.map(c => (
-              <tr key={c.id} className="border-b border-slate-100">
-                <td className="px-3 py-2 text-slate-500 text-xs">{c.major_type}</td>
-                <td className="px-3 py-2 text-slate-800">{c.name}</td>
-                <td className="px-3 py-2 text-right">
-                  <input
-                    type="number" defaultValue={c.monthly_budget}
-                    onBlur={e => handleBudgetChange(c, e.target.value)}
-                    className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs"
-                  />
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <button onClick={() => handleDeactivate(c.id)} className="text-slate-400 hover:text-rose-600 text-xs">비활성화</button>
-                </td>
+            {filteredCategories.map(c => (
+              <tr key={c.id} className={`border-b border-slate-100 ${!c.is_active ? 'opacity-50' : ''}`}>
+                {editing === c.id ? (
+                  <>
+                    <td className="px-3 py-2">
+                      <select 
+                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                        value={editForm.major_type}
+                        onChange={e => setEditForm(f => ({ ...f, major_type: e.target.value }))}
+                      >
+                        {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                        value={editForm.name}
+                        onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <input
+                        type="number"
+                        className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs"
+                        value={editForm.monthly_budget}
+                        onChange={e => setEditForm(f => ({ ...f, monthly_budget: e.target.value }))}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button onClick={() => handleEditSave(c)} className="text-xs text-indigo-600 hover:text-indigo-700 mr-2">저장</button>
+                      <button onClick={handleEditCancel} className="text-xs text-slate-400 hover:text-slate-600">취소</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-3 py-2 text-slate-500 text-xs">{c.major_type}</td>
+                    <td className="px-3 py-2 text-slate-800">{c.name}</td>
+                    <td className="px-3 py-2 text-right">
+                      <input
+                        type="number" defaultValue={c.monthly_budget}
+                        onBlur={e => handleBudgetChange(c, e.target.value)}
+                        className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button onClick={() => handleEditStart(c)} className="text-indigo-600 hover:text-indigo-700 text-xs mr-2">수정</button>
+                      {c.is_active ? (
+                        <button onClick={() => handleDeactivate(c.id)} className="text-slate-400 hover:text-rose-600 text-xs">비활성화</button>
+                      ) : (
+                        <button onClick={() => handleReActivate(c.id)} className="text-slate-400 hover:text-emerald-600 text-xs">재활성화</button>
+                      )}
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
@@ -180,6 +272,9 @@ function CategorySection({ categories, onChanged }) {
 function PaymentMethodSection({ paymentMethods, onChanged }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', type: '신용' });
+  const [showInactive, setShowInactive] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -199,11 +294,59 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
     onChanged();
   };
 
+  const handleEditStart = (pm) => {
+    setEditing(pm.id);
+    setEditForm({ name: pm.name, type: pm.type });
+  };
+
+  const handleEditCancel = () => {
+    setEditing(null);
+    setEditForm({});
+  };
+
+  const handleEditSave = async (pm) => {
+    await fetch(`/api/payment-methods/${pm.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...pm, ...editForm }),
+    });
+    setEditing(null);
+    setEditForm({});
+    onChanged();
+  };
+
+  const handleReActivate = async (id) => {
+    if (!confirm('재활성화하시겠습니까?')) return;
+    await fetch(`/api/payment-methods/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: 1 }),
+    });
+    onChanged();
+  };
+
+  const filteredPaymentMethods = showInactive 
+    ? paymentMethods 
+    : paymentMethods.filter(p => p.is_active);
+
   return (
     <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-700">결제수단 관리</h2>
-        <button onClick={() => setShowForm(s => !s)} className="text-xs text-indigo-600 hover:text-indigo-700">+ 추가</button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowForm(s => !s)} 
+            className="text-xs text-indigo-600 hover:text-indigo-700"
+          >
+            + 추가
+          </button>
+          <button 
+            onClick={() => setShowInactive(s => !s)} 
+            className="text-xs text-slate-500 hover:text-slate-700"
+          >
+            {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
+          </button>
+        </div>
       </div>
       {showForm && (
         <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
@@ -221,10 +364,39 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
         </form>
       )}
       <div className="flex flex-wrap gap-2">
-        {paymentMethods.map(p => (
-          <span key={p.id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full pl-3 pr-1 py-1 text-xs text-slate-600">
-            {p.name} <span className="text-slate-400">({p.type})</span>
-            <button onClick={() => handleDeactivate(p.id)} className="text-slate-400 hover:text-rose-600 px-1.5 py-0.5 rounded-full hover:bg-rose-50">✕</button>
+        {filteredPaymentMethods.map(p => (
+          <span key={p.id} className={`flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full pl-3 pr-1 py-1 text-xs ${!p.is_active ? 'opacity-50' : ''}`}>
+            {editing === p.id ? (
+              <>
+                <input
+                  type="text"
+                  className="bg-white border border-slate-300 rounded px-2 py-1 text-xs w-16"
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                />
+                <select 
+                  className="bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                  value={editForm.type}
+                  onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}
+                >
+                  {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <button onClick={() => handleEditSave(p)} className="text-xs text-indigo-600 hover:text-indigo-700 mr-1">저장</button>
+                <button onClick={handleEditCancel} className="text-xs text-slate-400 hover:text-slate-600">취소</button>
+              </>
+            ) : (
+              <>
+                {p.name} <span className="text-slate-400">({p.type})</span>
+                <div className="flex gap-1">
+                  <button onClick={() => handleEditStart(p)} className="text-xs text-indigo-600 hover:text-indigo-700 px-1.5 py-0.5 rounded-full hover:bg-indigo-50">✏</button>
+                  {p.is_active ? (
+                    <button onClick={() => handleDeactivate(p.id)} className="text-slate-400 hover:text-rose-600 px-1.5 py-0.5 rounded-full hover:bg-rose-50">✕</button>
+                  ) : (
+                    <button onClick={() => handleReActivate(p.id)} className="text-slate-400 hover:text-emerald-600 px-1.5 py-0.5 rounded-full hover:bg-emerald-50">🔄</button>
+                  )}
+                </div>
+              </>
+            )}
           </span>
         ))}
       </div>

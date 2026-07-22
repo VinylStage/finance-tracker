@@ -3,8 +3,18 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 
-router.get('/', (_req, res) => {
-  const rows = db.prepare('SELECT * FROM categories WHERE is_active=1 ORDER BY major_type, name').all();
+router.get('/', (req, res) => {
+  const includeInactive = req.query.include_inactive;
+  let query = 'SELECT * FROM categories';
+  const params = [];
+  
+  if (!includeInactive) {
+    query += ' WHERE is_active=1';
+  }
+  
+  query += ' ORDER BY major_type, name';
+  
+  const rows = db.prepare(query).all(...params);
   res.json(rows);
 });
 
