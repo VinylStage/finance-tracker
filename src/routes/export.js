@@ -53,6 +53,7 @@ function getFullBackup(from, to) {
     debts: db.prepare('SELECT * FROM debts').all(),
     debt_interest_log: db.prepare('SELECT * FROM debt_interest_log').all(),
     savings_products: db.prepare('SELECT * FROM savings_products').all(),
+    app_settings: db.prepare('SELECT * FROM app_settings').all(),
   };
 }
 
@@ -94,6 +95,64 @@ router.get('/', (req, res) => {
     const { format = 'json', from, to } = req.query;
     if (format === 'csv') return sendCsv(res, from, to);
     return sendJson(res, from, to);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+function getSettingsBackup() {
+  return {
+    schema_version: SCHEMA_VERSION,
+    exported_at: new Date().toISOString(),
+    type: 'settings',
+    categories: db.prepare('SELECT * FROM categories').all(),
+    payment_methods: db.prepare('SELECT * FROM payment_methods').all(),
+    app_settings: db.prepare('SELECT * FROM app_settings').all(),
+  };
+}
+
+function restoreSettings(payload) {
+  const restore = db.transaction(() => {
+    if (payload.categories) {
+      db.prepare('DELETE FROM categories').run();
+      const ins = db.prepare('INSERT INTO categories (id, major_type, name, monthly_budget, is_active) VALUES (@id, @major_type, @name, @monthly_budget, @is_active)');
+      payload.categories.forEach(r => ins.run(r));
+    }
+    if (payload.payment_methods) {
+      db.prepare('DELETE FROM payment_methods').run();
+      const ins = db.prepare('INSERT INTO payment_methods (id, name, type, is_active, created_at) VALUES (@id, @name, @type, @is_active, @created_at)');
+      payload.payment_methods.forEach(r => ins.run(r));
+    }
+    if (payload.app_settings) {
+      db.prepare('DELETE FROM app_settings').run();
+      const ins = db.prepare('INSERT INTO app_settings (key, value) VALUES (@key, @value)');
+      payload.app_settings.forEach(r => ins.run(r));
+    }
+  });
+  restore();
+}
+
+// GET /api/export/settings — 설정 전용 백업
+router.get('/settings', (req, res) => {
+  try {
+    const data = getSettingsBackup();
+    res.setHeader('Content-Disposition', `attachment; filename=\"finance-tracker-settings_${new Date().toISOString().slice(0,10)}.json\"`);
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/export/settings/restore — 설정 전용 복원
+router.post('/settings/restore', express.json({ limit: '10mb' }), (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'invalid payload' });
+    if (!payload.categories && !payload.payment_methods && !payload.app_settings) {
+      return res.status(400).json({ error: 'payload must contain at least one of categories, payment_methods, app_settings' });
+    }
+    restoreSettings(payload);
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

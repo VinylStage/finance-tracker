@@ -38,6 +38,7 @@ export default function Settings() {
       <CategorySection categories={categories} onChanged={load} />
       <PaymentMethodSection paymentMethods={paymentMethods} onChanged={load} />
       <ExportSection />
+      <SettingsBackupSection />
     </div>
   );
 }
@@ -430,6 +431,49 @@ function ExportSection() {
         </div>
         <button onClick={() => handleExport('csv')} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">CSV 다운로드 (거래내역)</button>
         <button onClick={() => handleExport('json')} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">JSON 다운로드 (전체 백업)</button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsBackupSection() {
+  const [msg, setMsg] = useState('');
+
+  const handleExport = () => {
+    window.location.href = '/api/export/settings';
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const res = await fetch('/api/export/settings/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.ok) { setMsg('설정이 복원되었습니다.'); setTimeout(() => window.location.reload(), 1000); }
+      else setMsg('복원 실패: ' + data.error);
+    } catch (err) {
+      setMsg('오류: ' + err.message);
+    }
+    e.target.value = '';
+  };
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">설정 백업 / 복원</h2>
+      <p className="text-xs text-slate-500">카테고리, 결제수단, 앱 설정값만 별도로 백업·복원합니다. 거래내역은 포함되지 않습니다.</p>
+      <div className="flex flex-wrap gap-3 items-center">
+        <button onClick={handleExport} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">설정 내보내기 (JSON)</button>
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          설정 가져오기
+          <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+        </label>
+        {msg && <span className="text-xs text-slate-500">{msg}</span>}
       </div>
     </div>
   );
