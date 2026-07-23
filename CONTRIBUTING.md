@@ -3,6 +3,7 @@
 ## 브랜치 전략
 
 - `main` — production 브랜치. 직접 push 금지.
+- `develop` — GitHub 저장소의 기본 브랜치(default branch). 통합 브랜치 역할을 한다.
 - `feature/issue-number-description` — 기능 개발용 (예: `feature/12-add-export`)
 - `fix/issue-number-description` — 버그 수정용
 - `chore/description` — 설정/문서/인프라 변경용
@@ -24,7 +25,7 @@
 - `gh pr create` 또는 GitHub 웹 UI로 PR을 생성한다.
 - PR 제목은 커밋 컨벤션과 동일한 prefix 규칙을 따른다.
 - PR 본문에는 변경 요약과 관련 이슈 번호(`closes #N`)를 포함한다.
-- GitHub 저장소 기본 브랜치는 `main`으로 유지되므로, PR 생성 시 base가 자동으로 `develop`을 가리키지 않는다. `feature/*`, `fix/*`, `chore/*` 브랜치의 PR은 `gh pr create --base develop` 또는 GitHub UI에서 base를 `develop`으로 직접 선택해야 한다.
+- GitHub 저장소 기본 브랜치는 `develop`으로 변경되었으므로, `feature/*`, `fix/*`, `chore/*` 브랜치의 PR은 base를 별도로 지정하지 않아도 자동으로 `develop`을 가리킨다. `develop` → `main` 으로의 릴리즈 PR은 반드시 `gh pr create --base main` 또는 GitHub UI에서 base를 `main`으로 수동 지정해야 한다.
 
 ## PR 머지 주체
 
