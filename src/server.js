@@ -16,6 +16,7 @@ app.use('/api/debts',        require('./routes/debts'));
 app.use('/api/cashflow',     require('./routes/cashflow'));
 app.use('/api/savings',      require('./routes/savings'));
 app.use('/api/export',       require('./routes/export'));
+app.use('/api/data',         require('./routes/data'));
 app.use('/api/settings',     require('./routes/settings'));
 app.use('/api/exchange',     require('./routes/exchange'));
 app.use('/api/stocks',       require('./routes/stocks'));

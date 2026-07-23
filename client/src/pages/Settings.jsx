@@ -39,6 +39,7 @@ export default function Settings() {
       <PaymentMethodSection paymentMethods={paymentMethods} onChanged={load} />
       <ExportSection />
       <SettingsBackupSection />
+      <TransactionsBackupSection />
     </div>
   );
 }
@@ -475,6 +476,130 @@ function SettingsBackupSection() {
         </label>
         {msg && <span className="text-xs text-slate-500">{msg}</span>}
       </div>
+    </div>
+  );
+}
+
+function TransactionsBackupSection() {
+  const [preview, setPreview] = useState(null);
+  const [message, setMessage] = useState('');
+  
+  const handleExport = () => {
+    window.location.href = '/api/data/export';
+  };
+  
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      
+      if (!payload.transactions || !Array.isArray(payload.transactions)) {
+        setMessage('오류: 파일이 유효하지 않습니다. transactions 배열이 필요합니다.');
+        return;
+      }
+      
+      // Show preview of first 5 items, keep full array for import
+      const previewData = payload.transactions.slice(0, 5);
+      setPreview({
+        data: previewData,
+        all: payload.transactions,
+        total: payload.transactions.length
+      });
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    }
+    
+    e.target.value = '';
+  };
+  
+  const handleImportAction = async (mode) => {
+    if (!preview) return;
+    
+    // For overwrite, confirm with user
+    if (mode === 'overwrite' && !window.confirm('기존 거래내역이 모두 삭제됩니다. 계속하시겠습니까?')) {
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/data/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, transactions: preview.all }),
+      });
+      const data = await res.json();
+      
+      if (data.ok) {
+        setMessage(`${data.imported}건 저장됨 (${data.skipped}건 스킵)`);
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        setMessage('오류: ' + data.error);
+      }
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    }
+    
+    // Reset preview
+    setPreview(null);
+  };
+  
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">거래내역 백업 / 복원</h2>
+      <p className="text-xs text-slate-500">거래내역을 이 앱 전용 JSON 형식으로 내보내거나, 내보낸 파일을 다시 불러와 추가하거나 전체 복원할 수 있습니다.</p>
+      <div className="flex flex-wrap gap-3 items-center">
+        <button onClick={handleExport} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">거래내역 내보내기 (JSON)</button>
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          거래내역 불러오기
+          <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+        </label>
+        {message && <span className="text-xs text-slate-500">{message}</span>}
+      </div>
+      
+      {preview && (
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold text-slate-700 mb-2">미리보기</h3>
+          <div className="mb-2">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="border border-slate-200 px-2 py-1 text-left">날짜</th>
+                  <th className="border border-slate-200 px-2 py-1 text-left">가맹점</th>
+                  <th className="border border-slate-200 px-2 py-1 text-right">금액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.data.map((tx, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="border border-slate-200 px-2 py-1">{tx.date}</td>
+                    <td className="border border-slate-200 px-2 py-1">{tx.merchant || '-'}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-right">{tx.amount ? tx.amount.toLocaleString('ko-KR') : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">총 {preview.total}건</p>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={() => handleImportAction('append')}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+            >
+              새 데이터 추가
+            </button>
+            <button 
+              onClick={() => handleImportAction('overwrite')} 
+              className="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+            >
+              덮어쓰기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
