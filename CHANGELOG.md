@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2](https://github.com/VinylStage/finance-tracker/compare/v0.2.1...v0.2.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* release-please target-branch를 main으로 명시 ([b8016d4](https://github.com/VinylStage/finance-tracker/commit/b8016d47d40bd8e92efafe791bfbace397d5779c))
+
+
+### Documentation
+
+* P3-low 라벨 색상 오타 수정 ([#84](https://github.com/VinylStage/finance-tracker/issues/84)cc16 → [#0](https://github.com/VinylStage/finance-tracker/issues/0)e8a16) ([5f7a510](https://github.com/VinylStage/finance-tracker/commit/5f7a51040b9bf8f976f399e8f38004f7b57573af))
+
 ## [0.2.1](https://github.com/VinylStage/finance-tracker/compare/v0.2.0...v0.2.1) (2026-07-23)
 
 
