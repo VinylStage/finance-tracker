@@ -6,7 +6,13 @@
 - `feature/issue-number-description` — 기능 개발용 (예: `feature/12-add-export`)
 - `fix/issue-number-description` — 버그 수정용
 - `chore/description` — 설정/문서/인프라 변경용
-- 모든 변경은 PR을 통해 main에 머지한다 (squash merge).
+- 모든 변경은 PR을 통해 develop에 머지한다 (squash merge).
+- `develop` → `main` 으로의 PR은 릴리즈 준비가 됐을 때만 진행한다 (이 시점에 release-please가 동작).
+
+브랜치 전략 흐름:
+
+- feature/* → develop (PR, 자유롭게 머지)
+- develop → main (릴리즈 타이밍 조절, release-please 트리거)
 
 ## 커밋 컨벤션
 
@@ -18,6 +24,7 @@
 - `gh pr create` 또는 GitHub 웹 UI로 PR을 생성한다.
 - PR 제목은 커밋 컨벤션과 동일한 prefix 규칙을 따른다.
 - PR 본문에는 변경 요약과 관련 이슈 번호(`closes #N`)를 포함한다.
+- GitHub 저장소 기본 브랜치는 `main`으로 유지되므로, PR 생성 시 base가 자동으로 `develop`을 가리키지 않는다. `feature/*`, `fix/*`, `chore/*` 브랜치의 PR은 `gh pr create --base develop` 또는 GitHub UI에서 base를 `develop`으로 직접 선택해야 한다.
 
 ## PR 머지 주체
 
