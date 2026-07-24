@@ -13,16 +13,29 @@ function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
 }
 
-export default function TransactionList({ items, onEdit, onDelete, bare = false }) {
+export default function TransactionList({ items, onEdit, onDelete, bare = false, selectedIds, onToggleSelect, onToggleSelectAll }) {
   if (!items.length) {
     return <div className="text-slate-500 text-center py-10 text-sm">거래 내역이 없습니다.</div>;
   }
+
+  const selectable = !!(selectedIds && onToggleSelect);
+  const allSelected = selectable && items.every(tx => selectedIds.has(tx.id));
 
   return (
     <div className={bare ? 'overflow-hidden' : 'bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden'}>
       <table className="w-full text-sm">
         <thead className="bg-slate-50">
           <tr className="border-b border-slate-200">
+            {selectable && (
+              <th className="px-4 py-3 w-8">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={() => onToggleSelectAll?.(items.map(tx => tx.id), !allSelected)}
+                  className="cursor-pointer"
+                />
+              </th>
+            )}
             <th className="text-left px-4 py-3 text-slate-500 font-medium">날짜</th>
             <th className="text-left px-4 py-3 text-slate-500 font-medium">카테고리</th>
             <th className="text-left px-4 py-3 text-slate-500 font-medium hidden md:table-cell">가맹점</th>
@@ -37,8 +50,18 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false 
               key={tx.id}
               className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
                 i % 2 === 0 ? '' : 'bg-slate-50/50'
-              }`}
+              } ${selectable && selectedIds.has(tx.id) ? 'bg-indigo-50/60' : ''}`}
             >
+              {selectable && (
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(tx.id)}
+                    onChange={() => onToggleSelect(tx.id)}
+                    className="cursor-pointer"
+                  />
+                </td>
+              )}
               <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{tx.date}</td>
               <td className="px-4 py-3">
                 <span className={`text-xs font-medium ${TYPE_COLOR[tx.major_type] || 'text-slate-600'}`}>
