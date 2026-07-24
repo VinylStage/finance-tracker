@@ -526,10 +526,13 @@ function TransactionsBackupSection() {
     }
     
     try {
+      const body = { mode, transactions: preview.all };
+      // overwrite는 서버가 명시적 확인 토큰을 요구한다(파괴적 동작 방어)
+      if (mode === 'overwrite') body.confirm = 'DELETE_ALL';
       const res = await fetch('/api/data/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, transactions: preview.all }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       
