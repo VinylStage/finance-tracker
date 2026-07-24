@@ -1,5 +1,7 @@
 'use strict';
 
+const { fetchJson, maskSecrets } = require('../utils/http');
+
 /**
  * 한국은행 ECOS API에서 기준금리 정보를 가져오는 서비스 모듈
  */
@@ -26,14 +28,9 @@ async function getBaseRate(date) {
   const url = `https://ecos.bok.or.kr/api/StatisticSearch/${process.env.ECOS_API_KEY}/json/kr/1/1/028Y001/DD/${date}`;
 
   try {
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`ECOS API request failed with status ${response.status}`);
-    }
+    // fetchJson 이 타임아웃(무한 대기 방지)과 시크릿 마스킹을 처리한다
+    const data = await fetchJson(url);
 
-    const data = await response.json();
-    
     // 응답이 성공적이지 않거나 데이터가 없을 경우 에러
     if (!data || !data.STATISTIC_SEARCH || !data.STATISTIC_SEARCH.DATA || data.STATISTIC_SEARCH.DATA.length === 0) {
       throw new Error('ECOS API returned no data');
@@ -48,11 +45,8 @@ async function getBaseRate(date) {
 
     return Number(baseRate);
   } catch (e) {
-    if (e instanceof Error && e.message.includes('ECOS API')) {
-      throw e;
-    } else {
-      throw new Error(`Failed to fetch base rate from ECOS API: ${e.message}`);
-    }
+    // fetchJson 에서 온 오류는 이미 마스킹됨. 그 외 메시지도 방어적으로 마스킹한다.
+    throw new Error(maskSecrets(`Failed to fetch base rate from ECOS API: ${e.message}`));
   }
 }
 
