@@ -244,6 +244,28 @@ router.get('/period-comparison', (req, res) => {
   }
 });
 
+// DELETE /api/transactions - 일괄 삭제
+// body: { ids: number[] } 선택 항목 삭제 | { all: true } 전체 초기화
+router.delete('/', (req, res) => {
+  try {
+    const { ids, all } = req.body || {};
+    if (all === true) {
+      const deleted = db.prepare('DELETE FROM transactions').run().changes;
+      return res.json({ ok: true, deleted });
+    }
+    if (Array.isArray(ids) && ids.length > 0) {
+      const validIds = ids.map(Number).filter(Number.isInteger);
+      if (!validIds.length) return res.status(400).json({ error: 'ids must contain valid integers' });
+      const placeholders = validIds.map(() => '?').join(',');
+      const deleted = db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
+      return res.json({ ok: true, deleted });
+    }
+    return res.status(400).json({ error: 'ids (non-empty array) or all=true required' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/transactions/:id
 router.get('/:id', (req, res) => {
   const row = db.prepare(`
