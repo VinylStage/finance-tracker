@@ -2,8 +2,8 @@
 
 ## 브랜치 전략
 
-- `main` — production 브랜치. 직접 push 금지.
-- `develop` — GitHub 저장소의 기본 브랜치(default branch). 통합 브랜치 역할을 한다.
+- `main` — production 브랜치. 직접 push 금지. **저장소 설정(브랜치 보호 규칙)으로 강제된다** — 아래 «브랜치 보호 규칙» 참조.
+- `develop` — GitHub 저장소의 기본 브랜치(default branch). 통합 브랜치 역할을 한다. 브랜치 보호는 걸려 있지 않다.
 - `feature/issue-number-description` — 기능 개발용 (예: `feature/12-add-export`)
 - `fix/issue-number-description` — 버그 수정용
 - `chore/description` — 설정/문서/인프라 변경용
@@ -30,6 +30,37 @@
 ## PR 머지 주체
 
 - **PR 머지는 항상 저장소 소유자(사용자)가 직접 수행한다.** 자동 머지나 제3자 머지는 하지 않는다.
+
+## 브랜치 보호 규칙
+
+이 문서의 브랜치 정책은 문서상 규정에 그치지 않고 저장소 설정으로 강제된다. 보호 대상은 `main` 하나이며, `develop` 에는 아무 제한도 걸지 않는다.
+
+### `main` 에 적용된 설정
+
+| 설정 | 값 | 효과 |
+|---|---|---|
+| Require a pull request before merging | 켬 (필요 승인 0) | `main` 직접 push 차단 |
+| Require status checks to pass | `ci`, `validate-title` | CI 실패 상태로 머지 불가 |
+| Require conversation resolution | 켬 | 미해결 리뷰 코멘트가 있으면 머지 불가 |
+| Block force pushes | 켬 | `main` 히스토리 재작성 차단 |
+| Restrict deletions | 켬 | `main` 삭제 차단 |
+| Do not allow bypassing (`enforce_admins`) | **끔** | 저장소 소유자는 위 규칙을 우회할 수 있다 |
+
+필요 승인 수를 0으로 둔 것은 1인 저장소이기 때문이다. PR을 경유하는 절차 자체는 강제하되, 자신의 PR에 셀프 승인을 요구하지는 않는다.
+
+### `develop` 은 보호하지 않는다
+
+`develop` 으로의 직접 push와 force push는 지금까지와 동일하게 가능하다. 통합 브랜치의 유연함을 유지하기 위한 의도적 선택이며, 실수의 여파는 `main` 보호에서 걸러진다.
+
+### bypass 사용 조건
+
+소유자 bypass는 열려 있으나 **일상적인 우회 수단이 아니다.** 아래 경우에 한해 사용하고, 사용했다면 그 사실과 사유를 관련 이슈나 PR에 남긴다.
+
+1. `develop` → `main` 릴리즈 머지에서 release-please 아티팩트(`package.json`, `.release-please-manifest.json`, `CHANGELOG.md`, `package-lock.json`)가 충돌해 로컬 해결이 필요하고, feature 브랜치를 경유하는 경로로는 해소되지 않는 경우
+2. CI 인프라 자체의 장애로 필수 status check가 영구 대기 상태에 빠져, 코드 변경과 무관하게 머지가 막힌 경우
+3. 보안 사고 대응 등 긴급 상황에서 정상 절차를 밟을 시간이 없는 경우
+
+**단순히 절차가 번거롭다는 이유로는 사용하지 않는다.** 위 1번은 `develop` 과 `main` 의 버전 매니페스트가 어긋날 때 발생하므로, 릴리즈 후 두 브랜치를 동기화해 두면 대부분 예방된다.
 
 ## 문서 업데이트 체크
 
