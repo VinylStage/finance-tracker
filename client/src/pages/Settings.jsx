@@ -41,6 +41,7 @@ export default function Settings() {
       <SettingsBackupSection />
       <TransactionsBackupSection />
       <CardImportSection />
+      <DangerZoneSection />
     </div>
   );
 }
@@ -683,6 +684,67 @@ function CardImportSection() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const DANGER_CONFIRM_TEXT = '전체삭제';
+
+function DangerZoneSection() {
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const handleDeleteAll = async () => {
+    if (confirmText !== DANGER_CONFIRM_TEXT) return;
+    if (!window.confirm('정말로 모든 거래내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+
+    setDeleting(true);
+    setMessage('');
+    try {
+      const res = await fetch('/api/transactions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMessage(`${data.deleted}건이 삭제되었습니다.`);
+        setConfirmText('');
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        setMessage('오류: ' + data.error);
+      }
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="bg-rose-50 shadow-sm rounded-xl border border-rose-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-rose-700">위험 구역</h2>
+      <p className="text-xs text-rose-600">
+        전체 거래내역을 삭제합니다. 이 작업은 되돌릴 수 없으며, 삭제 전 위의 "거래내역 백업"으로 미리 내보내는 것을 권장합니다.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          className="bg-white border border-rose-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-rose-500"
+          placeholder={`확인을 위해 "${DANGER_CONFIRM_TEXT}" 입력`}
+          value={confirmText}
+          onChange={e => setConfirmText(e.target.value)}
+        />
+        <button
+          onClick={handleDeleteAll}
+          disabled={confirmText !== DANGER_CONFIRM_TEXT || deleting}
+          className="bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          {deleting ? '삭제 중...' : '전체 거래내역 삭제'}
+        </button>
+        {message && <span className="text-xs text-rose-700">{message}</span>}
+      </div>
     </div>
   );
 }
