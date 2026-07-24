@@ -26,17 +26,19 @@ function parseNonghyupExcel(buffer) {
     const is_installment = row[18] === '할부';
     const installment_months = row[21] ? Number(row[21].match(/\d+/)[0]) : null;
     const cancelled = row[22] !== null && row[22] !== '0' && row[22] !== '-';
-    
+    const approval_number = row[3] != null ? String(row[3]) : null;
+
     result.push({
       date,
       merchant,
       amount,
       is_installment,
       installment_months,
-      cancelled
+      cancelled,
+      approval_number
     });
   }
-  
+
   return result;
 }
 
@@ -56,17 +58,19 @@ function parseLotteExcel(buffer) {
     const is_installment = row[6] === '할부';
     const installment_months = row[7] === '-' ? null : Number(row[7].match(/\d+/)[0]);
     const cancelled = row[9] !== 'N';
-    
+    const approval_number = row[8] != null ? String(row[8]) : null;
+
     result.push({
       date,
       merchant,
       amount,
       is_installment,
       installment_months,
-      cancelled
+      cancelled,
+      approval_number
     });
   }
-  
+
   return result;
 }
 
@@ -95,7 +99,8 @@ function parseSamsungExcel(buffer) {
       amount,
       is_installment,
       installment_months,
-      cancelled
+      cancelled,
+      approval_number: approvalNumber != null ? String(approvalNumber) : null
     };
     result.push(entry);
     if (approvalNumber) {
@@ -135,17 +140,19 @@ function parseHanaExcel(buffer) {
     const is_installment = row[7] === '할부';
     const installment_months = row[8] === '-' ? null : Number(row[8].match(/\d+/)?.[0]) || null;
     const cancelled = row[13] === '취소';
-    
+    const approval_number = row[3] != null ? String(row[3]) : null;
+
     result.push({
       date,
       merchant,
       amount,
       is_installment,
       installment_months,
-      cancelled
+      cancelled,
+      approval_number
     });
   }
-  
+
   return result;
 }
 
@@ -186,7 +193,8 @@ function parseHyundaiExcel(buffer) {
       amount,
       is_installment: installment_months !== null,
       installment_months,
-      cancelled: false
+      cancelled: false,
+      approval_number: null
     });
   }
   
