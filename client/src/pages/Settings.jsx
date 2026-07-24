@@ -610,25 +610,26 @@ function TransactionsBackupSection() {
 }
 
 function CardImportSection() {
-  const [status, setStatus] = useState(null);
-  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null); // { results, totals }
+  const [files, setFiles] = useState([]);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleFile = async (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    setFile(f);
-    setStatus(null);
+  // 여러 파일을 미리보기 요청. 파일별 결과(성공/실패)를 함께 받는다.
+  const handleFiles = async (e) => {
+    const selected = Array.from(e.target.files || []);
+    if (!selected.length) return;
+    setFiles(selected);
+    setPreview(null);
     setMessage('');
     setLoading(true);
     try {
       const fd = new FormData();
-      fd.append('file', f);
+      selected.forEach((f) => fd.append('files', f));
       const res = await fetch('/api/card-import?preview=true', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
-      setStatus(data);
+      setPreview(data);
     } catch (err) {
       setMessage('오류: ' + err.message);
     } finally {
@@ -638,20 +639,22 @@ function CardImportSection() {
   };
 
   const handleImport = async () => {
-    if (!file) return;
+    if (!files.length) return;
     setLoading(true);
     setMessage('');
     try {
       const fd = new FormData();
-      fd.append('file', file);
+      files.forEach((f) => fd.append('files', f));
       const res = await fetch('/api/card-import', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
-      let msg = `${data.imported}건 임포트 완료 (${data.skipped}건 스킵)`;
-      if (data.errors?.length) msg += ` / 오류 ${data.errors.length}건`;
+      const t = data.totals || {};
+      let msg = `${(t.imported || 0).toLocaleString('ko-KR')}건 임포트 완료 (중복 스킵 ${(t.skipped || 0).toLocaleString('ko-KR')}건`;
+      if (t.failed) msg += `, 실패 파일 ${t.failed}개`;
+      msg += ')';
       setMessage(msg);
-      setStatus(null);
-      setFile(null);
+      setPreview(null);
+      setFiles([]);
     } catch (err) {
       setMessage('오류: ' + err.message);
     } finally {
@@ -659,29 +662,43 @@ function CardImportSection() {
     }
   };
 
+  const previewTotal = preview?.totals?.count || 0;
+
   return (
     <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
       <h2 className="text-sm font-semibold text-slate-700">카드사 엑셀 임포트</h2>
-      <p className="text-xs text-slate-500">카드사 홈페이지에서 내려받은 이용내역 파일을 업로드하면 거래내역으로 자동 등록됩니다. (농협·롯데·삼성·하나·현대)</p>
+      <p className="text-xs text-slate-500">카드사 홈페이지에서 내려받은 이용내역 파일을 업로드하면 거래내역으로 자동 등록됩니다. 여러 파일을 한 번에 선택할 수 있습니다. (농협·롯데·삼성·하나·현대)</p>
       <div className="flex flex-wrap gap-3 items-center">
         <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
-          파일 선택 (xlsx / xls)
-          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} disabled={loading} />
+          파일 선택 (여러 개 가능)
+          <input type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={handleFiles} disabled={loading} />
         </label>
         {loading && <span className="text-xs text-slate-400">처리 중…</span>}
         {message && <span className="text-xs text-slate-500">{message}</span>}
       </div>
-      {status && (
+      {preview && (
         <div className="mt-2 space-y-3">
-          <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
-            <div className="font-medium text-slate-700 mb-1">{status.cardCompanyLabel}</div>
-            <div>신규 <strong>{status.count.toLocaleString('ko-KR')}</strong>건 · 중복 스킵 {status.skipped.toLocaleString('ko-KR')}건</div>
+          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-1.5">
+            <div className="font-medium text-slate-700">
+              파일 {preview.totals.files}개 · 성공 {preview.totals.succeeded} / 실패 {preview.totals.failed}
+            </div>
+            {preview.results.map((r, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className={r.ok ? 'text-emerald-600' : 'text-rose-600'}>{r.ok ? '✓' : '✕'}</span>
+                <span className="text-slate-600 break-all">
+                  <span className="font-medium">{r.filename}</span>
+                  {r.ok
+                    ? ` — ${r.cardCompanyLabel} · 신규 ${(r.count || 0).toLocaleString('ko-KR')}건 · 중복 ${(r.skipped || 0).toLocaleString('ko-KR')}건`
+                    : ` — ${r.error}`}
+                </span>
+              </div>
+            ))}
           </div>
           <div className="flex gap-2">
-            <button onClick={handleImport} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
-              {status.count}건 임포트
+            <button onClick={handleImport} disabled={loading || previewTotal === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+              신규 {previewTotal.toLocaleString('ko-KR')}건 임포트
             </button>
-            <button onClick={() => { setStatus(null); setFile(null); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+            <button onClick={() => { setPreview(null); setFiles([]); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
               취소
             </button>
           </div>
