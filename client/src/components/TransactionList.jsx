@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 
 const TYPE_COLOR = {
   '수입': 'text-emerald-600',
@@ -20,6 +20,21 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
 
   const selectable = !!(selectedIds && onToggleSelect);
   const allSelected = selectable && items.every(tx => selectedIds.has(tx.id));
+
+  const lastCheckedIndexRef = useRef(null);
+
+  const handleCheckboxChange = (e, id, index) => {
+    const shiftKey = e.nativeEvent.shiftKey;
+    if (shiftKey && lastCheckedIndexRef.current !== null && onToggleSelectAll) {
+      const start = Math.min(lastCheckedIndexRef.current, index);
+      const end = Math.max(lastCheckedIndexRef.current, index);
+      const rangeIds = items.slice(start, end + 1).map(tx => tx.id);
+      onToggleSelectAll(rangeIds, e.target.checked);
+    } else {
+      onToggleSelect(id);
+    }
+    lastCheckedIndexRef.current = index;
+  };
 
   return (
     <div className={bare ? 'overflow-hidden' : 'bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden'}>
@@ -57,7 +72,7 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                   <input
                     type="checkbox"
                     checked={selectedIds.has(tx.id)}
-                    onChange={() => onToggleSelect(tx.id)}
+                    onChange={(e) => handleCheckboxChange(e, tx.id, i)}
                     className="cursor-pointer"
                   />
                 </td>
