@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 const { parseCardExcel, detectCardCompany } = require('../services/cardExcelImport');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -139,7 +140,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     if (/^(UNSUPPORTED_CARD|SHEET_NOT_FOUND|PARSE_FAILED):/.test(e.message)) {
       return res.status(400).json({ error: e.message });
     }
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'cardImport');
   }
 });
 

@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, escapeLike } = require('../utils/validate');
+const { serverError } = require('../utils/errors');
 
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
 router.get('/', (req, res) => {
@@ -35,7 +36,7 @@ router.get('/', (req, res) => {
 
     res.json({ data: rows, total });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -250,7 +251,7 @@ router.get('/period-comparison', (req, res) => {
       summary: buildComparisonSummary(curTotals, prevTotals),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -272,7 +273,7 @@ router.delete('/', (req, res) => {
     }
     return res.status(400).json({ error: 'ids (non-empty array) or all=true required' });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -314,7 +315,7 @@ router.post('/', (req, res) => {
            payment_style, merchant || null, memo || null);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -333,7 +334,7 @@ router.put('/:id', (req, res) => {
     if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -344,7 +345,7 @@ router.delete('/:id', (req, res) => {
     if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -515,7 +516,7 @@ router.get('/summary/dashboard', (req, res) => {
       categoryBreakdown, dailyTrend, weeklyTrend, monthlyTrend, topMerchants,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -536,7 +537,7 @@ router.get('/summary/category-breakdown', (req, res) => {
     `).all(from, to);
     res.json({ data });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 

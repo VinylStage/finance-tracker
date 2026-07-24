@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 // GET /api/debts
 router.get('/', (req, res) => {
@@ -15,7 +16,7 @@ router.get('/', (req, res) => {
     const total_monthly_interest = data.reduce((s, d) => s + d.monthly_interest, 0);
     res.json({ data, total_balance, total_monthly_interest });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'debts');
   }
 });
 
@@ -32,7 +33,7 @@ router.post('/', (req, res) => {
     `).run(name, balance, annual_rate, type, memo || null);
     res.status(201).json({ id: result.lastInsertRowid, ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'debts');
   }
 });
 
@@ -48,7 +49,7 @@ router.put('/:id', (req, res) => {
     `).run(merged.name, merged.balance, merged.annual_rate, merged.type || '일반', merged.memo || null, req.params.id);
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'debts');
   }
 });
 
@@ -90,7 +91,7 @@ router.post('/:id/interest', (req, res) => {
 
     res.status(201).json({ ok: true, balance_after });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'debts');
   }
 });
 
@@ -102,7 +103,7 @@ router.get('/:id/interest-log', (req, res) => {
     `).all(req.params.id);
     res.json({ data });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'debts');
   }
 });
 

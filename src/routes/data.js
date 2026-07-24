@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 // GET /api/data/export - Export all transactions with category names
 router.get('/export', (req, res) => {
@@ -42,7 +43,7 @@ router.get('/export', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.json(data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'data');
   }
 });
 
@@ -155,7 +156,7 @@ router.post('/import', (req, res) => {
 
     res.json(response);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'data');
   }
 });
 

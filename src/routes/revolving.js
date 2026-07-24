@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 // GET /api/revolving?payment_method_id=&from=&to=
 router.get('/', (req, res) => {
@@ -24,7 +25,7 @@ router.get('/', (req, res) => {
 
     res.json({ data, current_carried_balance });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'revolving');
   }
 });
 
@@ -45,7 +46,7 @@ router.post('/', (req, res) => {
     if (e.message.includes('UNIQUE')) {
       return res.status(409).json({ error: '해당 월/카드 조합이 이미 등록되어 있습니다.' });
     }
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'revolving');
   }
 });
 
@@ -68,7 +69,7 @@ router.put('/:id', (req, res) => {
     if (e.message.includes('UNIQUE')) {
       return res.status(409).json({ error: '해당 월/카드 조합이 이미 등록되어 있습니다.' });
     }
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'revolving');
   }
 });
 

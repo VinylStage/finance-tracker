@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 const MONTHS_ELAPSED = `
   (CAST(strftime('%Y','now') AS INT) - CAST(strftime('%Y', i.start_billing_month || '-01') AS INT)) * 12
@@ -37,7 +38,7 @@ router.get('/', (req, res) => {
 
     res.json({ data, this_month_total });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'installments');
   }
 });
 
@@ -60,7 +61,7 @@ router.post('/', (req, res) => {
     `).run(purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id || null, start_billing_month);
     res.status(201).json({ id: result.lastInsertRowid, ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'installments');
   }
 });
 
@@ -81,7 +82,7 @@ router.put('/:id', (req, res) => {
     );
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'installments');
   }
 });
 
