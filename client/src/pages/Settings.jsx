@@ -39,6 +39,9 @@ export default function Settings() {
       <PaymentMethodSection paymentMethods={paymentMethods} onChanged={load} />
       <ExportSection />
       <SettingsBackupSection />
+      <TransactionsBackupSection />
+      <CardImportSection />
+      <DangerZoneSection />
     </div>
   );
 }
@@ -474,6 +477,273 @@ function SettingsBackupSection() {
           <input type="file" accept=".json" className="hidden" onChange={handleImport} />
         </label>
         {msg && <span className="text-xs text-slate-500">{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+function TransactionsBackupSection() {
+  const [preview, setPreview] = useState(null);
+  const [message, setMessage] = useState('');
+  
+  const handleExport = () => {
+    window.location.href = '/api/data/export';
+  };
+  
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      
+      if (!payload.transactions || !Array.isArray(payload.transactions)) {
+        setMessage('오류: 파일이 유효하지 않습니다. transactions 배열이 필요합니다.');
+        return;
+      }
+      
+      // Show preview of first 5 items, keep full array for import
+      const previewData = payload.transactions.slice(0, 5);
+      setPreview({
+        data: previewData,
+        all: payload.transactions,
+        total: payload.transactions.length
+      });
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    }
+    
+    e.target.value = '';
+  };
+  
+  const handleImportAction = async (mode) => {
+    if (!preview) return;
+    
+    // For overwrite, confirm with user
+    if (mode === 'overwrite' && !window.confirm('기존 거래내역이 모두 삭제됩니다. 계속하시겠습니까?')) {
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/data/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, transactions: preview.all }),
+      });
+      const data = await res.json();
+      
+      if (data.ok) {
+        setMessage(`${data.imported}건 저장됨 (${data.skipped}건 스킵)`);
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        setMessage('오류: ' + data.error);
+      }
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    }
+    
+    // Reset preview
+    setPreview(null);
+  };
+  
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">거래내역 백업 / 복원</h2>
+      <p className="text-xs text-slate-500">거래내역을 이 앱 전용 JSON 형식으로 내보내거나, 내보낸 파일을 다시 불러와 추가하거나 전체 복원할 수 있습니다.</p>
+      <div className="flex flex-wrap gap-3 items-center">
+        <button onClick={handleExport} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">거래내역 내보내기 (JSON)</button>
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          거래내역 불러오기
+          <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+        </label>
+        {message && <span className="text-xs text-slate-500">{message}</span>}
+      </div>
+      
+      {preview && (
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold text-slate-700 mb-2">미리보기</h3>
+          <div className="mb-2">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="border border-slate-200 px-2 py-1 text-left">날짜</th>
+                  <th className="border border-slate-200 px-2 py-1 text-left">가맹점</th>
+                  <th className="border border-slate-200 px-2 py-1 text-right">금액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.data.map((tx, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="border border-slate-200 px-2 py-1">{tx.date}</td>
+                    <td className="border border-slate-200 px-2 py-1">{tx.merchant || '-'}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-right">{tx.amount ? tx.amount.toLocaleString('ko-KR') : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">총 {preview.total}건</p>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={() => handleImportAction('append')}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+            >
+              새 데이터 추가
+            </button>
+            <button 
+              onClick={() => handleImportAction('overwrite')} 
+              className="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+            >
+              덮어쓰기
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardImportSection() {
+  const [status, setStatus] = useState(null);
+  const [file, setFile] = useState(null);
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleFile = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setFile(f);
+    setStatus(null);
+    setMessage('');
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const res = await fetch('/api/card-import?preview=true', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      setStatus(data);
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file) return;
+    setLoading(true);
+    setMessage('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/card-import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      let msg = `${data.imported}건 임포트 완료 (${data.skipped}건 스킵)`;
+      if (data.errors?.length) msg += ` / 오류 ${data.errors.length}건`;
+      setMessage(msg);
+      setStatus(null);
+      setFile(null);
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">카드사 엑셀 임포트</h2>
+      <p className="text-xs text-slate-500">카드사 홈페이지에서 내려받은 이용내역 파일을 업로드하면 거래내역으로 자동 등록됩니다. (농협·롯데·삼성·하나·현대)</p>
+      <div className="flex flex-wrap gap-3 items-center">
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          파일 선택 (xlsx / xls)
+          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} disabled={loading} />
+        </label>
+        {loading && <span className="text-xs text-slate-400">처리 중…</span>}
+        {message && <span className="text-xs text-slate-500">{message}</span>}
+      </div>
+      {status && (
+        <div className="mt-2 space-y-3">
+          <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+            <div className="font-medium text-slate-700 mb-1">{status.cardCompanyLabel}</div>
+            <div>신규 <strong>{status.count.toLocaleString('ko-KR')}</strong>건 · 중복 스킵 {status.skipped.toLocaleString('ko-KR')}건</div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleImport} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+              {status.count}건 임포트
+            </button>
+            <button onClick={() => { setStatus(null); setFile(null); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const DANGER_CONFIRM_TEXT = '전체삭제';
+
+function DangerZoneSection() {
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const handleDeleteAll = async () => {
+    if (confirmText !== DANGER_CONFIRM_TEXT) return;
+    if (!window.confirm('정말로 모든 거래내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+
+    setDeleting(true);
+    setMessage('');
+    try {
+      const res = await fetch('/api/transactions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMessage(`${data.deleted}건이 삭제되었습니다.`);
+        setConfirmText('');
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        setMessage('오류: ' + data.error);
+      }
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="bg-rose-50 shadow-sm rounded-xl border border-rose-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-rose-700">위험 구역</h2>
+      <p className="text-xs text-rose-600">
+        전체 거래내역을 삭제합니다. 이 작업은 되돌릴 수 없으며, 삭제 전 위의 "거래내역 백업"으로 미리 내보내는 것을 권장합니다.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          className="bg-white border border-rose-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-rose-500"
+          placeholder={`확인을 위해 "${DANGER_CONFIRM_TEXT}" 입력`}
+          value={confirmText}
+          onChange={e => setConfirmText(e.target.value)}
+        />
+        <button
+          onClick={handleDeleteAll}
+          disabled={confirmText !== DANGER_CONFIRM_TEXT || deleting}
+          className="bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          {deleting ? '삭제 중...' : '전체 거래내역 삭제'}
+        </button>
+        {message && <span className="text-xs text-rose-700">{message}</span>}
       </div>
     </div>
   );

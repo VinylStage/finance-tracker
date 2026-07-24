@@ -16,10 +16,13 @@ app.use('/api/debts',        require('./routes/debts'));
 app.use('/api/cashflow',     require('./routes/cashflow'));
 app.use('/api/savings',      require('./routes/savings'));
 app.use('/api/export',       require('./routes/export'));
+app.use('/api/data',         require('./routes/data'));
 app.use('/api/settings',     require('./routes/settings'));
 app.use('/api/exchange',     require('./routes/exchange'));
 app.use('/api/stocks',       require('./routes/stocks'));
 app.use('/api/csv-import',   require('./routes/csvImport'));
+app.use('/api/card-import',  require('./routes/cardImport'));
+app.use('/api/guide',        require('./routes/guide'));
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));

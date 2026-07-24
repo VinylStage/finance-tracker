@@ -867,6 +867,25 @@
 - **에러 케이스**:
   - 500: DB 오류
 
+### DELETE /
+- **Method**: DELETE
+- **Path**: `/api/transactions`
+- **설명**: 일괄 삭제. 선택 항목 삭제(`ids`) 또는 전체 초기화(`all: true`) 중 하나를 요청 본문으로 전달
+- **요청 본문** (다음 중 하나):
+  ```json
+  { "ids": [1, 2, 3] }
+  ```
+  ```json
+  { "all": true }
+  ```
+- **응답 스키마**:
+  ```json
+  { "ok": true, "deleted": integer }
+  ```
+- **에러 케이스**:
+  - 400: `ids`(비어있지 않은 배열) 또는 `all: true` 중 하나가 필요함 / `ids`에 유효한 정수가 없음
+  - 500: DB 오류
+
 ### GET /summary/dashboard
 - **Method**: GET
 - **Path**: `/api/transactions/summary/dashboard`

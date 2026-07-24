@@ -1,0 +1,71 @@
+name: PR Title Check
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+permissions:
+  pull-requests: write
+
+jobs:
+  validate-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title follows Conventional Commits
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prTitle = context.payload.pull_request.title;
+            const allowedTypes = [
+              'feat', 'fix', 'docs', 'chore',
+              'refactor', 'test', 'ci', 'perf',
+              'style', 'revert',
+            ];
+            const pattern = new RegExp(
+              `^(${allowedTypes.join('|')})(\\([^)]+\\))?:\\s.+`
+            );
+
+            if (pattern.test(prTitle)) {
+              console.log(`✅ PR 제목이 Conventional Commits 형식을 따릅니다: ${prTitle}`);
+              return;
+            }
+
+            const message =
+              '❌ PR 제목이 Conventional Commits 형식을 따르지 않습니다.\n\n' +
+              '⚠️ CRITICAL: release-please는 이 형식에 의존하여 CHANGELOG와 버전을 생성합니다. ' +
+              '특히 develop → main PR은 형식을 지키지 않으면 릴리즈가 누락될 수 있습니다.\n\n' +
+              `현재 제목: ${prTitle}\n\n` +
+              '형식: <type>(<scope>)?: <description>\n' +
+              `허용 type: ${allowedTypes.join(', ')}\n\n` +
+              '예시:\n' +
+              '  ✅ feat: add card excel import\n' +
+              '  ✅ fix(ci): prevent release-please loop\n' +
+              '  ❌ Update workflow\n' +
+              '  ❌ 릴리즈 준비';
+
+            try {
+              const { owner, repo } = context.repo;
+              const issue_number = context.payload.pull_request.number;
+              const { data: comments } = await github.rest.issues.listComments({
+                owner, repo, issue_number,
+              });
+              const marker = '<!-- pr-title-check -->';
+              const existing = comments.find((c) => c.body.includes(marker));
+              const body = `${marker}\n${message}`;
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: existing.id, body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number, body,
+                });
+              }
+            } catch (err) {
+              console.log(`코멘트 작성 실패 (무시하고 계속): ${err.message}`);
+            }
+
+            core.setFailed(message);

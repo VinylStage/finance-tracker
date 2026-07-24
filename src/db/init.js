@@ -37,6 +37,7 @@ db.exec(`
     payment_method_id INTEGER REFERENCES payment_methods(id),
     payment_style TEXT NOT NULL DEFAULT '일시불',
     merchant TEXT,
+    approval_number TEXT,
     memo TEXT,
     installment_id INTEGER REFERENCES installments(id),
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -123,6 +124,11 @@ if (!debtsColumns.includes('type')) {
 const savingsColumns = db.prepare(`PRAGMA table_info(savings_products)`).all().map(c => c.name);
 if (!savingsColumns.includes('category_id')) {
   db.exec(`ALTER TABLE savings_products ADD COLUMN category_id INTEGER REFERENCES categories(id)`);
+}
+
+const transactionsColumns = db.prepare(`PRAGMA table_info(transactions)`).all().map(c => c.name);
+if (!transactionsColumns.includes('approval_number')) {
+  db.exec(`ALTER TABLE transactions ADD COLUMN approval_number TEXT`);
 }
 
 // --- initial seed: 최초 실행(빈 DB)에서만 범용 카테고리/결제수단 생성 ---

@@ -19,6 +19,7 @@ export default function Transactions() {
   const [editItem, setEditItem] = useState(null);
   const [selectedYear, setSelectedYear] = useState(null);
   const [expandedMonths, setExpandedMonths] = useState(new Set());
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   const load = useCallback(() => {
     setLoading(true);
@@ -45,6 +46,8 @@ export default function Transactions() {
     if (!years.length) return;
     setSelectedYear(prev => (prev && years.includes(prev) ? prev : (years.includes(CURRENT_YEAR) ? CURRENT_YEAR : years[0])));
   }, [years]);
+
+  useEffect(() => { setSelectedIds(new Set()); }, [selectedYear]);
 
   const monthGroups = useMemo(() => {
     if (!selectedYear) return [];
@@ -102,16 +105,63 @@ export default function Transactions() {
     setShowForm(true);
   };
 
+  const handleToggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (ids, select) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => { if (select) next.add(id); else next.delete(id); });
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`선택한 ${selectedIds.size}건을 삭제하시겠습니까? 되돌릴 수 없습니다.`)) return;
+    await fetch('/api/transactions', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...selectedIds] }),
+    });
+    setSelectedIds(new Set());
+    load();
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-semibold text-slate-800">거래 내역</h1>
-        <button
-          onClick={() => { setEditItem(null); setShowForm(true); }}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
-        >
-          + 거래 추가
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-xs text-slate-500">{selectedIds.size}건 선택됨</span>
+              <button
+                onClick={handleBulkDelete}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+              >
+                선택 삭제
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-slate-500 hover:text-slate-700 text-sm px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+              >
+                선택 해제
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => { setEditItem(null); setShowForm(true); }}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          >
+            + 거래 추가
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -168,7 +218,15 @@ export default function Transactions() {
                   </button>
                   {expanded && (
                     <div className="border-t border-slate-200 p-3">
-                      <TransactionList items={g.items} onEdit={handleEdit} onDelete={handleDelete} bare />
+                      <TransactionList
+                        items={g.items}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        bare
+                        selectedIds={selectedIds}
+                        onToggleSelect={handleToggleSelect}
+                        onToggleSelectAll={handleToggleSelectAll}
+                      />
                     </div>
                   )}
                 </div>

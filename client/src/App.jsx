@@ -8,6 +8,7 @@ import Debts from './pages/Debts';
 import Simulator from './pages/Simulator';
 import Savings from './pages/Savings';
 import Settings from './pages/Settings';
+import Guide from './pages/Guide';
 
 const NAV = [
   { id: 'dashboard', label: '대시보드' },
@@ -19,6 +20,7 @@ const NAV = [
   { id: 'savings', label: '적금' },
   { id: 'simulator', label: '시뮬레이터' },
   { id: 'settings', label: '설정' },
+  { id: 'guide', label: '가이드' },
 ];
 
 export default function App() {
@@ -57,6 +59,7 @@ export default function App() {
         {page === 'savings' && <Savings />}
         {page === 'simulator' && <Simulator />}
         {page === 'settings' && <Settings />}
+        {page === 'guide' && <Guide />}
       </main>
     </div>
   );
