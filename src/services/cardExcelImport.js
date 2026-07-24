@@ -189,12 +189,15 @@ function parseHyundaiExcel(buffer) {
     
     const match = cell(row, 0).match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
     const date = `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`;
+    // 가맹점+금액이 한 셀에 붙어 오므로 이 셀이 없으면 파싱할 수 없다. 건너뛴다
+    // (String(null) = 'null' 이 가맹점명으로 저장되는 것을 방지).
+    const rawMerchant = cell(row, 2);
+    if (rawMerchant === null) continue;
     // 이용금액 column is unreliable/blank in this export; the amount is instead
     // appended directly onto the merchant name with no separator (e.g. "연회비0", "SSG_COM100,849").
     // Foreign-currency rows embed a "USD:12.34" segment before the KRW amount
     // (e.g. "ANTHROPIC,USD:5.508,116" = "ANTHROPIC" + USD:5.50 + amount 8,116),
     // so that segment must be excluded from the trailing-amount match first.
-    const rawMerchant = String(cell(row, 2));
     const usdSuffix = rawMerchant.match(/USD:\d+\.\d{2}(?=[\d,]+$)/);
     let merchant, amount;
     if (usdSuffix) {
