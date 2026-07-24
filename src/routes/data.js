@@ -80,9 +80,10 @@ router.post('/import', express.json({ limit: '10mb' }), (req, res) => {
       }
       
       // Process and insert transactions
+      // created_at 은 백업값을 복원하되, 없으면(구버전 백업) COALESCE 로 현재 시각을 쓴다
       const insertTx = db.prepare(`
-        INSERT INTO transactions (date, merchant, amount, category_id, memo, payment_method_id, payment_style, approval_number, installment_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO transactions (date, merchant, amount, category_id, memo, payment_method_id, payment_style, approval_number, installment_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
       `);
       
       for (const tx of transactions) {
@@ -105,17 +106,19 @@ router.post('/import', express.json({ limit: '10mb' }), (req, res) => {
           }
         }
         
-        // Handle legacy fields
-        let payment_method_id = tx.payment_method_id !== undefined ? tx.payment_method_id : null;
-        let payment_style = '일시불';
-        if (tx.payment_style !== undefined) {
-          payment_style = tx.payment_style;
-        } else {
+        // Handle legacy fields — 신버전 백업은 필드가 null 이어도 존재한다.
+        // 하나라도 undefined(필드 자체 부재)면 구버전 백업으로 보고 legacy 플래그를 세운다.
+        if (tx.payment_style === undefined || tx.payment_method_id === undefined ||
+            tx.approval_number === undefined || tx.installment_id === undefined ||
+            tx.created_at === undefined) {
           legacy_fields_defaulted = true;
         }
 
+        let payment_method_id = tx.payment_method_id !== undefined ? tx.payment_method_id : null;
+        const payment_style = tx.payment_style !== undefined ? tx.payment_style : '일시불';
         const approval_number = tx.approval_number !== undefined ? tx.approval_number : null;
         let installment_id = tx.installment_id !== undefined ? tx.installment_id : null;
+        const created_at = tx.created_at !== undefined ? tx.created_at : null;
 
         // 현재 DB에 존재하지 않는 FK 값은 NULL로 폴백(전체 롤백 방지)
         if (payment_method_id !== null && !paymentMethodIds.has(payment_method_id)) {
@@ -128,7 +131,7 @@ router.post('/import', express.json({ limit: '10mb' }), (req, res) => {
         }
 
         // Insert transaction
-        insertTx.run(tx.date, tx.merchant, tx.amount, categoryId, tx.memo, payment_method_id, payment_style, approval_number, installment_id);
+        insertTx.run(tx.date, tx.merchant, tx.amount, categoryId, tx.memo, payment_method_id, payment_style, approval_number, installment_id, created_at);
         imported++;
       }
     });
