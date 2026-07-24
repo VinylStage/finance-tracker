@@ -34,9 +34,9 @@ function processTransactions(cardCompany, originalname, fileBuffer, isPreview = 
 
     for (const row of filteredTransactions) {
       // Check for duplicates
-      const existing = db.prepare(
-        'SELECT id FROM transactions WHERE date = ? AND merchant = ? AND amount = ?'
-      ).get(row.date, row.merchant, row.amount);
+      const existing = row.approval_number
+        ? db.prepare('SELECT id FROM transactions WHERE approval_number = ?').get(row.approval_number)
+        : db.prepare('SELECT id FROM transactions WHERE date = ? AND merchant = ? AND amount = ?').get(row.date, row.merchant, row.amount);
       
       if (existing) {
         skipped++;
@@ -80,9 +80,9 @@ function processTransactions(cardCompany, originalname, fileBuffer, isPreview = 
       for (const row of filteredTransactions) {
         try {
           // Check for duplicates
-          const existing = db.prepare(
-            'SELECT id FROM transactions WHERE date = ? AND merchant = ? AND amount = ?'
-          ).get(row.date, row.merchant, row.amount);
+          const existing = row.approval_number
+            ? db.prepare('SELECT id FROM transactions WHERE approval_number = ?').get(row.approval_number)
+            : db.prepare('SELECT id FROM transactions WHERE date = ? AND merchant = ? AND amount = ?').get(row.date, row.merchant, row.amount);
           
           if (existing) {
             skipped++;
@@ -92,15 +92,16 @@ function processTransactions(cardCompany, originalname, fileBuffer, isPreview = 
           // Insert transaction
           db.prepare(`
             INSERT INTO transactions 
-              (date, category_id, amount, payment_method_id, payment_style, merchant)
-            VALUES (?, ?, ?, ?, ?, ?)
+              (date, category_id, amount, payment_method_id, payment_style, merchant, approval_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
           `).run(
             row.date,
             category_id,
             row.amount,
             payment_method_id,
             row.is_installment ? '할부' : '일시불',
-            row.merchant
+            row.merchant,
+            row.approval_number
           );
           
           imported++;
@@ -121,7 +122,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     }
 
     const cardCompany = req.query.preview === 'true' ? null : detectCardCompany(req.file.originalname);
-    
+
     if (req.query.preview === 'true') {
       // In preview mode, don't write to DB - just count new vs existing transactions
       const result = processTransactions(cardCompany, req.file.originalname, req.file.buffer, true);
