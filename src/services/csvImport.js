@@ -96,7 +96,7 @@ function normalizeDate(raw) {
       let year, month, day;
       
       if (format === formats[0] || format === formats[1]) {
-        // YY.MM.DD 또는 YYYY/MM/DD 포맷
+        // YYYY.MM.DD 또는 YYYY/MM/DD 포맷
         year = match[1];
         month = String(match[2]).padStart(2, '0');
         day = String(match[3]).padStart(2, '0');
@@ -111,11 +111,19 @@ function normalizeDate(raw) {
         month = String(match[2]).padStart(2, '0');
         day = String(match[3]).padStart(2, '0');
       }
-      
+
+      // 실제 달력 유효성 검증: Date 로 만들어 롤오버(2026-02-30 → 3월)를 감지한다.
+      // 형식만 맞고 존재하지 않는 날짜(2026-99-99, 20260230)는 null 을 반환한다.
+      const y = Number(year), mo = Number(month), d = Number(day);
+      const dt = new Date(y, mo - 1, d);
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) {
+        return null;
+      }
+
       return `${year}-${month}-${day}`;
     }
   }
-  
+
   return null;
 }
 
