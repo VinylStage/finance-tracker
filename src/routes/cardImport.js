@@ -121,19 +121,14 @@ router.post('/', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'file is required' });
     }
 
-    const cardCompany = req.query.preview === 'true' ? null : detectCardCompany(req.file.originalname);
-
-    if (req.query.preview === 'true') {
-      // In preview mode, don't write to DB - just count new vs existing transactions
-      const result = processTransactions(cardCompany, req.file.originalname, req.file.buffer, true);
-      res.json(result);
-    } else {
-      // Real import mode
-      const result = processTransactions(cardCompany, req.file.originalname, req.file.buffer);
-      res.json(result);
-    }
+    // 카드사 판별은 processTransactions 내부에서 파일명을 UTF-8로 디코딩한 뒤 수행한다.
+    // (라우트에서 원본 파일명으로 detect하면 multer latin1 인코딩 때문에 한글 파일명이 항상 실패했다)
+    const isPreview = req.query.preview === 'true';
+    const result = processTransactions(null, req.file.originalname, req.file.buffer, isPreview);
+    res.json(result);
   } catch (e) {
-    if (e.message.includes('Unknown card company')) {
+    // 잘못된 입력(미지원 카드사, 시트 부재, 파싱 실패)은 400. 그 외는 500.
+    if (/^(UNSUPPORTED_CARD|SHEET_NOT_FOUND):/.test(e.message)) {
       return res.status(400).json({ error: e.message });
     }
     res.status(500).json({ error: e.message });
