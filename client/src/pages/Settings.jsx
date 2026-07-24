@@ -40,6 +40,7 @@ export default function Settings() {
       <ExportSection />
       <SettingsBackupSection />
       <TransactionsBackupSection />
+      <CardImportSection />
     </div>
   );
 }
@@ -596,6 +597,221 @@ function TransactionsBackupSection() {
               className="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
             >
               덮어쓰기
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardImportSection() {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [importing, setImporting] = useState(false);
+
+  const handleFileChange = async (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+
+    setFile(selectedFile);
+    setMessage('');
+    setPreview(null);
+
+    try {
+      setLoading(true);
+      
+      // Create FormData and send to preview endpoint
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      
+      const res = await fetch('/api/card-import?preview=true', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setPreview(data);
+      } else {
+        setMessage(data.error || '미리보기 실패');
+      }
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+
+    // Reset file input
+    e.target.value = '';
+  };
+
+  const handleImport = async () => {
+    if (!file) return;
+
+    try {
+      setImporting(true);
+      setMessage('');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/card-import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMessage(`${data.imported}건 가져옴 (${data.skipped}건 중복 스킵)`);
+        if (data.errors && data.errors.length > 0) {
+          data.errors.forEach(error => {
+            setMessage(prev => prev + '\n' + error);
+          });
+        }
+        // Clear state and reload after short delay
+        setTimeout(() => {
+          setFile(null);
+          setPreview(null);
+          window.location.reload();
+        }, 1000);
+      } else {
+        setMessage(data.error || '가져오기 실패');
+      }
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">카드 거래내역 가져오기</h2>
+      <p className="text-xs text-slate-500">카드 거래내역 Excel 파일을 업로드하여 추가할 수 있습니다.</p>
+      
+      <div className="flex flex-wrap gap-3 items-center">
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          파일 선택
+          <input 
+            type="file" 
+            accept=".xls,.xlsx" 
+            className="hidden" 
+            onChange={handleFileChange} 
+          />
+        </label>
+        
+        {loading && (
+          <span className="text-xs text-slate-500">미리보기 중...</span>
+        )}
+        
+        {message && !preview && (
+          <span className="text-xs text-rose-600">{message}</span>
+        )}
+      </div>
+
+      {preview && (
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold text-slate-700 mb-2">미리보기</h3>
+          <div className="bg-slate-50 rounded-lg p-3 mb-3">
+            <p className="text-xs text-slate-700">
+              <span className="font-medium">카드사명:</span> {preview.cardCompanyLabel}<br/>
+              <span className="font-medium">파일명:</span> {file?.name}<br/>
+              <span className="font-medium">예상 건수:</span> {preview.count}건{preview.skipped > 0 ? ` (중복 ${preview.skipped}건 스킵)` : ''}
+            </p>
+          </div>
+          
+          <button
+            onClick={handleImport}
+            disabled={importing}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          >
+            {importing ? '가져오는 중...' : '가져오기'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardImportSection() {
+  const [status, setStatus] = useState(null);
+  const [file, setFile] = useState(null);
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleFile = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setFile(f);
+    setStatus(null);
+    setMessage('');
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const res = await fetch('/api/card-import?preview=true', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      setStatus(data);
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file) return;
+    setLoading(true);
+    setMessage('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/card-import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      let msg = `${data.imported}건 임포트 완료 (${data.skipped}건 스킵)`;
+      if (data.errors?.length) msg += ` / 오류 ${data.errors.length}건`;
+      setMessage(msg);
+      setStatus(null);
+      setFile(null);
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">카드사 엑셀 임포트</h2>
+      <p className="text-xs text-slate-500">카드사 홈페이지에서 내려받은 이용내역 파일을 업로드하면 거래내역으로 자동 등록됩니다. (농협·롯데·삼성·하나·현대)</p>
+      <div className="flex flex-wrap gap-3 items-center">
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          파일 선택 (xlsx / xls)
+          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} disabled={loading} />
+        </label>
+        {loading && <span className="text-xs text-slate-400">처리 중…</span>}
+        {message && <span className="text-xs text-slate-500">{message}</span>}
+      </div>
+      {status && (
+        <div className="mt-2 space-y-3">
+          <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+            <div className="font-medium text-slate-700 mb-1">{status.cardCompanyLabel}</div>
+            <div>신규 <strong>{status.count.toLocaleString('ko-KR')}</strong>건 · 중복 스킵 {status.skipped.toLocaleString('ko-KR')}건</div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleImport} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+              {status.count}건 임포트
+            </button>
+            <button onClick={() => { setStatus(null); setFile(null); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              취소
             </button>
           </div>
         </div>
