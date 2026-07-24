@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/VinylStage/finance-tracker/compare/v0.3.0...v0.4.0) (2026-07-24)
+
+
+### Features
+
+* **data:** add transaction backup/restore (append/overwrite) ([#52](https://github.com/VinylStage/finance-tracker/issues/52)) ([0458395](https://github.com/VinylStage/finance-tracker/commit/04583957f62927952ee757c2af65d7e95a21d7be)), closes [#34](https://github.com/VinylStage/finance-tracker/issues/34)
+* **guide:** UI 가이드 페이지 추가 및 마크다운 문서화 ([#56](https://github.com/VinylStage/finance-tracker/issues/56)) ([#63](https://github.com/VinylStage/finance-tracker/issues/63)) ([d7d160e](https://github.com/VinylStage/finance-tracker/commit/d7d160ef40c12e233a19c2bb4b129ea140850e92))
+* **import:** 카드사 엑셀 임포트 (농협·롯데·삼성·하나·현대) ([#55](https://github.com/VinylStage/finance-tracker/issues/55)) ([0579344](https://github.com/VinylStage/finance-tracker/commit/05793442394bc00880c6cc6d7369b9eefea10fd7))
+* **transactions:** shift+클릭 체크박스 범위선택 ([#61](https://github.com/VinylStage/finance-tracker/issues/61)) ([7f1221b](https://github.com/VinylStage/finance-tracker/commit/7f1221bbde557807d1075a3deae86f87aa3913cd))
+* 거래 일괄삭제 및 전체 초기화 기능 ([#60](https://github.com/VinylStage/finance-tracker/issues/60)) ([01cb9d4](https://github.com/VinylStage/finance-tracker/commit/01cb9d48125d6a042f2017b3a35747aa2dc5cf1a))
+
+
+### Bug Fixes
+
+* **card-import:** 승인번호 기반 중복 체크로 오탐 방지 ([#57](https://github.com/VinylStage/finance-tracker/issues/57)) ([#62](https://github.com/VinylStage/finance-tracker/issues/62)) ([b6472ec](https://github.com/VinylStage/finance-tracker/commit/b6472ec0d40b8b0e9325d1622b0988f561340138))
+* **ci:** release-please 워크플로우 자기 재트리거 루프 방지 ([#58](https://github.com/VinylStage/finance-tracker/issues/58)) ([2d4e37d](https://github.com/VinylStage/finance-tracker/commit/2d4e37d37fa0e6e92cbbe9d025c7c010c583d674))
+
+
+### Maintenance
+
+* **release:** merge develop into main for v0.4.0 release ([c2fc72c](https://github.com/VinylStage/finance-tracker/commit/c2fc72cb35342c8bc12b8cf9309e0a20749b4629))
+
 ## [0.3.0](https://github.com/VinylStage/finance-tracker/compare/v0.2.1...v0.3.0) (2026-07-23)
 
 
