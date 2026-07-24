@@ -40,5 +40,12 @@ app.use((_req, res) => {
   }
 });
 
+const HOST = process.env.HOST || '127.0.0.1';
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`[server] http://localhost:${PORT}`));
+app.listen(PORT, HOST, () => {
+  if (HOST === '0.0.0.0' || HOST === '::') {
+    console.log(`[server] http://${HOST}:${PORT} (모든 인터페이스에 노출됨)`);
+  } else {
+    console.log(`[server] http://${HOST}:${PORT}`);
+  }
+});
