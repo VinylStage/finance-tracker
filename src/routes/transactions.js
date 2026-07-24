@@ -6,23 +6,32 @@ const db = require('../db/init');
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
 router.get('/', (req, res) => {
   try {
-    const { limit = 100, offset = 0, from, to, category_id } = req.query;
-    let sql = `
+    const { from, to, category_id } = req.query;
+    // limit/offset 은 정수로 강제하고 범위를 제한한다(잘못된 값으로 인한 500·과도한 조회 방지)
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
+    const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+
+    // WHERE 절을 목록 쿼리와 카운트 쿼리가 공유한다(total 이 필터를 반영하도록)
+    let where = ' WHERE 1=1';
+    const whereParams = [];
+    if (from) { where += ' AND t.date >= ?'; whereParams.push(from); }
+    if (to)   { where += ' AND t.date <= ?'; whereParams.push(to); }
+    if (category_id) { where += ' AND t.category_id = ?'; whereParams.push(category_id); }
+
+    const rows = db.prepare(`
       SELECT t.*, c.name AS category_name, c.major_type,
              p.name AS payment_method_name
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN payment_methods p ON t.payment_method_id = p.id
-      WHERE 1=1
-    `;
-    const params = [];
-    if (from) { sql += ' AND t.date >= ?'; params.push(from); }
-    if (to)   { sql += ' AND t.date <= ?'; params.push(to); }
-    if (category_id) { sql += ' AND t.category_id = ?'; params.push(category_id); }
-    sql += ' ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?';
-    params.push(Number(limit), Number(offset));
-    const rows = db.prepare(sql).all(...params);
-    const total = db.prepare(`SELECT COUNT(*) as cnt FROM transactions`).get().cnt;
+      ${where}
+      ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?
+    `).all(...whereParams, limit, offset);
+
+    const total = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM transactions t${where}
+    `).get(...whereParams).cnt;
+
     res.json({ data: rows, total });
   } catch (e) {
     res.status(500).json({ error: e.message });
