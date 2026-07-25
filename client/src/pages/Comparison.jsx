@@ -4,6 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
 
@@ -24,7 +25,7 @@ function shortFmt(n) {
   return v.toLocaleString('ko-KR');
 }
 
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { return localYMD(); }
 
 function StatCard({ label, value, diff, pct, invert }) {
   const good = diff === 0 ? null : invert ? diff < 0 : diff > 0;

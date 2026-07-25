@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
@@ -166,7 +167,7 @@ export default function Installments() {
 }
 
 function InstallmentForm({ paymentMethods, onSave, onCancel }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYMD();
   const thisMonth = today.slice(0, 7);
   const [form, setForm] = useState({
     purchase_date: today,

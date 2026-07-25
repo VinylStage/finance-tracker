@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
 
 const PAYMENT_STYLES = ['일시불', '할부', '리볼빙', '해당없음'];
 
@@ -10,7 +11,7 @@ const CONFIDENCE_STYLE = {
 };
 
 export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYMD();
   const [form, setForm] = useState({
     date: today,
     category_id: '',

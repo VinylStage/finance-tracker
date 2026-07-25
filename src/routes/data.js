@@ -3,11 +3,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { localYMD } = require('../utils/date');
 
 // GET /api/data/export - Export all transactions with category names
 router.get('/export', (req, res) => {
   try {
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const today = localYMD().replace(/-/g, '');
     const fileName = `finance-backup-${today}.json`;
     
     // Join transactions with categories to get category names
@@ -22,7 +23,7 @@ router.get('/export', (req, res) => {
     const transactions = db.prepare(txSql).all();
     
     const data = {
-      exported_at: new Date().toISOString(),
+      exported_at: new Date().toISOString(), // 의도적 UTC 타임스탬프(내보내기 메타데이터, 로컬 날짜 아님) — 변경하지 않음
       schema_version: 2,
       transactions: transactions.map(t => ({
         date: t.date,

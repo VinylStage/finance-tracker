@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
@@ -129,7 +130,7 @@ export default function Savings() {
 }
 
 function SavingsForm({ initial, categories, onSave, onCancel }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYMD();
   const [form, setForm] = useState({
     name: initial?.name || '',
     monthly_contribution: initial ? String(initial.monthly_contribution) : '',

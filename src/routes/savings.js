@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { localYMD } = require('../utils/date');
 
 function monthsBetween(startDate, endDate) {
   const s = new Date(startDate);
@@ -75,7 +76,7 @@ router.post('/:id/mature', (req, res) => {
     if (!product) return res.status(404).json({ error: 'Not found' });
     if (product.status === '완료') return res.status(400).json({ error: '이미 만기 처리된 상품입니다.' });
 
-    const settleDate = req.body.settle_date || product.maturity_date || new Date().toISOString().slice(0, 10);
+    const settleDate = req.body.settle_date || product.maturity_date || localYMD();
     const months = monthsBetween(product.start_date, settleDate);
     const principal = product.monthly_contribution * months;
     const payout = product.expected_payout || principal;

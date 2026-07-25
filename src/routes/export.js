@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { localYMD } = require('../utils/date');
 
 const SCHEMA_VERSION = 1;
 
@@ -44,7 +45,7 @@ function getFullBackup(from, to) {
 
   return {
     schema_version: SCHEMA_VERSION,
-    exported_at: new Date().toISOString(),
+    exported_at: new Date().toISOString(), // 의도적 UTC 타임스탬프(내보내기 메타데이터, 로컬 날짜 아님) — 변경하지 않음
     range: { from: from || null, to: to || null },
     transactions: db.prepare(rawTxSql).all(...params),
     categories: db.prepare('SELECT * FROM categories').all(),
@@ -104,7 +105,7 @@ router.get('/', (req, res) => {
 function getSettingsBackup() {
   return {
     schema_version: SCHEMA_VERSION,
-    exported_at: new Date().toISOString(),
+    exported_at: new Date().toISOString(), // 의도적 UTC 타임스탬프(내보내기 메타데이터, 로컬 날짜 아님) — 변경하지 않음
     type: 'settings',
     categories: db.prepare('SELECT * FROM categories').all(),
     payment_methods: db.prepare('SELECT * FROM payment_methods').all(),
@@ -137,7 +138,7 @@ function restoreSettings(payload) {
 router.get('/settings', (req, res) => {
   try {
     const data = getSettingsBackup();
-    res.setHeader('Content-Disposition', `attachment; filename=\"finance-tracker-settings_${new Date().toISOString().slice(0,10)}.json\"`);
+    res.setHeader('Content-Disposition', `attachment; filename=\"finance-tracker-settings_${localYMD()}.json\"`);
     res.json(data);
   } catch (e) {
     serverError(res, e, 'export');

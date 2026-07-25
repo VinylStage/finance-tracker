@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../lib/api';
+import { localYearMonth } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
@@ -139,7 +140,7 @@ export default function Revolving() {
 }
 
 function RevolvingForm({ paymentMethods, error, onSave, onCancel }) {
-  const thisMonth = new Date().toISOString().slice(0, 7);
+  const thisMonth = localYearMonth();
   const [form, setForm] = useState({
     month: thisMonth,
     payment_method_id: '',

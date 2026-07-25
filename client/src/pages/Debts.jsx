@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
@@ -295,7 +296,7 @@ function DebtForm({ initial, onSave, onCancel }) {
 }
 
 function InterestForm({ debt, onSave, onCancel }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYMD();
   const [form, setForm] = useState({
     log_date: today,
     rate: String(debt.annual_rate ?? 0),
