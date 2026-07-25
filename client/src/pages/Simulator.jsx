@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -15,7 +17,6 @@ function shortFmt(n) {
 
 export default function Simulator() {
   const [startingBalance, setStartingBalance] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     income: '',
     expense: '',
@@ -24,11 +25,9 @@ export default function Simulator() {
     months: '12',
   });
 
-  useEffect(() => {
-    fetch('/api/transactions/summary/dashboard')
-      .then(r => r.json())
-      .then(d => { setStartingBalance(d.available || 0); setLoading(false); })
-      .catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const d = await api.get('/api/transactions/summary/dashboard');
+    setStartingBalance(d.available || 0);
   }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -63,6 +62,14 @@ export default function Simulator() {
         <div className="text-slate-500 text-center py-10">로딩 중...</div>
       ) : (
         <>
+          {error && (
+            // 대시보드 조회는 시작 잔액 프리필 용도일 뿐, 시뮬레이션 계산은 전적으로
+            // 클라이언트 측이다. 조회 실패로 도구 전체를 막지 않고 0원 기준으로 계속 쓰게 한다.
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+              <span>현재 가용현금을 불러오지 못했습니다. 0원 기준으로 계산합니다.</span>
+              <button onClick={reload} className="underline hover:text-amber-800">다시 시도</button>
+            </div>
+          )}
           <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-700">가정값 입력</h2>

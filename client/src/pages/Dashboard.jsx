@@ -1,9 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import LoadError from '../components/LoadError';
 
 const PALETTE = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
 const PERIODS = ['일', '주', '월', '연'];
@@ -38,7 +41,6 @@ function CategoryComparison() {
   const [customTo, setCustomTo] = useState('');
   const [chartType, setChartType] = useState('bar');
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   const range = useMemo(() => {
     if (periodMode === 'this') return monthRange(0);
@@ -46,13 +48,10 @@ function CategoryComparison() {
     return { from: customFrom, to: customTo };
   }, [periodMode, customFrom, customTo]);
 
-  useEffect(() => {
-    if (!range.from || !range.to) { setRows([]); setLoading(false); return; }
-    setLoading(true);
-    fetch(`/api/transactions/summary/category-breakdown?from=${range.from}&to=${range.to}`)
-      .then(r => r.json())
-      .then(d => { setRows(d.data || []); setLoading(false); })
-      .catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    if (!range.from || !range.to) { setRows([]); return; }
+    const d = await api.get(`/api/transactions/summary/category-breakdown?from=${range.from}&to=${range.to}`);
+    setRows(d.data || []);
   }, [range]);
 
   return (
@@ -98,6 +97,8 @@ function CategoryComparison() {
       )}
       {loading ? (
         <div className="text-slate-400 text-sm text-center py-10">로딩 중...</div>
+      ) : error ? (
+        <LoadError error={error} onRetry={reload} />
       ) : rows.length === 0 ? (
         <div className="text-slate-400 text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
       ) : (
@@ -178,18 +179,15 @@ function periodConfig(period, data) {
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [totalDebt, setTotalDebt] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('월');
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/transactions/summary/dashboard').then(r => r.json()),
-      fetch('/api/debts').then(r => r.json()),
-    ]).then(([d, debts]) => {
-      setData(d);
-      setTotalDebt(debts.total_balance || 0);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const [d, debts] = await Promise.all([
+      api.get('/api/transactions/summary/dashboard'),
+      api.get('/api/debts'),
+    ]);
+    setData(d);
+    setTotalDebt(debts.total_balance || 0);
   }, []);
 
   const netWorthTrend = useMemo(() => {
@@ -219,6 +217,7 @@ export default function Dashboard() {
   }, [data]);
 
   if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
+  if (error) return <LoadError error={error} onRetry={reload} />;
   if (!data) return <div className="text-rose-600 text-center py-20">데이터를 불러올 수 없습니다.</div>;
 
   const { rows: flowRows, xKey: flowXKey, tick: flowTick } = periodConfig(period, data);

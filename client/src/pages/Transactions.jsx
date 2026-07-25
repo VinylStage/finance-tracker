@@ -1,6 +1,10 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import TransactionList from '../components/TransactionList';
 import TransactionForm from '../components/TransactionForm';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import { useConfirm } from '../components/ConfirmProvider';
+import LoadError from '../components/LoadError';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -14,28 +18,23 @@ export default function Transactions() {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [selectedYear, setSelectedYear] = useState(null);
   const [expandedMonths, setExpandedMonths] = useState(new Set());
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const { confirm, alert } = useConfirm();
 
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetch('/api/transactions?limit=5000').then(r => r.json()),
-      fetch('/api/categories').then(r => r.json()),
-      fetch('/api/payment-methods').then(r => r.json()),
-    ]).then(([txData, cats, pms]) => {
-      setTransactions(txData.data || []);
-      setCategories(cats);
-      setPaymentMethods(pms);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const [txData, cats, pms] = await Promise.all([
+      api.get('/api/transactions?limit=5000'),
+      api.get('/api/categories'),
+      api.get('/api/payment-methods'),
+    ]);
+    setTransactions(txData.data || []);
+    setCategories(cats);
+    setPaymentMethods(pms);
   }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const years = useMemo(() => {
     const set = new Set(transactions.map(t => t.date.slice(0, 4)));
@@ -82,22 +81,25 @@ export default function Transactions() {
   };
 
   const handleSave = async (formData) => {
-    const method = editItem ? 'PUT' : 'POST';
-    const url = editItem ? `/api/transactions/${editItem.id}` : '/api/transactions';
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
-    setShowForm(false);
-    setEditItem(null);
-    load();
+    try {
+      if (editItem) await api.put(`/api/transactions/${editItem.id}`, formData);
+      else await api.post('/api/transactions', formData);
+      setShowForm(false);
+      setEditItem(null);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('삭제하시겠습니까?')) return;
-    await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
-    load();
+    if (!await confirm('삭제하시겠습니까?', { tone: 'danger' })) return;
+    try {
+      await api.del(`/api/transactions/${id}`);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleEdit = (item) => {
@@ -123,14 +125,14 @@ export default function Transactions() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`선택한 ${selectedIds.size}건을 삭제하시겠습니까? 되돌릴 수 없습니다.`)) return;
-    await fetch('/api/transactions', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [...selectedIds] }),
-    });
-    setSelectedIds(new Set());
-    load();
+    if (!await confirm(`선택한 ${selectedIds.size}건을 삭제하시겠습니까? 되돌릴 수 없습니다.`, { tone: 'danger' })) return;
+    try {
+      await api.del('/api/transactions', { ids: [...selectedIds] });
+      setSelectedIds(new Set());
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   return (
@@ -176,6 +178,8 @@ export default function Transactions() {
 
       {loading ? (
         <div className="text-slate-500 text-center py-10">로딩 중...</div>
+      ) : error ? (
+        <LoadError error={error} onRetry={reload} />
       ) : years.length === 0 ? (
         <div className="text-slate-500 text-center py-10">거래 내역이 없습니다.</div>
       ) : (

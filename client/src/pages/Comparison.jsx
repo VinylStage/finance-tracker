@@ -1,8 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   ComposedChart, Area, Line, ResponsiveContainer, Tooltip,
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import LoadError from '../components/LoadError';
 
 const TABS = [
   { key: 'daily', label: '일별' },
@@ -72,18 +75,12 @@ export default function Comparison() {
   const [period, setPeriod] = useState('monthly');
   const [date, setDate] = useState(today());
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const { loading, error, reload } = useLoader(async () => {
     const params = new URLSearchParams({ period, date });
-    fetch(`/api/transactions/period-comparison?${params.toString()}`)
-      .then(r => r.json())
-      .then(d => { setResult(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    const d = await api.get(`/api/transactions/period-comparison?${params.toString()}`);
+    setResult(d);
   }, [period, date]);
-
-  useEffect(() => { load(); }, [load]);
 
   return (
     <div className="space-y-6">
@@ -111,7 +108,9 @@ export default function Comparison() {
         ))}
       </div>
 
-      {loading || !result ? (
+      {error ? (
+        <LoadError error={error} onRetry={reload} />
+      ) : loading || !result ? (
         <div className="text-slate-500 text-center py-20">로딩 중...</div>
       ) : (
         <>
