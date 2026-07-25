@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
 
+// 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
+// 프런트(ESM/Vite)와 빌드 도구가 분리되어 있어 값을 공유하지 못하므로 수동 동기화 필요(#90).
 const PAYMENT_STYLES = ['일시불', '할부', '리볼빙', '해당없음'];
 
 const CONFIDENCE_STYLE = {
