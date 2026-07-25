@@ -6,7 +6,8 @@ const fs = require('fs');
 const DATA_DIR = path.join(__dirname, '../../data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const DB_PATH = path.join(DATA_DIR, 'finance.db');
+// 테스트에서 격리된 임시 DB를 쓸 수 있도록 오버라이드 허용(기본 동작은 그대로).
+const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'finance.db');
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
