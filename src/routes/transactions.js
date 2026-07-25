@@ -468,31 +468,32 @@ router.get('/summary/dashboard', (req, res) => {
       expense: dailyMap[date]?.expense || 0,
     }));
 
-    // 최근 12주 주별 수입/지출
-    const rangeStmt = db.prepare(`
-      SELECT
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
-      FROM transactions t
-      JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= ? AND t.date <= ?
-    `);
-    const weeklyTrend = lastNWeeks(12).map(w => {
-      const r = rangeStmt.get(w.start, w.end);
-      return { week: w.week, income: r.income, expense: r.expense };
+    // 최근 12주 주별 수입/지출 — 전체 범위를 날짜별로 한 번 조회하고 JS에서 주별로 합산(N+1 제거)
+    const weeks = lastNWeeks(12);
+    const weekDayMap = rangeTotalsByDate(weeks[0].start, weeks[weeks.length - 1].end);
+    const weeklyTrend = weeks.map(w => {
+      let income = 0, expense = 0;
+      for (let d = new Date(w.start), end = new Date(w.end); d <= end; d.setDate(d.getDate() + 1)) {
+        const r = weekDayMap.get(fmtDateObj(d));
+        if (r) { income += r.income; expense += r.expense; }
+      }
+      return { week: w.week, income, expense };
     });
 
-    // 최근 12개월 월별 수입/지출
-    const monthStmt = db.prepare(`
-      SELECT
+    // 최근 12개월 월별 수입/지출 — 범위 전체를 월별 GROUP BY 로 한 번 조회(N+1 제거)
+    const months = lastNMonths(12);
+    const monthRows = db.prepare(`
+      SELECT strftime('%Y-%m', t.date) AS ym,
         COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
         COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE strftime('%Y-%m', t.date) = ?
-    `);
-    const monthlyTrend = lastNMonths(12).map(month => {
-      const r = monthStmt.get(month);
+      WHERE strftime('%Y-%m', t.date) >= ? AND strftime('%Y-%m', t.date) <= ?
+      GROUP BY ym
+    `).all(months[0], months[months.length - 1]);
+    const monthMap = new Map(monthRows.map(r => [r.ym, r]));
+    const monthlyTrend = months.map(month => {
+      const r = monthMap.get(month) || { income: 0, expense: 0 };
       return { month, income: r.income, expense: r.expense };
     });
 
