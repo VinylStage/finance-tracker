@@ -81,5 +81,5 @@
 
 ### 관련 결정
 
-- 무인증 상태에서의 잔존 리스크는 `docs/decisions/0003-xlsx-vulnerability-risk-acceptance.md` 에 기록돼 있다.
+- 무인증 상태에서의 잔존 리스크는 `docs/decisions/0003-xlsx-vulnerability-risk-acceptance.md`(→ `0004-xlsx-vendored-upgrade.md` 로 대체)에 기록돼 있다.
 - 외부 터널링(ngrok 등)은 사용하지 않는다.
