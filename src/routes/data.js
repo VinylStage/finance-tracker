@@ -47,23 +47,30 @@ router.get('/export', (req, res) => {
 });
 
 // POST /api/data/import - Import transactions
-router.post('/import', express.json({ limit: '10mb' }), (req, res) => {
+// 본문 크기 제한은 server.js 전역 파서에서 관리한다(라우트별 파서는 전역보다 늦게 실행돼 무효).
+router.post('/import', (req, res) => {
   try {
-    const { mode, transactions } = req.body;
-    
+    const { mode, transactions, confirm } = req.body;
+
     // Validate input
     if (mode !== 'append' && mode !== 'overwrite') {
       return res.status(400).json({ error: 'Invalid mode. Must be "append" or "overwrite"' });
     }
-    
+
     if (!Array.isArray(transactions)) {
       return res.status(400).json({ error: 'Transactions must be an array' });
     }
-    
+
+    // overwrite는 기존 거래를 전부 삭제하는 파괴적 동작이므로 명시적 확인 토큰을 요구한다
+    if (mode === 'overwrite' && confirm !== 'DELETE_ALL') {
+      return res.status(400).json({ error: 'overwrite mode requires confirm: "DELETE_ALL"' });
+    }
+
     let imported = 0;
     let skipped = 0;
     let legacy_fields_defaulted = false;
     let fk_fallback = false;
+    let deleted = 0;
 
     // Get all current categories for lookups
     const allCategories = db.prepare('SELECT id, name FROM categories').all();
@@ -76,7 +83,7 @@ router.post('/import', express.json({ limit: '10mb' }), (req, res) => {
     const restore = db.transaction(() => {
       // If overwrite mode, delete existing transactions
       if (mode === 'overwrite') {
-        db.prepare('DELETE FROM transactions').run();
+        deleted = db.prepare('DELETE FROM transactions').run().changes;
       }
       
       // Process and insert transactions
@@ -138,7 +145,7 @@ router.post('/import', express.json({ limit: '10mb' }), (req, res) => {
     
     restore();
     
-    const response = { ok: true, imported, skipped, total: transactions.length };
+    const response = { ok: true, imported, skipped, deleted, total: transactions.length };
     if (legacy_fields_defaulted) {
       response.legacy_fields_defaulted = true;
     }
