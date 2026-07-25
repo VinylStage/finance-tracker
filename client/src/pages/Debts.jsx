@@ -1,4 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import { useConfirm } from '../components/ConfirmProvider';
+import LoadError from '../components/LoadError';
 
 const DEBT_TYPES = ['일반', '마이너스통장', '학자금', '전세자금'];
 
@@ -21,42 +25,40 @@ export default function Debts() {
   const [items, setItems] = useState([]);
   const [totalBalance, setTotalBalance] = useState(0);
   const [totalInterest, setTotalInterest] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [interestTarget, setInterestTarget] = useState(null);
   const [expandedLog, setExpandedLog] = useState(null);
   const [logs, setLogs] = useState({});
+  const { confirm, alert } = useConfirm();
 
-  const load = useCallback(() => {
-    setLoading(true);
-    fetch('/api/debts').then(r => r.json()).then(d => {
-      setItems(d.data || []);
-      setTotalBalance(d.total_balance || 0);
-      setTotalInterest(d.total_monthly_interest || 0);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const d = await api.get('/api/debts');
+    setItems(d.data || []);
+    setTotalBalance(d.total_balance || 0);
+    setTotalInterest(d.total_monthly_interest || 0);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
   const handleSave = async (formData) => {
-    const method = editItem ? 'PUT' : 'POST';
-    const url = editItem ? `/api/debts/${editItem.id}` : '/api/debts';
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
-    setShowForm(false);
-    setEditItem(null);
-    load();
+    try {
+      if (editItem) await api.put(`/api/debts/${editItem.id}`, formData);
+      else await api.post('/api/debts', formData);
+      setShowForm(false);
+      setEditItem(null);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('삭제하시겠습니까? 이자 이력도 함께 삭제됩니다.')) return;
-    await fetch(`/api/debts/${id}`, { method: 'DELETE' });
-    load();
+    if (!await confirm('삭제하시겠습니까? 이자 이력도 함께 삭제됩니다.', { tone: 'danger' })) return;
+    try {
+      await api.del(`/api/debts/${id}`);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleEdit = (item) => {
@@ -64,27 +66,32 @@ export default function Debts() {
     setShowForm(true);
   };
 
+  const loadInterestLog = async (debtId) => {
+    const r = await api.get(`/api/debts/${debtId}/interest-log`);
+    setLogs(prev => ({ ...prev, [debtId]: r.data || [] }));
+  };
+
   const toggleLog = async (debt) => {
     if (expandedLog === debt.id) { setExpandedLog(null); return; }
     setExpandedLog(debt.id);
     if (!logs[debt.id]) {
-      const r = await fetch(`/api/debts/${debt.id}/interest-log`).then(res => res.json());
-      setLogs(prev => ({ ...prev, [debt.id]: r.data || [] }));
+      try {
+        await loadInterestLog(debt.id);
+      } catch (err) {
+        await alert(err.message);
+      }
     }
   };
 
   const handleAddInterest = async (formData) => {
     const debtId = interestTarget.id;
-    await fetch(`/api/debts/${debtId}/interest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
-    setInterestTarget(null);
-    load();
-    if (expandedLog === debtId) {
-      const r = await fetch(`/api/debts/${debtId}/interest-log`).then(res => res.json());
-      setLogs(prev => ({ ...prev, [debtId]: r.data || [] }));
+    try {
+      await api.post(`/api/debts/${debtId}/interest`, formData);
+      setInterestTarget(null);
+      reload();
+      if (expandedLog === debtId) await loadInterestLog(debtId);
+    } catch (err) {
+      await alert(err.message);
     }
   };
 
@@ -129,6 +136,8 @@ export default function Debts() {
 
       {loading ? (
         <div className="text-slate-500 text-center py-10">로딩 중...</div>
+      ) : error ? (
+        <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
         <div className="text-slate-400 text-center py-10">등록된 부채가 없습니다.</div>
       ) : (

@@ -1,4 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import { useConfirm } from '../components/ConfirmProvider';
+import LoadError from '../components/LoadError';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -9,46 +13,40 @@ export default function Revolving() {
   const [currentBalance, setCurrentBalance] = useState(0);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [cardFilter, setCardFilter] = useState('');
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
+  const { confirm, alert } = useConfirm();
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const { loading, error: loadError, reload } = useLoader(async () => {
     const qs = cardFilter ? `?payment_method_id=${cardFilter}` : '';
-    Promise.all([
-      fetch(`/api/revolving${qs}`).then(r => r.json()),
-      fetch('/api/payment-methods').then(r => r.json()),
-    ]).then(([rev, pms]) => {
-      setItems(rev.data || []);
-      setCurrentBalance(rev.current_carried_balance || 0);
-      setPaymentMethods(pms);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    const [rev, pms] = await Promise.all([
+      api.get(`/api/revolving${qs}`),
+      api.get('/api/payment-methods'),
+    ]);
+    setItems(rev.data || []);
+    setCurrentBalance(rev.current_carried_balance || 0);
+    setPaymentMethods(pms);
   }, [cardFilter]);
-
-  useEffect(() => { load(); }, [load]);
 
   const handleSave = async (formData) => {
     setError('');
-    const r = await fetch('/api/revolving', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
-    if (!r.ok) {
-      const body = await r.json();
-      setError(body.error || '저장 실패');
-      return;
+    try {
+      await api.post('/api/revolving', formData);
+      setShowForm(false);
+      reload();
+    } catch (err) {
+      setError(err.message || '저장 실패');
     }
-    setShowForm(false);
-    load();
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('삭제하시겠습니까?')) return;
-    await fetch(`/api/revolving/${id}`, { method: 'DELETE' });
-    load();
+    if (!await confirm('삭제하시겠습니까?', { tone: 'danger' })) return;
+    try {
+      await api.del(`/api/revolving/${id}`);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   return (
@@ -88,6 +86,8 @@ export default function Revolving() {
 
       {loading ? (
         <div className="text-slate-500 text-center py-10">로딩 중...</div>
+      ) : loadError ? (
+        <LoadError error={loadError} onRetry={reload} />
       ) : items.length === 0 ? (
         <div className="text-slate-400 text-center py-10">리볼빙 기록이 없습니다.</div>
       ) : (

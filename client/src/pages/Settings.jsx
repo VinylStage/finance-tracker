@@ -1,4 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import { useConfirm } from '../components/ConfirmProvider';
+import LoadError from '../components/LoadError';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -11,32 +15,27 @@ export default function Settings() {
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [appSettings, setAppSettings] = useState({ initial_balance: 0, monthly_income: 0 });
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetch('/api/categories').then(r => r.json()),
-      fetch('/api/payment-methods').then(r => r.json()),
-      fetch('/api/settings').then(r => r.json()),
-    ]).then(([cats, pms, settings]) => {
-      setCategories(cats);
-      setPaymentMethods(pms);
-      setAppSettings(settings);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const [cats, pms, settings] = await Promise.all([
+      api.get('/api/categories'),
+      api.get('/api/payment-methods'),
+      api.get('/api/settings'),
+    ]);
+    setCategories(cats);
+    setPaymentMethods(pms);
+    setAppSettings(settings);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
   if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
+  if (error) return <LoadError error={error} onRetry={reload} />;
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-slate-800">설정</h1>
-      <AppSettingsSection initial={appSettings} onSaved={load} />
-      <CategorySection categories={categories} onChanged={load} />
-      <PaymentMethodSection paymentMethods={paymentMethods} onChanged={load} />
+      <AppSettingsSection initial={appSettings} onSaved={reload} />
+      <CategorySection categories={categories} onChanged={reload} />
+      <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
       <ExportSection />
       <SettingsBackupSection />
       <TransactionsBackupSection />
@@ -54,20 +53,21 @@ function AppSettingsSection({ initial, onSaved }) {
     monthly_income: String(initial.monthly_income || 0),
   });
   const [saved, setSaved] = useState(false);
+  const { alert } = useConfirm();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await api.put('/api/settings', {
         initial_balance: Number(form.initial_balance),
         monthly_income: Number(form.monthly_income),
-      }),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-    onSaved();
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+      onSaved();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   return (
@@ -97,32 +97,37 @@ function CategorySection({ categories, onChanged }) {
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const { confirm, alert } = useConfirm();
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    await fetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, monthly_budget: Number(form.monthly_budget) || 0 }),
-    });
-    setForm({ major_type: '선택지출', name: '', monthly_budget: '' });
-    setShowForm(false);
-    onChanged();
+    try {
+      await api.post('/api/categories', { ...form, monthly_budget: Number(form.monthly_budget) || 0 });
+      setForm({ major_type: '선택지출', name: '', monthly_budget: '' });
+      setShowForm(false);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleBudgetChange = async (cat, value) => {
-    await fetch(`/api/categories/${cat.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...cat, monthly_budget: Number(value) || 0 }),
-    });
-    onChanged();
+    try {
+      await api.put(`/api/categories/${cat.id}`, { ...cat, monthly_budget: Number(value) || 0 });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDeactivate = async (id) => {
-    if (!confirm('비활성화하시겠습니까?')) return;
-    await fetch(`/api/categories/${id}`, { method: 'DELETE' });
-    onChanged();
+    if (!await confirm('비활성화하시겠습니까?')) return;
+    try {
+      await api.del(`/api/categories/${id}`);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleEditStart = (cat) => {
@@ -136,24 +141,24 @@ function CategorySection({ categories, onChanged }) {
   };
 
   const handleEditSave = async (cat) => {
-    await fetch(`/api/categories/${cat.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...cat, ...editForm }),
-    });
-    setEditing(null);
-    setEditForm({});
-    onChanged();
+    try {
+      await api.put(`/api/categories/${cat.id}`, { ...cat, ...editForm });
+      setEditing(null);
+      setEditForm({});
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleReActivate = async (id) => {
-    if (!confirm('재활성화하시겠습니까?')) return;
-    await fetch(`/api/categories/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: 1 }),
-    });
-    onChanged();
+    if (!await confirm('재활성화하시겠습니까?')) return;
+    try {
+      await api.put(`/api/categories/${id}`, { is_active: 1 });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const filteredCategories = showInactive 
@@ -279,23 +284,28 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const { confirm, alert } = useConfirm();
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    await fetch('/api/payment-methods', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    setForm({ name: '', type: '신용' });
-    setShowForm(false);
-    onChanged();
+    try {
+      await api.post('/api/payment-methods', form);
+      setForm({ name: '', type: '신용' });
+      setShowForm(false);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDeactivate = async (id) => {
-    if (!confirm('비활성화하시겠습니까?')) return;
-    await fetch(`/api/payment-methods/${id}`, { method: 'DELETE' });
-    onChanged();
+    if (!await confirm('비활성화하시겠습니까?')) return;
+    try {
+      await api.del(`/api/payment-methods/${id}`);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleEditStart = (pm) => {
@@ -309,24 +319,24 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
   };
 
   const handleEditSave = async (pm) => {
-    await fetch(`/api/payment-methods/${pm.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...pm, ...editForm }),
-    });
-    setEditing(null);
-    setEditForm({});
-    onChanged();
+    try {
+      await api.put(`/api/payment-methods/${pm.id}`, { ...pm, ...editForm });
+      setEditing(null);
+      setEditForm({});
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleReActivate = async (id) => {
-    if (!confirm('재활성화하시겠습니까?')) return;
-    await fetch(`/api/payment-methods/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: 1 }),
-    });
-    onChanged();
+    if (!await confirm('재활성화하시겠습니까?')) return;
+    try {
+      await api.put(`/api/payment-methods/${id}`, { is_active: 1 });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const filteredPaymentMethods = showInactive 
@@ -452,12 +462,7 @@ function SettingsBackupSection() {
     try {
       const text = await file.text();
       const payload = JSON.parse(text);
-      const res = await fetch('/api/export/settings/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const data = await api.post('/api/export/settings/restore', payload);
       if (data.ok) { setMsg('설정이 복원되었습니다.'); setTimeout(() => window.location.reload(), 1000); }
       else setMsg('복원 실패: ' + data.error);
     } catch (err) {
@@ -485,7 +490,8 @@ function SettingsBackupSection() {
 function TransactionsBackupSection() {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState('');
-  
+  const { confirm } = useConfirm();
+
   const handleExport = () => {
     window.location.href = '/api/data/export';
   };
@@ -521,21 +527,16 @@ function TransactionsBackupSection() {
     if (!preview) return;
     
     // For overwrite, confirm with user
-    if (mode === 'overwrite' && !window.confirm('기존 거래내역이 모두 삭제됩니다. 계속하시겠습니까?')) {
+    if (mode === 'overwrite' && !await confirm('기존 거래내역이 모두 삭제됩니다. 계속하시겠습니까?', { tone: 'danger' })) {
       return;
     }
-    
+
     try {
       const body = { mode, transactions: preview.all };
       // overwrite는 서버가 명시적 확인 토큰을 요구한다(파괴적 동작 방어)
       if (mode === 'overwrite') body.confirm = 'DELETE_ALL';
-      const res = await fetch('/api/data/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      
+      const data = await api.post('/api/data/import', body);
+
       if (data.ok) {
         setMessage(`${data.imported}건 저장됨 (${data.skipped}건 스킵)`);
         setTimeout(() => {
@@ -626,9 +627,7 @@ function CardImportSection() {
     try {
       const fd = new FormData();
       selected.forEach((f) => fd.append('files', f));
-      const res = await fetch('/api/card-import?preview=true', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      const data = await api.raw('/api/card-import?preview=true', { method: 'POST', body: fd });
       setPreview(data);
     } catch (err) {
       setMessage('오류: ' + err.message);
@@ -645,9 +644,7 @@ function CardImportSection() {
     try {
       const fd = new FormData();
       files.forEach((f) => fd.append('files', f));
-      const res = await fetch('/api/card-import', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      const data = await api.raw('/api/card-import', { method: 'POST', body: fd });
       const t = data.totals || {};
       let msg = `${(t.imported || 0).toLocaleString('ko-KR')}건 임포트 완료 (중복 스킵 ${(t.skipped || 0).toLocaleString('ko-KR')}건`;
       if (t.failed) msg += `, 실패 파일 ${t.failed}개`;
@@ -714,20 +711,16 @@ function DangerZoneSection() {
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState('');
+  const { confirm } = useConfirm();
 
   const handleDeleteAll = async () => {
     if (confirmText !== DANGER_CONFIRM_TEXT) return;
-    if (!window.confirm('정말로 모든 거래내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+    if (!await confirm('정말로 모든 거래내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.', { tone: 'danger', confirmLabel: '전체 삭제' })) return;
 
     setDeleting(true);
     setMessage('');
     try {
-      const res = await fetch('/api/transactions', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true }),
-      });
-      const data = await res.json();
+      const data = await api.del('/api/transactions', { all: true });
       if (data.ok) {
         setMessage(`${data.deleted}건이 삭제되었습니다.`);
         setConfirmText('');

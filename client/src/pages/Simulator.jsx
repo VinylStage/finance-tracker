@@ -1,7 +1,10 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import LoadError from '../components/LoadError';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -15,7 +18,6 @@ function shortFmt(n) {
 
 export default function Simulator() {
   const [startingBalance, setStartingBalance] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     income: '',
     expense: '',
@@ -24,11 +26,9 @@ export default function Simulator() {
     months: '12',
   });
 
-  useEffect(() => {
-    fetch('/api/transactions/summary/dashboard')
-      .then(r => r.json())
-      .then(d => { setStartingBalance(d.available || 0); setLoading(false); })
-      .catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const d = await api.get('/api/transactions/summary/dashboard');
+    setStartingBalance(d.available || 0);
   }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -61,6 +61,8 @@ export default function Simulator() {
 
       {loading ? (
         <div className="text-slate-500 text-center py-10">로딩 중...</div>
+      ) : error ? (
+        <LoadError error={error} onRetry={reload} />
       ) : (
         <>
           <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">

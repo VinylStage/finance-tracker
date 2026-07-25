@@ -1,4 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import { useConfirm } from '../components/ConfirmProvider';
+import LoadError from '../components/LoadError';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -11,48 +15,47 @@ export default function Installments() {
   const [thisMonthTotal, setThisMonthTotal] = useState(0);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [filter, setFilter] = useState('진행중');
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const { confirm, alert } = useConfirm();
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const { loading, error, reload } = useLoader(async () => {
     const qs = filter === '전체' ? '' : `?status=${encodeURIComponent(filter)}`;
-    Promise.all([
-      fetch(`/api/installments${qs}`).then(r => r.json()),
-      fetch('/api/payment-methods').then(r => r.json()),
-    ]).then(([inst, pms]) => {
-      setItems(inst.data || []);
-      setThisMonthTotal(inst.this_month_total || 0);
-      setPaymentMethods(pms);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    const [inst, pms] = await Promise.all([
+      api.get(`/api/installments${qs}`),
+      api.get('/api/payment-methods'),
+    ]);
+    setItems(inst.data || []);
+    setThisMonthTotal(inst.this_month_total || 0);
+    setPaymentMethods(pms);
   }, [filter]);
 
-  useEffect(() => { load(); }, [load]);
-
   const handleComplete = async (id) => {
-    await fetch(`/api/installments/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: '완료' }),
-    });
-    load();
+    try {
+      await api.put(`/api/installments/${id}`, { status: '완료' });
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('삭제하시겠습니까?')) return;
-    await fetch(`/api/installments/${id}`, { method: 'DELETE' });
-    load();
+    if (!await confirm('삭제하시겠습니까?', { tone: 'danger' })) return;
+    try {
+      await api.del(`/api/installments/${id}`);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleSave = async (formData) => {
-    await fetch('/api/installments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
-    setShowForm(false);
-    load();
+    try {
+      await api.post('/api/installments', formData);
+      setShowForm(false);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   return (
@@ -96,6 +99,8 @@ export default function Installments() {
 
       {loading ? (
         <div className="text-slate-500 text-center py-10">로딩 중...</div>
+      ) : error ? (
+        <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
         <div className="text-slate-400 text-center py-10">할부 내역이 없습니다.</div>
       ) : (
