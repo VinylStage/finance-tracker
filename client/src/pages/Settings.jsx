@@ -15,16 +15,19 @@ export default function Settings() {
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [appSettings, setAppSettings] = useState({ initial_balance: 0, monthly_income: 0 });
+  const [recurringRules, setRecurringRules] = useState([]);
 
   const { loading, error, reload } = useLoader(async () => {
-    const [cats, pms, settings] = await Promise.all([
+    const [cats, pms, settings, rules] = await Promise.all([
       api.get('/api/categories'),
       api.get('/api/payment-methods'),
       api.get('/api/settings'),
+      api.get('/api/recurring-rules?include_inactive=1'),
     ]);
     setCategories(cats);
     setPaymentMethods(pms);
     setAppSettings(settings);
+    setRecurringRules(rules);
   }, []);
 
   if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
@@ -36,6 +39,7 @@ export default function Settings() {
       <AppSettingsSection initial={appSettings} onSaved={reload} />
       <CategorySection categories={categories} onChanged={reload} />
       <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
+      <RecurringRuleSection rules={recurringRules} categories={categories} paymentMethods={paymentMethods} onChanged={reload} />
       <ExportSection />
       <SettingsBackupSection />
       <TransactionsBackupSection />
@@ -270,6 +274,165 @@ function CategorySection({ categories, onChanged }) {
                     </td>
                   </>
                 )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const EMPTY_RULE_FORM = { category_id: '', merchant: '', amount: '', day_of_month: '1', payment_method_id: '', payment_style: '일시불', memo: '' };
+
+function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(EMPTY_RULE_FORM);
+  const [showInactive, setShowInactive] = useState(false);
+  const { confirm, alert } = useConfirm();
+
+  const startAdd = () => { setEditingId(null); setForm(EMPTY_RULE_FORM); setShowForm(true); };
+  const startEdit = (r) => {
+    setEditingId(r.id);
+    setForm({
+      category_id: String(r.category_id), merchant: r.merchant, amount: String(r.amount),
+      day_of_month: String(r.day_of_month), payment_method_id: r.payment_method_id ? String(r.payment_method_id) : '',
+      payment_style: r.payment_style, memo: r.memo || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const body = {
+      ...form,
+      category_id: Number(form.category_id),
+      amount: Number(form.amount),
+      day_of_month: Number(form.day_of_month),
+      payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
+    };
+    try {
+      if (editingId) await api.put(`/api/recurring-rules/${editingId}`, body);
+      else await api.post('/api/recurring-rules', body);
+      setShowForm(false);
+      setEditingId(null);
+      setForm(EMPTY_RULE_FORM);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const handleDeactivate = async (id) => {
+    if (!await confirm('이 반복 규칙을 비활성화하시겠습니까? 이번 달 확인 목록에서 더 이상 나타나지 않습니다.')) return;
+    try {
+      await api.del(`/api/recurring-rules/${id}`);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const handleReActivate = async (r) => {
+    try {
+      await api.put(`/api/recurring-rules/${r.id}`, {
+        category_id: r.category_id, merchant: r.merchant, amount: r.amount, day_of_month: r.day_of_month,
+        payment_method_id: r.payment_method_id, payment_style: r.payment_style, memo: r.memo, is_active: 1,
+      });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const filteredRules = showInactive ? rules : rules.filter(r => r.is_active);
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700">반복 거래 관리</h2>
+        <div className="flex gap-2">
+          <button onClick={showForm ? () => setShowForm(false) : startAdd} className="text-xs text-indigo-600 hover:text-indigo-700">
+            {showForm ? '취소' : '+ 추가'}
+          </button>
+          <button onClick={() => setShowInactive(s => !s)} className="text-xs text-slate-500 hover:text-slate-700">
+            {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">
+        매달 금액이 완전히 고정된 지출(구독료 등)만 등록하세요. 통신비처럼 매달 금액이 달라지는 항목은 계속 직접 입력해야 합니다.
+        등록해도 자동으로 거래가 생기지 않고, 대시보드의 "이번 달 반복 거래 확인"에서 매달 확인 후 생성합니다.
+      </p>
+      {showForm && (
+        <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">카테고리</label>
+            <select className={inp} value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} required>
+              <option value="">선택...</option>
+              {categories.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">가맹점/이름</label>
+            <input type="text" className={inp} value={form.merchant} onChange={e => setForm(f => ({ ...f, merchant: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">금액</label>
+            <input type="number" className={inp} placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">매월 며칠</label>
+            <input type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">결제수단</label>
+            <select className={inp} value={form.payment_method_id} onChange={e => setForm(f => ({ ...f, payment_method_id: e.target.value }))}>
+              <option value="">선택...</option>
+              {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">결제방식</label>
+            <select className={inp} value={form.payment_style} onChange={e => setForm(f => ({ ...f, payment_style: e.target.value }))}>
+              <option value="일시불">일시불</option>
+              <option value="해당없음">해당없음</option>
+            </select>
+          </div>
+          <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+            {editingId ? '저장' : '추가'}
+          </button>
+        </form>
+      )}
+      <div className="max-h-72 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 sticky top-0">
+            <tr className="border-b border-slate-200">
+              <th className="text-left px-3 py-2 text-slate-500 font-medium">가맹점</th>
+              <th className="text-left px-3 py-2 text-slate-500 font-medium">카테고리</th>
+              <th className="text-right px-3 py-2 text-slate-500 font-medium">금액</th>
+              <th className="text-right px-3 py-2 text-slate-500 font-medium">매월</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRules.length === 0 ? (
+              <tr><td colSpan={5} className="text-center text-slate-400 text-xs py-6">등록된 반복 규칙이 없습니다.</td></tr>
+            ) : filteredRules.map(r => (
+              <tr key={r.id} className={`border-b border-slate-100 ${!r.is_active ? 'opacity-50' : ''}`}>
+                <td className="px-3 py-2 text-slate-800">{r.merchant}</td>
+                <td className="px-3 py-2 text-slate-500 text-xs">{r.category_name}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmt(r.amount)}</td>
+                <td className="px-3 py-2 text-right text-xs text-slate-500">{r.day_of_month}일</td>
+                <td className="px-3 py-2 text-right">
+                  <button onClick={() => startEdit(r)} className="text-indigo-600 hover:text-indigo-700 text-xs mr-2">수정</button>
+                  {r.is_active ? (
+                    <button onClick={() => handleDeactivate(r.id)} className="text-slate-400 hover:text-rose-600 text-xs">비활성화</button>
+                  ) : (
+                    <button onClick={() => handleReActivate(r)} className="text-slate-400 hover:text-emerald-600 text-xs">재활성화</button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

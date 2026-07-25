@@ -17,6 +17,7 @@ app.use('/api/revolving',    require('./routes/revolving'));
 app.use('/api/debts',        require('./routes/debts'));
 app.use('/api/cashflow',     require('./routes/cashflow'));
 app.use('/api/savings',      require('./routes/savings'));
+app.use('/api/recurring-rules', require('./routes/recurringRules'));
 app.use('/api/export',       require('./routes/export'));
 app.use('/api/data',         require('./routes/data'));
 app.use('/api/settings',     require('./routes/settings'));
