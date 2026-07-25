@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/VinylStage/finance-tracker/compare/v0.5.0...v0.6.0) (2026-07-25)
+
+
+### Features
+
+* 거래내역 검색·필터 고도화 — 가맹점/금액범위/결제수단/메모/다중카테고리 ([#126](https://github.com/VinylStage/finance-tracker/issues/126)) ([#127](https://github.com/VinylStage/finance-tracker/issues/127)) ([029c737](https://github.com/VinylStage/finance-tracker/commit/029c737d7ff1405fe4b1876dda85142a78e5aa9d))
+* 완전 고정금액 반복 거래 자동등록 ([#128](https://github.com/VinylStage/finance-tracker/issues/128)) ([#129](https://github.com/VinylStage/finance-tracker/issues/129)) ([fe342ba](https://github.com/VinylStage/finance-tracker/commit/fe342ba668321e789b398bad59f1d438e90d7eb9))
+* 카드 임포트 경로를 카드사별 단일 경로로 통합 ([#120](https://github.com/VinylStage/finance-tracker/issues/120)) ([4f4d98c](https://github.com/VinylStage/finance-tracker/commit/4f4d98c61cec4741aa88ec129e8a020580c24c3f))
+
+
+### Bug Fixes
+
+* **deps:** xlsx high 취약점 2건 해소 — 벤더링 CDN 패치본 교체 ([#112](https://github.com/VinylStage/finance-tracker/issues/112)) ([28b6aa7](https://github.com/VinylStage/finance-tracker/commit/28b6aa7f70d96d2e6f4a660e25effb93f8d8cc97))
+* payment_style/major_type 허용값을 애플리케이션 레벨에서 검증 ([#90](https://github.com/VinylStage/finance-tracker/issues/90)) ([#119](https://github.com/VinylStage/finance-tracker/issues/119)) ([b66c7f2](https://github.com/VinylStage/finance-tracker/commit/b66c7f28a1955ed8a48ebc6fe605f28b8cc479c4))
+* toISOString() 로컬 날짜 생성 버그 수정 ([#75](https://github.com/VinylStage/finance-tracker/issues/75)) ([#114](https://github.com/VinylStage/finance-tracker/issues/114)) ([bb0bccb](https://github.com/VinylStage/finance-tracker/commit/bb0bccb877eaed38102c869cd8a320a753c3b5f0))
+* 입력 검증 구멍 2건 수정 ([#104](https://github.com/VinylStage/finance-tracker/issues/104)) ([#116](https://github.com/VinylStage/finance-tracker/issues/116)) ([2fdb069](https://github.com/VinylStage/finance-tracker/commit/2fdb0692aca66c0cf21c58081791d77be244daf0))
+
+
+### Maintenance
+
+* DB 마이그레이션 버전 관리 도입 ([#89](https://github.com/VinylStage/finance-tracker/issues/89)) ([#118](https://github.com/VinylStage/finance-tracker/issues/118)) ([9697bae](https://github.com/VinylStage/finance-tracker/commit/9697bae60d7f6724c5b1f8a040b09a930234cef7))
+* 방어적 견고성 개선 2건 — headersSent 가드, e.message 안전 접근 ([#105](https://github.com/VinylStage/finance-tracker/issues/105)) ([#123](https://github.com/VinylStage/finance-tracker/issues/123)) ([a41808d](https://github.com/VinylStage/finance-tracker/commit/a41808d5bf93fb2758426ab2fade3cd22fb57fa8))
+
+
+### Documentation
+
+* **audit:** 독립 코드 감사 프레임워크 추가 ([#115](https://github.com/VinylStage/finance-tracker/issues/115)) ([ff2b1fb](https://github.com/VinylStage/finance-tracker/commit/ff2b1fb817890d86428915d662a6cff62a6a4c20))
+
 ## [0.5.0](https://github.com/VinylStage/finance-tracker/compare/v0.4.0...v0.5.0) (2026-07-25)
 
 
