@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0](https://github.com/VinylStage/finance-tracker/compare/v0.4.0...v0.5.0) (2026-07-25)
+
+
+### Features
+
+* **card-import:** 카드사 엑셀 여러 파일 한 번에 임포트 ([#102](https://github.com/VinylStage/finance-tracker/issues/102)) ([#106](https://github.com/VinylStage/finance-tracker/issues/106)) ([517ea7e](https://github.com/VinylStage/finance-tracker/commit/517ea7efa82084c1fa9757d820dec9c250e974f4))
+
+
+### Bug Fixes
+
+* **backup:** export/import 왕복에서 결제방식·결제수단·승인번호 보존 ([#77](https://github.com/VinylStage/finance-tracker/issues/77)) ([#94](https://github.com/VinylStage/finance-tracker/issues/94)) ([6de0937](https://github.com/VinylStage/finance-tracker/commit/6de09374e06f99c6b480e5e6bbd92e967f782c09))
+* **card-import:** 업로드 엑셀 파서 크래시 방어 + 파서 오류 400 응답 ([#79](https://github.com/VinylStage/finance-tracker/issues/79)) ([#96](https://github.com/VinylStage/finance-tracker/issues/96)) ([6a8a0a5](https://github.com/VinylStage/finance-tracker/commit/6a8a0a5823a1cfb90ac35a27b870687306d564cd))
+* **ci:** release-please if 조건 제거 — 릴리즈 태그 발행 차단 해소 ([#68](https://github.com/VinylStage/finance-tracker/issues/68)) ([79afead](https://github.com/VinylStage/finance-tracker/commit/79afead2fcf1ede1385b82ffc0f5cb0dd9c3ee1b))
+* **csv:** 카드사 CSV 파싱 정확성 3건 — 금액 절단, 날짜 미정규화, CRLF ([#78](https://github.com/VinylStage/finance-tracker/issues/78)) ([#95](https://github.com/VinylStage/finance-tracker/issues/95)) ([f170d94](https://github.com/VinylStage/finance-tracker/commit/f170d9430b041c663fd686821c3247a3aa3c63d1))
+* **dashboard:** 종료된 할부가 가용현금에서 계속 차감되던 문제 수정 ([#76](https://github.com/VinylStage/finance-tracker/issues/76)) ([#93](https://github.com/VinylStage/finance-tracker/issues/93)) ([12ef014](https://github.com/VinylStage/finance-tracker/commit/12ef014742c1a3b18a31c28c02fd9b5fefa56b20))
+* **data:** import 본문 제한 정상화 + overwrite 확인 토큰 요구 ([#80](https://github.com/VinylStage/finance-tracker/issues/80)) ([#97](https://github.com/VinylStage/finance-tracker/issues/97)) ([f43f1d4](https://github.com/VinylStage/finance-tracker/commit/f43f1d491d924fc375660e7ee8b3549bcf74ce46))
+* **server:** HOST 환경변수로 바인딩 제어, 기본값을 루프백으로 ([#72](https://github.com/VinylStage/finance-tracker/issues/72)) ([#73](https://github.com/VinylStage/finance-tracker/issues/73)) ([9a61f98](https://github.com/VinylStage/finance-tracker/commit/9a61f98e432e2f7c5d0727c6e46839ba7621b1fc))
+* **services:** 외부 API 호출 타임아웃 + 시크릿 마스킹 + KIS 환경변수 ([#83](https://github.com/VinylStage/finance-tracker/issues/83)) ([#100](https://github.com/VinylStage/finance-tracker/issues/100)) ([750cc80](https://github.com/VinylStage/finance-tracker/commit/750cc80b6dc8f627c6df215759b3230b78577590))
+* **transactions:** 페이지네이션 total이 필터를 반영하도록 + limit/offset 검증 ([#81](https://github.com/VinylStage/finance-tracker/issues/81)) ([#98](https://github.com/VinylStage/finance-tracker/issues/98)) ([e0c49a5](https://github.com/VinylStage/finance-tracker/commit/e0c49a568d69220bd7405949c9e50057b6f7bb09))
+
+
+### Maintenance
+
+* **docs:** 브랜치 보호 규칙 및 bypass 조건 문서화 ([#69](https://github.com/VinylStage/finance-tracker/issues/69)) ([#74](https://github.com/VinylStage/finance-tracker/issues/74)) ([c4ee927](https://github.com/VinylStage/finance-tracker/commit/c4ee9277777922bad184ebcb3183833d13e550c0))
+* **errors:** 500 응답에서 내부 메시지 노출 제거 (36곳) ([#84](https://github.com/VinylStage/finance-tracker/issues/84)) ([#101](https://github.com/VinylStage/finance-tracker/issues/101)) ([dbd1fb7](https://github.com/VinylStage/finance-tracker/commit/dbd1fb7009f216f1a44ed4d4a33caa394184017b))
+* **hygiene:** 죽은 코드 제거, N+1 쿼리 제거, KIS TODO 정리, 리볼빙 인덱스 문서화 ([#87](https://github.com/VinylStage/finance-tracker/issues/87)) ([#109](https://github.com/VinylStage/finance-tracker/issues/109)) ([4635993](https://github.com/VinylStage/finance-tracker/commit/4635993511606e16f058bf341a0dffc9bd88ea8f))
+* **opencode:** 프로젝트 레벨 로컬 에이전트 설정 추가 ([#70](https://github.com/VinylStage/finance-tracker/issues/70)) ([37785ed](https://github.com/VinylStage/finance-tracker/commit/37785ede6bb32ee423b63b70139461e85e875d25))
+* **validation:** 입력 검증 일괄 보강 — amount 타입, PUT 필수/404, 설정 숫자, LIKE 이스케이프 ([#82](https://github.com/VinylStage/finance-tracker/issues/82)) ([#99](https://github.com/VinylStage/finance-tracker/issues/99)) ([309ce01](https://github.com/VinylStage/finance-tracker/commit/309ce01b220f67723f846ffe1bf18624eb3c3f1d))
+
+
+### Documentation
+
+* **adr:** xlsx 취약점 리스크 수용 결정 기록 ([#64](https://github.com/VinylStage/finance-tracker/issues/64)) ([#71](https://github.com/VinylStage/finance-tracker/issues/71)) ([ee55ffd](https://github.com/VinylStage/finance-tracker/commit/ee55ffddbd0f13f70742600d48f7df1aedb9f9fb))
+
 ## [0.4.0](https://github.com/VinylStage/finance-tracker/compare/v0.3.0...v0.4.0) (2026-07-24)
 
 
