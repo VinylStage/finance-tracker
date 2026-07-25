@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { serverError } = require('../utils/errors');
+const { serverError, errMsg } = require('../utils/errors');
 const { parseCardCsv } = require('../services/csvImport');
 
 // CSV 경로는 엑셀 내보내기가 없는 카드사만 남긴다(#88) — 라벨은 카드사 판별용, 결제수단 조회에도 재사용.
@@ -58,7 +58,7 @@ function importCsvTransactions(cardCompany, csvText, isPreview) {
         `).run(row.date, category_id, row.amount, payment_method_id, row.merchant, row.memo || null);
         imported++;
       } catch (err) {
-        errors.push(`${row.date} ${row.merchant}: ${err.message}`);
+        errors.push(`${row.date} ${row.merchant}: ${errMsg(err)}`);
       }
     }
   })();
@@ -81,8 +81,9 @@ router.post('/', async (req, res) => {
     const result = importCsvTransactions(cardCompany, csvText, isPreview);
     res.json(result);
   } catch (error) {
-    if (/^Unsupported card company|^Required columns|^Invalid CSV data/.test(error.message)) {
-      return res.status(400).json({ error: error.message });
+    const message = errMsg(error);
+    if (/^Unsupported card company|^Required columns|^Invalid CSV data/.test(message)) {
+      return res.status(400).json({ error: message });
     }
     serverError(res, error, 'csvImport');
   }
