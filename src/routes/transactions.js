@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
+const { PAYMENT_STYLES } = require('../constants');
 
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
 router.get('/', (req, res) => {
@@ -299,6 +300,10 @@ function validateTxBody(body) {
   if (asInt(body.amount) === null) return 'amount must be an integer';
   if (body.payment_method_id !== undefined && body.payment_method_id !== null &&
       asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
+  if (body.payment_style !== undefined && body.payment_style !== null &&
+      !PAYMENT_STYLES.includes(body.payment_style)) {
+    return `payment_style must be one of ${PAYMENT_STYLES.join(', ')}`;
+  }
   return null;
 }
 
