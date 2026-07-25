@@ -14,7 +14,15 @@ function processTransactions(cardCompany, originalname, fileBuffer, isPreview = 
   // non-ASCII (Korean) filenames — re-decode the raw bytes as utf8.
   const decodedOriginalname = Buffer.from(originalname, 'latin1').toString('utf8');
   const detectedCardCompany = detectCardCompany(decodedOriginalname);
-  const transactions = parseCardExcel(detectedCardCompany, fileBuffer);
+  // 파싱 단계 실패(XLSX.read 거부, 시트 부재 등)는 사용자 입력 문제이므로 400으로 분류되게
+  // 구조화된 접두사로 변환한다. SHEET_NOT_FOUND 는 이미 구조화돼 있으므로 그대로 전달한다.
+  let transactions;
+  try {
+    transactions = parseCardExcel(detectedCardCompany, fileBuffer);
+  } catch (e) {
+    if (/^SHEET_NOT_FOUND:/.test(e.message)) throw e;
+    throw new Error('PARSE_FAILED: 엑셀 파일을 해석할 수 없습니다. 파일이 손상됐거나 지원하지 않는 형식입니다.');
+  }
 
   // Filter out cancelled transactions
   const filteredTransactions = transactions.filter(t => !t.cancelled);
@@ -121,19 +129,14 @@ router.post('/', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'file is required' });
     }
 
-    const cardCompany = req.query.preview === 'true' ? null : detectCardCompany(req.file.originalname);
-
-    if (req.query.preview === 'true') {
-      // In preview mode, don't write to DB - just count new vs existing transactions
-      const result = processTransactions(cardCompany, req.file.originalname, req.file.buffer, true);
-      res.json(result);
-    } else {
-      // Real import mode
-      const result = processTransactions(cardCompany, req.file.originalname, req.file.buffer);
-      res.json(result);
-    }
+    // 카드사 판별은 processTransactions 내부에서 파일명을 UTF-8로 디코딩한 뒤 수행한다.
+    // (라우트에서 원본 파일명으로 detect하면 multer latin1 인코딩 때문에 한글 파일명이 항상 실패했다)
+    const isPreview = req.query.preview === 'true';
+    const result = processTransactions(null, req.file.originalname, req.file.buffer, isPreview);
+    res.json(result);
   } catch (e) {
-    if (e.message.includes('Unknown card company')) {
+    // 잘못된 입력(미지원 카드사, 시트 부재, 파일 해석 실패)은 400. DB 등 그 외 오류는 500.
+    if (/^(UNSUPPORTED_CARD|SHEET_NOT_FOUND|PARSE_FAILED):/.test(e.message)) {
       return res.status(400).json({ error: e.message });
     }
     res.status(500).json({ error: e.message });
