@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 const SCHEMA_VERSION = 1;
 
@@ -76,7 +77,7 @@ router.get('/csv', (req, res) => {
   try {
     sendCsv(res, req.query.from, req.query.to);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'export');
   }
 });
 
@@ -85,7 +86,7 @@ router.get('/json', (req, res) => {
   try {
     sendJson(res, req.query.from, req.query.to);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'export');
   }
 });
 
@@ -96,7 +97,7 @@ router.get('/', (req, res) => {
     if (format === 'csv') return sendCsv(res, from, to);
     return sendJson(res, from, to);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'export');
   }
 });
 
@@ -139,7 +140,7 @@ router.get('/settings', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=\"finance-tracker-settings_${new Date().toISOString().slice(0,10)}.json\"`);
     res.json(data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'export');
   }
 });
 
@@ -154,7 +155,7 @@ router.post('/settings/restore', express.json({ limit: '10mb' }), (req, res) => 
     restoreSettings(payload);
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'export');
   }
 });
 

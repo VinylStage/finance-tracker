@@ -1,0 +1,11 @@
+'use strict';
+
+// 예상치 못한 서버 오류(500) 응답을 표준화한다.
+// 내부 메시지(SQLite 오류 원문, 경로 등)를 클라이언트에 노출하지 않고 서버 로그에만 남긴다.
+// 사용자에게 보여야 하는 검증 오류(400)는 이 함수를 쓰지 말고 그대로 status(400)로 응답할 것.
+function serverError(res, e, context) {
+  console.error(`[${context || 'error'}]`, e);
+  res.status(500).json({ error: 'Internal server error' });
+}
+
+module.exports = { serverError };

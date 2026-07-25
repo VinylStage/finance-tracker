@@ -2,30 +2,41 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { asInt, missingFields, escapeLike } = require('../utils/validate');
+const { serverError } = require('../utils/errors');
 
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
 router.get('/', (req, res) => {
   try {
-    const { limit = 100, offset = 0, from, to, category_id } = req.query;
-    let sql = `
+    const { from, to, category_id } = req.query;
+    // limit/offset 은 정수로 강제하고 범위를 제한한다(잘못된 값으로 인한 500·과도한 조회 방지)
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
+    const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+
+    // WHERE 절을 목록 쿼리와 카운트 쿼리가 공유한다(total 이 필터를 반영하도록)
+    let where = ' WHERE 1=1';
+    const whereParams = [];
+    if (from) { where += ' AND t.date >= ?'; whereParams.push(from); }
+    if (to)   { where += ' AND t.date <= ?'; whereParams.push(to); }
+    if (category_id) { where += ' AND t.category_id = ?'; whereParams.push(category_id); }
+
+    const rows = db.prepare(`
       SELECT t.*, c.name AS category_name, c.major_type,
              p.name AS payment_method_name
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN payment_methods p ON t.payment_method_id = p.id
-      WHERE 1=1
-    `;
-    const params = [];
-    if (from) { sql += ' AND t.date >= ?'; params.push(from); }
-    if (to)   { sql += ' AND t.date <= ?'; params.push(to); }
-    if (category_id) { sql += ' AND t.category_id = ?'; params.push(category_id); }
-    sql += ' ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?';
-    params.push(Number(limit), Number(offset));
-    const rows = db.prepare(sql).all(...params);
-    const total = db.prepare(`SELECT COUNT(*) as cnt FROM transactions`).get().cnt;
+      ${where}
+      ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?
+    `).all(...whereParams, limit, offset);
+
+    const total = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM transactions t${where}
+    `).get(...whereParams).cnt;
+
     res.json({ data: rows, total });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -240,7 +251,7 @@ router.get('/period-comparison', (req, res) => {
       summary: buildComparisonSummary(curTotals, prevTotals),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -262,7 +273,7 @@ router.delete('/', (req, res) => {
     }
     return res.status(400).json({ error: 'ids (non-empty array) or all=true required' });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -279,43 +290,63 @@ router.get('/:id', (req, res) => {
   res.json(row);
 });
 
+// 거래 필드 검증. 문제가 있으면 에러 메시지 문자열, 없으면 null 을 반환한다.
+// (POST/PUT 공통)
+function validateTxBody(body) {
+  const missing = missingFields(body, ['date', 'category_id', 'amount']);
+  if (missing.length) return `${missing.join(', ')} required`;
+  if (asInt(body.category_id) === null) return 'category_id must be an integer';
+  if (asInt(body.amount) === null) return 'amount must be an integer';
+  if (body.payment_method_id !== undefined && body.payment_method_id !== null &&
+      asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
+  return null;
+}
+
 // POST /api/transactions
 router.post('/', (req, res) => {
   try {
+    const err = validateTxBody(req.body);
+    if (err) return res.status(400).json({ error: err });
     const { date, category_id, amount, payment_method_id, payment_style = '일시불', merchant, memo } = req.body;
-    if (!date || !category_id || amount === undefined) {
-      return res.status(400).json({ error: 'date, category_id, amount required' });
-    }
     const result = db.prepare(`
       INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant, memo)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(date, category_id, amount, payment_method_id || null, payment_style, merchant || null, memo || null);
+    `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
+           payment_style, merchant || null, memo || null);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
 // PUT /api/transactions/:id
 router.put('/:id', (req, res) => {
   try {
+    const err = validateTxBody(req.body);
+    if (err) return res.status(400).json({ error: err });
     const { date, category_id, amount, payment_method_id, payment_style, merchant, memo } = req.body;
-    db.prepare(`
+    const result = db.prepare(`
       UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?,
         payment_style=?, merchant=?, memo=?
       WHERE id=?
-    `).run(date, category_id, amount, payment_method_id || null, payment_style || '일시불',
-           merchant || null, memo || null, req.params.id);
+    `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
+           payment_style || '일시불', merchant || null, memo || null, req.params.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
 // DELETE /api/transactions/:id
 router.delete('/:id', (req, res) => {
-  db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
-  res.json({ ok: true });
+  try {
+    const result = db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    serverError(res, e, 'transactions');
+  }
 });
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -384,11 +415,14 @@ router.get('/summary/dashboard', (req, res) => {
       AND t.payment_style NOT IN ('할부','리볼빙')
     `).get(thisMonth).total;
 
+    // 청구 기간(start_billing_month 부터 months 개월)이 이번 달을 포함하는 건만 합산한다
     const installmentsDue = db.prepare(`
       SELECT COALESCE(SUM(monthly_amount),0) AS total
       FROM installments
-      WHERE start_billing_month <= ? AND status = '진행중'
-    `).get(thisMonth).total;
+      WHERE status = '진행중'
+        AND start_billing_month <= ?
+        AND ? < strftime('%Y-%m', date(start_billing_month || '-01', '+' || months || ' months'))
+    `).get(thisMonth, thisMonth).total;
 
     const revolvingPaid = db.prepare(`
       SELECT COALESCE(SUM(paid_amount), 0) AS total
@@ -434,31 +468,32 @@ router.get('/summary/dashboard', (req, res) => {
       expense: dailyMap[date]?.expense || 0,
     }));
 
-    // 최근 12주 주별 수입/지출
-    const rangeStmt = db.prepare(`
-      SELECT
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
-      FROM transactions t
-      JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= ? AND t.date <= ?
-    `);
-    const weeklyTrend = lastNWeeks(12).map(w => {
-      const r = rangeStmt.get(w.start, w.end);
-      return { week: w.week, income: r.income, expense: r.expense };
+    // 최근 12주 주별 수입/지출 — 전체 범위를 날짜별로 한 번 조회하고 JS에서 주별로 합산(N+1 제거)
+    const weeks = lastNWeeks(12);
+    const weekDayMap = rangeTotalsByDate(weeks[0].start, weeks[weeks.length - 1].end);
+    const weeklyTrend = weeks.map(w => {
+      let income = 0, expense = 0;
+      for (let d = new Date(w.start), end = new Date(w.end); d <= end; d.setDate(d.getDate() + 1)) {
+        const r = weekDayMap.get(fmtDateObj(d));
+        if (r) { income += r.income; expense += r.expense; }
+      }
+      return { week: w.week, income, expense };
     });
 
-    // 최근 12개월 월별 수입/지출
-    const monthStmt = db.prepare(`
-      SELECT
+    // 최근 12개월 월별 수입/지출 — 범위 전체를 월별 GROUP BY 로 한 번 조회(N+1 제거)
+    const months = lastNMonths(12);
+    const monthRows = db.prepare(`
+      SELECT strftime('%Y-%m', t.date) AS ym,
         COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
         COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE strftime('%Y-%m', t.date) = ?
-    `);
-    const monthlyTrend = lastNMonths(12).map(month => {
-      const r = monthStmt.get(month);
+      WHERE strftime('%Y-%m', t.date) >= ? AND strftime('%Y-%m', t.date) <= ?
+      GROUP BY ym
+    `).all(months[0], months[months.length - 1]);
+    const monthMap = new Map(monthRows.map(r => [r.ym, r]));
+    const monthlyTrend = months.map(month => {
+      const r = monthMap.get(month) || { income: 0, expense: 0 };
       return { month, income: r.income, expense: r.expense };
     });
 
@@ -482,7 +517,7 @@ router.get('/summary/dashboard', (req, res) => {
       categoryBreakdown, dailyTrend, weeklyTrend, monthlyTrend, topMerchants,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -503,7 +538,7 @@ router.get('/summary/category-breakdown', (req, res) => {
     `).all(from, to);
     res.json({ data });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'transactions');
   }
 });
 
@@ -517,8 +552,8 @@ router.get('/suggest/category', (req, res) => {
   if (exact) return res.json({ category_id: exact.category_id, confidence: '완전일치' });
   const partial = db.prepare(`
     SELECT category_id, COUNT(*) as cnt FROM transactions
-    WHERE merchant LIKE ? GROUP BY category_id ORDER BY cnt DESC LIMIT 1
-  `).get(`%${merchant}%`);
+    WHERE merchant LIKE ? ESCAPE '\\' GROUP BY category_id ORDER BY cnt DESC LIMIT 1
+  `).get(`%${escapeLike(merchant)}%`);
   if (partial) return res.json({ category_id: partial.category_id, confidence: '부분일치' });
   res.json({ category_id: null, confidence: '없음' });
 });

@@ -71,6 +71,10 @@ db.exec(`
     payment_method_id INTEGER REFERENCES payment_methods(id)
   );
 
+  -- 알려진 한계: SQLite는 UNIQUE 인덱스에서 NULL을 서로 다른 값으로 취급하므로,
+  -- payment_method_id 가 NULL 인 리볼빙 이력은 같은 month 에 중복 등록될 수 있다.
+  -- 근본 대응(부분 인덱스 WHERE payment_method_id IS NOT NULL, 또는 컬럼 NOT NULL화)은
+  -- 기존 인덱스/테이블 재생성을 요구하므로 마이그레이션 체계 도입(#89) 이후 처리한다.
   CREATE UNIQUE INDEX IF NOT EXISTS idx_revolving_month_pm
     ON revolving_history(month, payment_method_id);
 

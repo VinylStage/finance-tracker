@@ -1,5 +1,7 @@
 'use strict';
 
+const { fetchJson, maskSecrets } = require('../utils/http');
+
 /**
  * 한국수출입은행 환율 API 연동 서비스 모듈
  */
@@ -25,14 +27,9 @@ async function getExchangeRates() {
   const url = `https://oapi.koreaexim.go.kr/site/program/financial/exchangeJSON?authkey=${process.env.EXIM_API_KEY}&data=AP01`;
 
   try {
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`EXIM API request failed with status ${response.status}`);
-    }
+    // fetchJson 이 타임아웃(무한 대기 방지)과 시크릿 마스킹을 처리한다
+    const data = await fetchJson(url);
 
-    const data = await response.json();
-    
     // 응답이 성공적이지 않거나 데이터가 없을 경우 에러
     if (!data || !Array.isArray(data)) {
       throw new Error('EXIM API returned invalid data');
@@ -40,11 +37,8 @@ async function getExchangeRates() {
 
     return data;
   } catch (e) {
-    if (e instanceof Error && e.message.includes('EXIM API')) {
-      throw e;
-    } else {
-      throw new Error(`Failed to fetch exchange rates from EXIM API: ${e.message}`);
-    }
+    // fetchJson 에서 온 오류는 이미 마스킹됨. 그 외 메시지도 방어적으로 마스킹한다.
+    throw new Error(maskSecrets(`Failed to fetch exchange rates from EXIM API: ${e.message}`));
   }
 }
 

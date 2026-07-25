@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 
@@ -95,7 +96,7 @@ router.get('/', (req, res) => {
 
     res.json({ granularity, data, comparison });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'cashflow');
   }
 });
 

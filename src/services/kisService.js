@@ -1,4 +1,5 @@
-const KIS_ENABLED = false;
+// .env 의 KIS_ENABLED 를 실제로 읽는다(기존에는 false 하드코딩이라 환경변수가 무동작이었다).
+const KIS_ENABLED = process.env.KIS_ENABLED === 'true';
 
 /**
  * KIS API를 통해 주식 가격을 조회합니다.
@@ -6,16 +7,15 @@ const KIS_ENABLED = false;
  * @returns {Promise<Object>} 주식 가격 정보 또는 에러 정보
  */
 async function getStockPrice(ticker) {
+  // KIS API 실연동은 미구현이다. OAuth2/JWT 인증과 엔드포인트
+  // (예: https://openapi.api.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/price)
+  // 확정이 필요하며, 실연동은 별도 작업으로 다룬다(#92 기능 확장 목록 참조).
+  // KIS_ENABLED 는 실연동 도입 시 게이트로 쓰기 위해 읽어둔다.
   if (!KIS_ENABLED) {
-    // TODO: 확인 필요 (KIS API 실제 연동 시 인증/엔드포인트 확정 필요)
     throw new Error('KIS API is not yet enabled');
   }
-  
-  // 실제 KIS API 호출 로직이 여기에 위치해야 합니다.
-  // 예시 URL: https://openapi.api.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/price
-  // 인증 흐름: OAuth 2.0 / JWT 토큰 필요
-  
-  return { enabled: false, message: 'KIS API integration not yet enabled' };
+  // 플래그가 켜져도 실제 구현이 없으므로 미구현임을 명확히 알린다.
+  return { enabled: false, message: 'KIS API integration not yet implemented' };
 }
 
 module.exports = {
