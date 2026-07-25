@@ -4,7 +4,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const db = require('../db/init');
-const { serverError } = require('../utils/errors');
+const { serverError, errMsg } = require('../utils/errors');
 const { parseCardExcel, detectCardCompany } = require('../services/cardExcelImport');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -21,7 +21,7 @@ function processTransactions(cardCompany, originalname, fileBuffer, isPreview = 
   try {
     transactions = parseCardExcel(detectedCardCompany, fileBuffer);
   } catch (e) {
-    if (/^SHEET_NOT_FOUND:/.test(e.message)) throw e;
+    if (/^SHEET_NOT_FOUND:/.test(errMsg(e))) throw e;
     throw new Error('PARSE_FAILED: 엑셀 파일을 해석할 수 없습니다. 파일이 손상됐거나 지원하지 않는 형식입니다.');
   }
 
@@ -115,7 +115,7 @@ function processTransactions(cardCompany, originalname, fileBuffer, isPreview = 
           
           imported++;
         } catch (err) {
-          errors.push(`${row.date} ${row.merchant}: ${err.message}`);
+          errors.push(`${row.date} ${row.merchant}: ${errMsg(err)}`);
         }
       }
     })(); // Immediately invoke the transaction
@@ -142,7 +142,8 @@ function processOne(file, isPreview) {
     const result = processTransactions(null, file.originalname, file.buffer, isPreview);
     return { filename, ok: true, ...result };
   } catch (e) {
-    return { filename, ok: false, error: isUserInputError(e.message) ? e.message : 'Internal error' };
+    const message = errMsg(e);
+    return { filename, ok: false, error: isUserInputError(message) ? message : 'Internal error' };
   }
 }
 
@@ -185,7 +186,8 @@ router.post('/single', upload.single('file'), async (req, res) => {
     res.json(result);
   } catch (e) {
     // 잘못된 입력(미지원 카드사, 시트 부재, 파일 해석 실패)은 400. DB 등 그 외 오류는 500(내부 메시지 숨김+로깅).
-    if (isUserInputError(e.message)) return res.status(400).json({ error: e.message });
+    const message = errMsg(e);
+    if (isUserInputError(message)) return res.status(400).json({ error: message });
     serverError(res, e, 'cardImport');
   }
 });
