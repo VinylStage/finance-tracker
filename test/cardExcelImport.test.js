@@ -52,6 +52,25 @@ describe('cardExcelImport', () => {
     assert.strictEqual(result.length, 9);
   });
 
+  // #92(다중통화 후속): 해외결제 건도 카드사가 이미 KRW로 환산해 명세서에 찍어주므로,
+  // 원 통화(USD)는 별도 구조화 없이 가맹점명에 참고용으로만 남기고 KRW 금액만 정확히
+  // 추출하면 된다는 게 확인된 요구사항 — 그 추출이 실제로 맞는지 실 샘플로 검증한다.
+  test('hyundai 해외결제(USD) 건의 KRW 환산 금액 추출 검증', { skip: !HAS_SAMPLES && '로컬 전용 샘플(ref/) 없음 — .gitignore 대상' }, () => {
+    const buffer = fs.readFileSync('./ref/ref-card-history/현대카드명세서05.xls');
+    const result = parseCardExcel('hyundai', buffer);
+    const usdRows = result.filter(r => r.merchant.includes('USD'));
+    assert.deepStrictEqual(
+      usdRows.map(r => ({ merchant: r.merchant, amount: r.amount })),
+      [
+        { merchant: 'VSA_BREEZE-APP.COM,USD:2.00', amount: 3086 },
+        { merchant: 'VSA_BREEZE-APP.COM,USD:14.99', amount: 22964 },
+        { merchant: 'CLAUDE.AI SUBSCRIPTI,USD:22.00', amount: 33712 },
+        { merchant: 'PAYPAL *EMTG,USD:111.21', amount: 168111 },
+        { merchant: 'VSA_BREEZE-APP.COM,USD:29.99', amount: 45341 },
+      ]
+    );
+  });
+
   // 2. 천 단위 구분자(콤마) 금액 파싱
   test('comma in amount', () => {
     // 농협은 row[10] = 거래금액. 실제로 Number("12,345")는 NaN이므로 테스트가 재현 가능.
