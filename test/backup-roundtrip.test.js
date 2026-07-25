@@ -10,14 +10,19 @@ const BASE = `http://127.0.0.1:${PORT}`;
 let serverProcess;
 let dbPath;
 
+let serverOutput = '';
+
 before(async () => {
   dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
   serverProcess = spawn('node', ['src/server.js'], {
     cwd: path.join(__dirname, '..'),
     env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  // health check가 200 돌아올 때까지 폴링 (최대 5초, 100ms 간격)
+  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
+  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
+  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
+  // health check가 200 돌아올 때까지 폴링 (최대 15초, 100ms 간격)
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {
     try {
@@ -26,7 +31,7 @@ before(async () => {
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error('서버가 5초 안에 기동하지 않음');
+  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
 });
 
 after(() => {
