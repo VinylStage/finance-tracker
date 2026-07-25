@@ -139,6 +139,70 @@ function StatCard({ label, value, sub, color = 'text-slate-800' }) {
   );
 }
 
+function RecurringDueSection({ onConfirmed }) {
+  const [due, setDue] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+
+  const { loading, reload } = useLoader(async () => {
+    const d = await api.get('/api/recurring-rules/due');
+    setDue(d.data || []);
+  }, []);
+
+  if (loading || due.length === 0) return null;
+
+  const handleConfirm = async (id) => {
+    setBusyId(id);
+    try {
+      await api.post(`/api/recurring-rules/${id}/confirm`, {});
+      await Promise.all([reload(), onConfirmed()]);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleSkip = async (id) => {
+    setBusyId(id);
+    try {
+      await api.post(`/api/recurring-rules/${id}/skip`, {});
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Section title="이번 달 반복 거래 확인" caption={`${due.length}건`}>
+      <div className="space-y-2">
+        {due.map(r => (
+          <div key={r.id} className="flex items-center justify-between gap-3 text-sm py-1.5">
+            <div className="min-w-0">
+              <span className="text-slate-800">{r.merchant}</span>
+              <span className="text-slate-400 text-xs ml-2">{r.category_name} · 매월 {r.day_of_month}일</span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="font-medium tabular-nums text-slate-700">{fmt(r.amount)}</span>
+              <button
+                onClick={() => handleConfirm(r.id)}
+                disabled={busyId === r.id}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                생성
+              </button>
+              <button
+                onClick={() => handleSkip(r.id)}
+                disabled={busyId === r.id}
+                className="text-slate-400 hover:text-slate-700 text-xs px-2 py-1.5"
+              >
+                건너뛰기
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 function Section({ title, children, caption }) {
   return (
     <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
@@ -240,6 +304,8 @@ export default function Dashboard() {
           color={data.available >= 0 ? 'text-indigo-600' : 'text-rose-600'}
         />
       </div>
+
+      <RecurringDueSection onConfirmed={reload} />
 
       {/* 지출 분석 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
