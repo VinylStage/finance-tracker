@@ -73,9 +73,10 @@ router.post('/import', (req, res) => {
     let fk_fallback = false;
     let deleted = 0;
 
-    // Get all current categories for lookups
+    // Get all current categories for lookups — id 존재확인/이름조회를 O(1)로
     const allCategories = db.prepare('SELECT id, name FROM categories').all();
-    const categoryMap = new Map(allCategories.map(c => [c.name, c.id]));
+    const categoryIds = new Set(allCategories.map(c => c.id));
+    const categoryByName = new Map(allCategories.map(c => [c.name, c.id]));
     // 백업의 FK 값이 현재 DB에 존재하지 않을 수 있다(다른 기기 복원, 결제수단/할부 초기화 등).
     // foreign_keys=ON 이므로 없는 FK를 그대로 넣으면 트랜잭션 전체가 롤백된다. 존재하는 값만 넣고 나머지는 NULL로 폴백한다.
     const paymentMethodIds = new Set(db.prepare('SELECT id FROM payment_methods').all().map(r => r.id));
@@ -103,11 +104,11 @@ router.post('/import', (req, res) => {
         
         let categoryId = tx.category_id;
         
-        // If category_id doesn't exist, try to find by category_name
-        if (!categoryId || !allCategories.some(c => c.id === categoryId)) {
-          const foundCategory = allCategories.find(c => c.name === tx.category_name);
-          if (foundCategory) {
-            categoryId = foundCategory.id;
+        // If category_id doesn't exist, try to find by category_name (O(1) 조회)
+        if (!categoryId || !categoryIds.has(categoryId)) {
+          const foundId = categoryByName.get(tx.category_name);
+          if (foundId !== undefined) {
+            categoryId = foundId;
           } else {
             skipped++;
             continue;
