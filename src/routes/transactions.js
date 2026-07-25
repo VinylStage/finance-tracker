@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { asInt, missingFields, escapeLike } = require('../utils/validate');
 
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
 router.get('/', (req, res) => {
@@ -288,17 +289,29 @@ router.get('/:id', (req, res) => {
   res.json(row);
 });
 
+// 거래 필드 검증. 문제가 있으면 에러 메시지 문자열, 없으면 null 을 반환한다.
+// (POST/PUT 공통)
+function validateTxBody(body) {
+  const missing = missingFields(body, ['date', 'category_id', 'amount']);
+  if (missing.length) return `${missing.join(', ')} required`;
+  if (asInt(body.category_id) === null) return 'category_id must be an integer';
+  if (asInt(body.amount) === null) return 'amount must be an integer';
+  if (body.payment_method_id !== undefined && body.payment_method_id !== null &&
+      asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
+  return null;
+}
+
 // POST /api/transactions
 router.post('/', (req, res) => {
   try {
+    const err = validateTxBody(req.body);
+    if (err) return res.status(400).json({ error: err });
     const { date, category_id, amount, payment_method_id, payment_style = '일시불', merchant, memo } = req.body;
-    if (!date || !category_id || amount === undefined) {
-      return res.status(400).json({ error: 'date, category_id, amount required' });
-    }
     const result = db.prepare(`
       INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant, memo)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(date, category_id, amount, payment_method_id || null, payment_style, merchant || null, memo || null);
+    `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
+           payment_style, merchant || null, memo || null);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -308,13 +321,16 @@ router.post('/', (req, res) => {
 // PUT /api/transactions/:id
 router.put('/:id', (req, res) => {
   try {
+    const err = validateTxBody(req.body);
+    if (err) return res.status(400).json({ error: err });
     const { date, category_id, amount, payment_method_id, payment_style, merchant, memo } = req.body;
-    db.prepare(`
+    const result = db.prepare(`
       UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?,
         payment_style=?, merchant=?, memo=?
       WHERE id=?
-    `).run(date, category_id, amount, payment_method_id || null, payment_style || '일시불',
-           merchant || null, memo || null, req.params.id);
+    `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
+           payment_style || '일시불', merchant || null, memo || null, req.params.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -323,8 +339,13 @@ router.put('/:id', (req, res) => {
 
 // DELETE /api/transactions/:id
 router.delete('/:id', (req, res) => {
-  db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
-  res.json({ ok: true });
+  try {
+    const result = db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -529,8 +550,8 @@ router.get('/suggest/category', (req, res) => {
   if (exact) return res.json({ category_id: exact.category_id, confidence: '완전일치' });
   const partial = db.prepare(`
     SELECT category_id, COUNT(*) as cnt FROM transactions
-    WHERE merchant LIKE ? GROUP BY category_id ORDER BY cnt DESC LIMIT 1
-  `).get(`%${merchant}%`);
+    WHERE merchant LIKE ? ESCAPE '\\' GROUP BY category_id ORDER BY cnt DESC LIMIT 1
+  `).get(`%${escapeLike(merchant)}%`);
   if (partial) return res.json({ category_id: partial.category_id, confidence: '부분일치' });
   res.json({ category_id: null, confidence: '없음' });
 });
