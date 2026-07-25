@@ -40,6 +40,7 @@ export default function Settings() {
       <SettingsBackupSection />
       <TransactionsBackupSection />
       <CardImportSection />
+      <CsvImportSection />
       <DangerZoneSection />
     </div>
   );
@@ -696,6 +697,99 @@ function CardImportSection() {
               신규 {previewTotal.toLocaleString('ko-KR')}건 임포트
             </button>
             <button onClick={() => { setPreview(null); setFiles([]); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file, 'utf-8');
+  });
+}
+
+function CsvImportSection() {
+  const [csvText, setCsvText] = useState(null);
+  const [fileName, setFileName] = useState('');
+  const [preview, setPreview] = useState(null); // { count, skipped, invalid }
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPreview(null);
+    setMessage('');
+    setLoading(true);
+    try {
+      const text = await readFileAsText(file);
+      setCsvText(text);
+      setFileName(file.name);
+      const data = await api.post('/api/csv-import?preview=true', { cardCompany: 'shinhan', csvText: text });
+      setPreview(data);
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleImport = async () => {
+    if (!csvText) return;
+    setLoading(true);
+    setMessage('');
+    try {
+      const data = await api.post('/api/csv-import', { cardCompany: 'shinhan', csvText });
+      let msg = `${(data.imported || 0).toLocaleString('ko-KR')}건 임포트 완료 (중복 스킵 ${(data.skipped || 0).toLocaleString('ko-KR')}건`;
+      if (data.invalid) msg += `, 형식 오류 ${data.invalid}건 제외`;
+      msg += ')';
+      setMessage(msg);
+      setPreview(null);
+      setCsvText(null);
+      setFileName('');
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">신한카드 CSV 임포트</h2>
+      <p className="text-xs text-slate-500">
+        신한카드는 엑셀 내보내기를 지원하지 않아 CSV 파일로 업로드합니다. 실제 내보내기 파일로 컬럼 구성이 검증되지 않았으니, 미리보기에서 건수를 확인한 뒤 임포트하세요.
+      </p>
+      <div className="flex flex-wrap gap-3 items-center">
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          파일 선택
+          <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={loading} />
+        </label>
+        {loading && <span className="text-xs text-slate-400">처리 중…</span>}
+        {message && <span className="text-xs text-slate-500">{message}</span>}
+      </div>
+      {preview && (
+        <div className="mt-2 space-y-3">
+          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-1">
+            <div className="font-medium text-slate-700 break-all">{fileName}</div>
+            <div className="text-slate-600">
+              신규 {(preview.count || 0).toLocaleString('ko-KR')}건 · 중복 {(preview.skipped || 0).toLocaleString('ko-KR')}건
+              {preview.invalid ? ` · 형식 오류(제외) ${preview.invalid}건` : ''}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleImport} disabled={loading || (preview.count || 0) === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+              신규 {(preview.count || 0).toLocaleString('ko-KR')}건 임포트
+            </button>
+            <button onClick={() => { setPreview(null); setCsvText(null); setFileName(''); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
               취소
             </button>
           </div>

@@ -128,11 +128,11 @@ function normalizeDate(raw) {
 }
 
 // 카드사별 CSV 컬럼 스펙. 파싱 로직은 동일하고 컬럼명만 다르므로 표로 분리한다.
-// 카드사 추가는 여기에 한 줄 추가로 끝난다.
+// 하나/삼성/현대는 실전 검증된 엑셀 경로(cardExcelImport.js)로 통일하고 CSV 경로에서는 제거했다(#88).
+// 신한은 엑셀 내보내기를 지원하지 않고 실사용이 확인돼 CSV 경로를 유지한다.
+// 주의: 아래 신한 컬럼명은 실제 신한카드 CSV 내보내기 샘플로 검증된 적이 없다(#88에서도 미해결).
+// 헤더가 다르면 parseWithSpec이 명확한 에러로 막아주지만, 실제 샘플 확보 시 반드시 재검증할 것.
 const CARD_CSV_SPECS = {
-  hana:    { date: '일자',     merchant: '가맹점명', amount: '금액',     label: 'Hana' },
-  samsung: { date: '거래일자', merchant: '가맹점명', amount: '거래금액', label: 'Samsung' },
-  hyundai: { date: '입력일자', merchant: '가맹점명', amount: '금액',     label: 'Hyundai' },
   shinhan: { date: '거래일자', merchant: '가맹점',   amount: '금액',     label: 'Shinhan' },
 };
 
@@ -148,7 +148,6 @@ function parseWithSpec(csvText, spec) {
     throw new Error('Invalid CSV data');
   }
 
-  // TODO: 확인 필요 - 실제 카드사 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
   const headers = rows[0].map(h => h.trim());
   if (!headers.includes(spec.date) || !headers.includes(spec.merchant) || !headers.includes(spec.amount)) {
     throw new Error(`Required columns (${spec.date}, ${spec.merchant}, ${spec.amount}) not found in ${spec.label} CSV`);
