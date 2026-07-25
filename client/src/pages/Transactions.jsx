@@ -14,6 +14,9 @@ const today = new Date();
 const CURRENT_YEAR = String(today.getFullYear());
 const CURRENT_MONTH = `${CURRENT_YEAR}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
+const EMPTY_FILTERS = { merchant: '', memo: '', minAmount: '', maxAmount: '', paymentMethodId: '' };
+const inp = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500';
+
 export default function Transactions() {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -23,6 +26,8 @@ export default function Transactions() {
   const [selectedYear, setSelectedYear] = useState(null);
   const [expandedMonths, setExpandedMonths] = useState(new Set());
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [categoryFilter, setCategoryFilter] = useState(new Set()); // 비어있으면 전체
   const { confirm, alert } = useConfirm();
 
   const { loading, error, reload } = useLoader(async () => {
@@ -48,11 +53,35 @@ export default function Transactions() {
 
   useEffect(() => { setSelectedIds(new Set()); }, [selectedYear]);
 
+  const matchesFilters = (t) => {
+    const { merchant, memo, minAmount, maxAmount, paymentMethodId } = filters;
+    if (merchant && !(t.merchant || '').toLowerCase().includes(merchant.toLowerCase())) return false;
+    if (memo && !(t.memo || '').toLowerCase().includes(memo.toLowerCase())) return false;
+    if (minAmount !== '' && t.amount < Number(minAmount)) return false;
+    if (maxAmount !== '' && t.amount > Number(maxAmount)) return false;
+    if (paymentMethodId && String(t.payment_method_id) !== paymentMethodId) return false;
+    if (categoryFilter.size > 0 && !categoryFilter.has(t.category_id)) return false;
+    return true;
+  };
+
+  const filtersActive = Object.values(filters).some(v => v !== '') || categoryFilter.size > 0;
+
+  const majorTypes = useMemo(() => [...new Set(categories.map(c => c.major_type))], [categories]);
+
+  const toggleCategoryFilter = (id) => {
+    setCategoryFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const monthGroups = useMemo(() => {
     if (!selectedYear) return [];
     const map = new Map();
     transactions
       .filter(t => t.date.slice(0, 4) === selectedYear)
+      .filter(matchesFilters)
       .forEach(t => {
         const month = t.date.slice(0, 7);
         if (!map.has(month)) map.set(month, { month, income: 0, expense: 0, count: 0, items: [] });
@@ -63,7 +92,7 @@ export default function Transactions() {
         else if (t.payment_style !== '할부' && t.payment_style !== '리볼빙') g.expense += t.amount;
       });
     return [...map.values()].sort((a, b) => b.month.localeCompare(a.month));
-  }, [transactions, selectedYear]);
+  }, [transactions, selectedYear, filters, categoryFilter]);
 
   useEffect(() => {
     if (!monthGroups.length) return;
@@ -164,6 +193,75 @@ export default function Transactions() {
             + 거래 추가
           </button>
         </div>
+      </div>
+
+      <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">검색·필터</h2>
+          {filtersActive && (
+            <button
+              onClick={() => { setFilters(EMPTY_FILTERS); setCategoryFilter(new Set()); }}
+              className="text-xs text-indigo-600 hover:text-indigo-700"
+            >
+              필터 초기화
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <input
+            type="text" placeholder="가맹점 검색" className={inp}
+            value={filters.merchant} onChange={e => setFilters(f => ({ ...f, merchant: e.target.value }))}
+          />
+          <input
+            type="text" placeholder="메모 검색" className={inp}
+            value={filters.memo} onChange={e => setFilters(f => ({ ...f, memo: e.target.value }))}
+          />
+          <input
+            type="number" placeholder="최소 금액" className={inp}
+            value={filters.minAmount} onChange={e => setFilters(f => ({ ...f, minAmount: e.target.value }))}
+          />
+          <input
+            type="number" placeholder="최대 금액" className={inp}
+            value={filters.maxAmount} onChange={e => setFilters(f => ({ ...f, maxAmount: e.target.value }))}
+          />
+          <select
+            className={inp}
+            value={filters.paymentMethodId} onChange={e => setFilters(f => ({ ...f, paymentMethodId: e.target.value }))}
+          >
+            <option value="">결제수단 전체</option>
+            {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <details>
+          <summary className="cursor-pointer text-sm text-slate-600">
+            카테고리 {categoryFilter.size > 0 ? `(${categoryFilter.size}개 선택됨)` : '(전체)'}
+          </summary>
+          <div className="mt-2 flex flex-wrap gap-4">
+            {majorTypes.map(mt => (
+              <div key={mt}>
+                <div className="text-xs text-slate-400 mb-1">{mt}</div>
+                <div className="flex flex-wrap gap-1 max-w-xs">
+                  {categories.filter(c => c.major_type === mt).map(c => (
+                    <label
+                      key={c.id}
+                      className={`text-xs px-2 py-1 rounded-full border cursor-pointer transition-colors ${
+                        categoryFilter.has(c.id)
+                          ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox" className="hidden"
+                        checked={categoryFilter.has(c.id)} onChange={() => toggleCategoryFilter(c.id)}
+                      />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       </div>
 
       {showForm && (
