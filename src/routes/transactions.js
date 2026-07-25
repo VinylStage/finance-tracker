@@ -384,11 +384,14 @@ router.get('/summary/dashboard', (req, res) => {
       AND t.payment_style NOT IN ('할부','리볼빙')
     `).get(thisMonth).total;
 
+    // 청구 기간(start_billing_month 부터 months 개월)이 이번 달을 포함하는 건만 합산한다
     const installmentsDue = db.prepare(`
       SELECT COALESCE(SUM(monthly_amount),0) AS total
       FROM installments
-      WHERE start_billing_month <= ? AND status = '진행중'
-    `).get(thisMonth).total;
+      WHERE status = '진행중'
+        AND start_billing_month <= ?
+        AND ? < strftime('%Y-%m', date(start_billing_month || '-01', '+' || months || ' months'))
+    `).get(thisMonth, thisMonth).total;
 
     const revolvingPaid = db.prepare(`
       SELECT COALESCE(SUM(paid_amount), 0) AS total
