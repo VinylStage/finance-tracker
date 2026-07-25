@@ -7,9 +7,9 @@ function asInt(v) {
   return null;
 }
 
-// body 에서 누락된 필수 키 목록을 반환 (undefined/null 만 누락으로 본다).
+// body 에서 누락된 필수 키 목록을 반환 (undefined/null/'' 만 누락으로 본다).
 function missingFields(body, keys) {
-  return keys.filter((k) => body[k] === undefined || body[k] === null);
+  return keys.filter((k) => body[k] === undefined || body[k] === null || body[k] === '');
 }
 
 // SQLite LIKE 패턴의 와일드카드(%, _)와 이스케이프 문자(\)를 이스케이프.

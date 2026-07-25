@@ -31,10 +31,10 @@ router.get('/', (req, res) => {
 router.put('/', (req, res) => {
   try {
     const { initial_balance, monthly_income } = req.body;
-    if (initial_balance !== undefined && asNumber(initial_balance) === null) {
+    if (initial_balance !== undefined && initial_balance !== '' && asNumber(initial_balance) === null) {
       return res.status(400).json({ error: 'initial_balance must be a number' });
     }
-    if (monthly_income !== undefined && asNumber(monthly_income) === null) {
+    if (monthly_income !== undefined && monthly_income !== '' && asNumber(monthly_income) === null) {
       return res.status(400).json({ error: 'monthly_income must be a number' });
     }
     const upsert = db.prepare(`
@@ -42,8 +42,8 @@ router.put('/', (req, res) => {
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `);
     const tx = db.transaction(() => {
-      if (initial_balance !== undefined) upsert.run('initial_balance', String(asNumber(initial_balance)));
-      if (monthly_income !== undefined) upsert.run('monthly_income', String(asNumber(monthly_income)));
+      if (initial_balance !== undefined && initial_balance !== '') upsert.run('initial_balance', String(asNumber(initial_balance)));
+      if (monthly_income !== undefined && monthly_income !== '') upsert.run('monthly_income', String(asNumber(monthly_income)));
     });
     tx();
     res.json({ ok: true });

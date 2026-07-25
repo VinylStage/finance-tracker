@@ -300,6 +300,8 @@ function validateTxBody(body) {
   if (asInt(body.amount) === null) return 'amount must be an integer';
   if (body.payment_method_id !== undefined && body.payment_method_id !== null &&
       asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
+  // date 형식 검증 (ISO 8601 YYYY-MM-DD)
+  if (body.date && !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return 'date must be in YYYY-MM-DD format';
   if (body.payment_style !== undefined && body.payment_style !== null &&
       !PAYMENT_STYLES.includes(body.payment_style)) {
     return `payment_style must be one of ${PAYMENT_STYLES.join(', ')}`;
