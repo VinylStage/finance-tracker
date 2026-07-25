@@ -127,201 +127,69 @@ function normalizeDate(raw) {
   return null;
 }
 
-/**
- * 카드사별 파서 함수 - TODO: 실제 CSV 구조 확인 필요
- */
-function parseHanaCsv(csvText) {
-  const rows = parseCsv(csvText);
-  if (rows.length < 1) {
-    throw new Error('Invalid CSV data');
-  }
-
-  // TODO: 확인 필요 - 실제 한카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-  const header = rows[0];
-  const headers = header.map(h => h.trim());
-
-  if (!headers.includes('일자') || !headers.includes('가맹점명') || !headers.includes('금액')) {
-    throw new Error('Required columns (일자, 가맹점명, 금액) not found in Hana CSV');
-  }
-
-  const transactions = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.length === 0) continue;
-
-    // TODO: 확인 필요 - 실제 한카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-    const dateIndex = headers.indexOf('일자');
-    const merchantIndex = headers.indexOf('가맹점명');
-    const amountIndex = headers.indexOf('금액');
-
-    const dateRaw = row[dateIndex];
-    const merchant = row[merchantIndex] || '';
-    const amountRaw = row[amountIndex];
-
-    const parsedDate = normalizeDate(dateRaw);
-    const parsedAmount = parseAmount(amountRaw);
-
-    transactions.push({
-      date: parsedDate,
-      merchant: merchant,
-      amount: parsedAmount,
-      memo: '',
-      error: parsedDate === null || isNaN(parsedAmount) ? 'Invalid data' : null
-    });
-  }
-
-  return transactions;
-}
-
-function parseSamsungCsv(csvText) {
-  const rows = parseCsv(csvText);
-  if (rows.length < 1) {
-    throw new Error('Invalid CSV data');
-  }
-
-  // TODO: 확인 필요 - 실제 삼성카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-  const header = rows[0];
-  const headers = header.map(h => h.trim());
-
-  if (!headers.includes('거래일자') || !headers.includes('가맹점명') || !headers.includes('거래금액')) {
-    throw new Error('Required columns (거래일자, 가맹점명, 거래금액) not found in Samsung CSV');
-  }
-
-  const transactions = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.length === 0) continue;
-
-    // TODO: 확인 필요 - 실제 삼성카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-    const dateIndex = headers.indexOf('거래일자');
-    const merchantIndex = headers.indexOf('가맹점명');
-    const amountIndex = headers.indexOf('거래금액');
-
-    const dateRaw = row[dateIndex];
-    const merchant = row[merchantIndex] || '';
-    const amountRaw = row[amountIndex];
-
-    const parsedDate = normalizeDate(dateRaw);
-    const parsedAmount = parseAmount(amountRaw);
-
-    transactions.push({
-      date: parsedDate,
-      merchant: merchant,
-      amount: parsedAmount,
-      memo: '',
-      error: parsedDate === null || isNaN(parsedAmount) ? 'Invalid data' : null
-    });
-  }
-
-  return transactions;
-}
-
-function parseHyundaiCsv(csvText) {
-  const rows = parseCsv(csvText);
-  if (rows.length < 1) {
-    throw new Error('Invalid CSV data');
-  }
-
-  // TODO: 확인 필요 - 실제 현대카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-  const header = rows[0];
-  const headers = header.map(h => h.trim());
-
-  if (!headers.includes('입력일자') || !headers.includes('가맹점명') || !headers.includes('금액')) {
-    throw new Error('Required columns (입력일자, 가맹점명, 금액) not found in Hyundai CSV');
-  }
-
-  const transactions = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.length === 0) continue;
-
-    // TODO: 확인 필요 - 실제 현대카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-    const dateIndex = headers.indexOf('입력일자');
-    const merchantIndex = headers.indexOf('가맹점명');
-    const amountIndex = headers.indexOf('금액');
-
-    const dateRaw = row[dateIndex];
-    const merchant = row[merchantIndex] || '';
-    const amountRaw = row[amountIndex];
-
-    const parsedDate = normalizeDate(dateRaw);
-    const parsedAmount = parseAmount(amountRaw);
-
-    transactions.push({
-      date: parsedDate,
-      merchant: merchant,
-      amount: parsedAmount,
-      memo: '',
-      error: parsedDate === null || isNaN(parsedAmount) ? 'Invalid data' : null
-    });
-  }
-
-  return transactions;
-}
-
-function parseShinhanCsv(csvText) {
-  const rows = parseCsv(csvText);
-  if (rows.length < 1) {
-    throw new Error('Invalid CSV data');
-  }
-
-  // TODO: 확인 필요 - 실제 신한카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-  const header = rows[0];
-  const headers = header.map(h => h.trim());
-
-  if (!headers.includes('거래일자') || !headers.includes('가맹점') || !headers.includes('금액')) {
-    throw new Error('Required columns (거래일자, 가맹점, 금액) not found in Shinhan CSV');
-  }
-
-  const transactions = [];
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.length === 0) continue;
-
-    // TODO: 확인 필요 - 실제 신한카드 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
-    const dateIndex = headers.indexOf('거래일자');
-    const merchantIndex = headers.indexOf('가맹점');
-    const amountIndex = headers.indexOf('금액');
-
-    const dateRaw = row[dateIndex];
-    const merchant = row[merchantIndex] || '';
-    const amountRaw = row[amountIndex];
-
-    const parsedDate = normalizeDate(dateRaw);
-    const parsedAmount = parseAmount(amountRaw);
-
-    transactions.push({
-      date: parsedDate,
-      merchant: merchant,
-      amount: parsedAmount,
-      memo: '',
-      error: parsedDate === null || isNaN(parsedAmount) ? 'Invalid data' : null
-    });
-  }
-
-  return transactions;
-}
-
-const parsers = {
-  hana: parseHanaCsv,
-  samsung: parseSamsungCsv,
-  hyundai: parseHyundaiCsv,
-  shinhan: parseShinhanCsv
+// 카드사별 CSV 컬럼 스펙. 파싱 로직은 동일하고 컬럼명만 다르므로 표로 분리한다.
+// 카드사 추가는 여기에 한 줄 추가로 끝난다.
+const CARD_CSV_SPECS = {
+  hana:    { date: '일자',     merchant: '가맹점명', amount: '금액',     label: 'Hana' },
+  samsung: { date: '거래일자', merchant: '가맹점명', amount: '거래금액', label: 'Samsung' },
+  hyundai: { date: '입력일자', merchant: '가맹점명', amount: '금액',     label: 'Hyundai' },
+  shinhan: { date: '거래일자', merchant: '가맹점',   amount: '금액',     label: 'Shinhan' },
 };
+
+/**
+ * 스펙에 따라 카드사 CSV를 파싱한다. 날짜/금액 정규화와 오류 표시는 공통이다.
+ * @param {string} csvText
+ * @param {{date:string, merchant:string, amount:string, label:string}} spec
+ * @returns {Array<Object>} { date, merchant, amount, memo, error }
+ */
+function parseWithSpec(csvText, spec) {
+  const rows = parseCsv(csvText);
+  if (rows.length < 1) {
+    throw new Error('Invalid CSV data');
+  }
+
+  // TODO: 확인 필요 - 실제 카드사 CSV 내보내기 샘플로 컬럼 헤더/순서/인코딩 검증 필요
+  const headers = rows[0].map(h => h.trim());
+  if (!headers.includes(spec.date) || !headers.includes(spec.merchant) || !headers.includes(spec.amount)) {
+    throw new Error(`Required columns (${spec.date}, ${spec.merchant}, ${spec.amount}) not found in ${spec.label} CSV`);
+  }
+
+  const dateIndex = headers.indexOf(spec.date);
+  const merchantIndex = headers.indexOf(spec.merchant);
+  const amountIndex = headers.indexOf(spec.amount);
+
+  const transactions = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.length === 0) continue;
+
+    const parsedDate = normalizeDate(row[dateIndex]);
+    const parsedAmount = parseAmount(row[amountIndex]);
+
+    transactions.push({
+      date: parsedDate,
+      merchant: row[merchantIndex] || '',
+      amount: parsedAmount,
+      memo: '',
+      error: parsedDate === null || isNaN(parsedAmount) ? 'Invalid data' : null
+    });
+  }
+
+  return transactions;
+}
 
 /**
  * 카드사별 CSV 텍스트를 파싱해서 거래 내역 배열로 변환
  * @param {string} cardCompany
  * @param {string} csvText
- * @returns {Array<Object>} 거래 내역 배열 - { date, merchant, amount, memo }
+ * @returns {Array<Object>} 거래 내역 배열 - { date, merchant, amount, memo, error }
  */
 function parseCardCsv(cardCompany, csvText) {
-  const parser = parsers[cardCompany];
-  if (!parser) {
+  const spec = CARD_CSV_SPECS[cardCompany];
+  if (!spec) {
     throw new Error(`Unsupported card company: ${cardCompany}`);
   }
-
-  return parser(csvText);
+  return parseWithSpec(csvText, spec);
 }
 
 module.exports = { parseCardCsv };
