@@ -1,4 +1,5 @@
-const KIS_ENABLED = false;
+// .env 의 KIS_ENABLED 를 실제로 읽는다(기존에는 false 하드코딩이라 환경변수가 무동작이었다).
+const KIS_ENABLED = process.env.KIS_ENABLED === 'true';
 
 /**
  * KIS API를 통해 주식 가격을 조회합니다.
