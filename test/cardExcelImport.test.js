@@ -1,7 +1,12 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
 const XLSX = require('xlsx');
 const { parseCardExcel, detectCardCompany } = require('../src/services/cardExcelImport.js');
+
+// ref/ 는 실제 개인 거래 내역이 담긴 샘플이라 .gitignore 대상이다(CI 체크아웃본엔 없음).
+// 로컬 개발 환경에 있을 때만 실행하고, 없으면(CI 등) skip 처리한다.
+const HAS_SAMPLES = fs.existsSync('./ref/ref-card-history/농협카드이용내역.xlsx');
 
 function makeWorkbook(rows, sheetName = 'Sheet1') {
   const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -12,8 +17,7 @@ function makeWorkbook(rows, sheetName = 'Sheet1') {
 
 describe('cardExcelImport', () => {
   // 1. 정상 입력 — 실제 샘플 파일로 검증
-  test('nonghyup sample file', () => {
-    const fs = require('fs');
+  test('nonghyup sample file', { skip: !HAS_SAMPLES && '로컬 전용 샘플(ref/) 없음 — .gitignore 대상' }, () => {
     const buffer = fs.readFileSync('./ref/ref-card-history/농협카드이용내역.xlsx');
     const company = detectCardCompany('./ref/ref-card-history/농협카드이용내역.xlsx');
     assert.strictEqual(company, 'nonghyup');
@@ -32,8 +36,7 @@ describe('cardExcelImport', () => {
     });
   });
 
-  test('hana sample file', () => {
-    const fs = require('fs');
+  test('hana sample file', { skip: !HAS_SAMPLES && '로컬 전용 샘플(ref/) 없음 — .gitignore 대상' }, () => {
     const buffer = fs.readFileSync('./ref/ref-card-history/하나카드이용내역01.xls');
     const company = detectCardCompany('./ref/ref-card-history/하나카드이용내역01.xls');
     assert.strictEqual(company, 'hana');
@@ -41,8 +44,7 @@ describe('cardExcelImport', () => {
     assert.strictEqual(result.length, 44);
   });
 
-  test('hyundai sample file', () => {
-    const fs = require('fs');
+  test('hyundai sample file', { skip: !HAS_SAMPLES && '로컬 전용 샘플(ref/) 없음 — .gitignore 대상' }, () => {
     const buffer = fs.readFileSync('./ref/ref-card-history/현대카드명세서01.xls');
     const company = detectCardCompany('./ref/ref-card-history/현대카드명세서01.xls');
     assert.strictEqual(company, 'hyundai');

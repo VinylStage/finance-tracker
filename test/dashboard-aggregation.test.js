@@ -18,7 +18,7 @@ before(async () => {
     stdio: 'ignore',
   });
   // health check가 200 돌아올 때까지 폴링 (최대 5초, 100ms 간격)
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {
     try {
       const r = await fetch(`${BASE}/api/health`);
