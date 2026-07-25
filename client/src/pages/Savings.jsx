@@ -1,4 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
+import { useLoader } from '../hooks/useLoader';
+import { useConfirm } from '../components/ConfirmProvider';
+import LoadError from '../components/LoadError';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -7,50 +12,50 @@ function fmt(n) {
 export default function Savings() {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const { confirm, alert } = useConfirm();
 
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetch('/api/savings').then(r => r.json()),
-      fetch('/api/categories').then(r => r.json()),
-    ]).then(([s, cats]) => {
-      setItems(s.data || []);
-      setCategories((cats || []).filter(c => c.major_type === '저축'));
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const [s, cats] = await Promise.all([
+      api.get('/api/savings'),
+      api.get('/api/categories'),
+    ]);
+    setItems(s.data || []);
+    setCategories((cats || []).filter(c => c.major_type === '저축'));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
   const handleSave = async (formData) => {
-    const method = editItem ? 'PUT' : 'POST';
-    const url = editItem ? `/api/savings/${editItem.id}` : '/api/savings';
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
-    });
-    setShowForm(false);
-    setEditItem(null);
-    load();
+    try {
+      if (editItem) await api.put(`/api/savings/${editItem.id}`, formData);
+      else await api.post('/api/savings', formData);
+      setShowForm(false);
+      setEditItem(null);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('삭제하시겠습니까?')) return;
-    await fetch(`/api/savings/${id}`, { method: 'DELETE' });
-    load();
+    if (!await confirm('삭제하시겠습니까?', { tone: 'danger' })) return;
+    try {
+      await api.del(`/api/savings/${id}`);
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleMature = async (item) => {
-    if (!confirm(`"${item.name}" 만기 처리하시겠습니까? 원금 회수 + 이자가 거래 내역에 자동 기록됩니다.`)) return;
-    const r = await fetch(`/api/savings/${item.id}/mature`, { method: 'POST' });
-    const body = await r.json();
-    if (!r.ok) { alert(body.error || '처리 실패'); return; }
-    alert(`만기 처리 완료\n원금: ${fmt(body.principal)}\n이자: ${fmt(body.interest)}\n총 수령액: ${fmt(body.payout)}`);
-    load();
+    if (!await confirm(`"${item.name}" 만기 처리하시겠습니까? 원금 회수 + 이자가 거래 내역에 자동 기록됩니다.`)) return;
+    try {
+      const body = await api.raw(`/api/savings/${item.id}/mature`, { method: 'POST' });
+      await alert(`만기 처리 완료\n원금: ${fmt(body.principal)}\n이자: ${fmt(body.interest)}\n총 수령액: ${fmt(body.payout)}`);
+      reload();
+    } catch (err) {
+      await alert(err.message || '처리 실패');
+    }
   };
 
   return (
@@ -76,6 +81,8 @@ export default function Savings() {
 
       {loading ? (
         <div className="text-slate-500 text-center py-10">로딩 중...</div>
+      ) : error ? (
+        <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
         <div className="text-slate-400 text-center py-10">등록된 상품이 없습니다.</div>
       ) : (
@@ -123,7 +130,7 @@ export default function Savings() {
 }
 
 function SavingsForm({ initial, categories, onSave, onCancel }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYMD();
   const [form, setForm] = useState({
     name: initial?.name || '',
     monthly_contribution: initial ? String(initial.monthly_contribution) : '',

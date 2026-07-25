@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { api } from '../lib/api';
 
 const components = {
   h1: (props) => <h1 className="text-xl font-semibold text-slate-800 mt-6 mb-3 first:mt-0" {...props} />,
@@ -19,13 +20,9 @@ export default function Guide() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/guide')
-      .then(r => {
-        if (!r.ok) throw new Error('가이드 문서를 불러오지 못했습니다.');
-        return r.text();
-      })
+    api.get('/api/guide')
       .then(text => setContent(text))
-      .catch(err => setError(err.message))
+      .catch(() => setError('가이드 문서를 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
   }, []);
 

@@ -1,4 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { api } from '../lib/api';
+import { useLoader } from '../hooks/useLoader';
+import { useConfirm } from '../components/ConfirmProvider';
+import LoadError from '../components/LoadError';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -11,36 +15,36 @@ export default function Settings() {
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [appSettings, setAppSettings] = useState({ initial_balance: 0, monthly_income: 0 });
-  const [loading, setLoading] = useState(true);
+  const [recurringRules, setRecurringRules] = useState([]);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetch('/api/categories').then(r => r.json()),
-      fetch('/api/payment-methods').then(r => r.json()),
-      fetch('/api/settings').then(r => r.json()),
-    ]).then(([cats, pms, settings]) => {
-      setCategories(cats);
-      setPaymentMethods(pms);
-      setAppSettings(settings);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const [cats, pms, settings, rules] = await Promise.all([
+      api.get('/api/categories'),
+      api.get('/api/payment-methods'),
+      api.get('/api/settings'),
+      api.get('/api/recurring-rules?include_inactive=1'),
+    ]);
+    setCategories(cats);
+    setPaymentMethods(pms);
+    setAppSettings(settings);
+    setRecurringRules(rules);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
   if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
+  if (error) return <LoadError error={error} onRetry={reload} />;
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-slate-800">설정</h1>
-      <AppSettingsSection initial={appSettings} onSaved={load} />
-      <CategorySection categories={categories} onChanged={load} />
-      <PaymentMethodSection paymentMethods={paymentMethods} onChanged={load} />
+      <AppSettingsSection initial={appSettings} onSaved={reload} />
+      <CategorySection categories={categories} onChanged={reload} />
+      <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
+      <RecurringRuleSection rules={recurringRules} categories={categories} paymentMethods={paymentMethods} onChanged={reload} />
       <ExportSection />
       <SettingsBackupSection />
       <TransactionsBackupSection />
       <CardImportSection />
+      <CsvImportSection />
       <DangerZoneSection />
     </div>
   );
@@ -54,20 +58,21 @@ function AppSettingsSection({ initial, onSaved }) {
     monthly_income: String(initial.monthly_income || 0),
   });
   const [saved, setSaved] = useState(false);
+  const { alert } = useConfirm();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await api.put('/api/settings', {
         initial_balance: Number(form.initial_balance),
         monthly_income: Number(form.monthly_income),
-      }),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-    onSaved();
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+      onSaved();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   return (
@@ -97,32 +102,37 @@ function CategorySection({ categories, onChanged }) {
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const { confirm, alert } = useConfirm();
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    await fetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, monthly_budget: Number(form.monthly_budget) || 0 }),
-    });
-    setForm({ major_type: '선택지출', name: '', monthly_budget: '' });
-    setShowForm(false);
-    onChanged();
+    try {
+      await api.post('/api/categories', { ...form, monthly_budget: Number(form.monthly_budget) || 0 });
+      setForm({ major_type: '선택지출', name: '', monthly_budget: '' });
+      setShowForm(false);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleBudgetChange = async (cat, value) => {
-    await fetch(`/api/categories/${cat.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...cat, monthly_budget: Number(value) || 0 }),
-    });
-    onChanged();
+    try {
+      await api.put(`/api/categories/${cat.id}`, { ...cat, monthly_budget: Number(value) || 0 });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDeactivate = async (id) => {
-    if (!confirm('비활성화하시겠습니까?')) return;
-    await fetch(`/api/categories/${id}`, { method: 'DELETE' });
-    onChanged();
+    if (!await confirm('비활성화하시겠습니까?')) return;
+    try {
+      await api.del(`/api/categories/${id}`);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleEditStart = (cat) => {
@@ -136,24 +146,24 @@ function CategorySection({ categories, onChanged }) {
   };
 
   const handleEditSave = async (cat) => {
-    await fetch(`/api/categories/${cat.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...cat, ...editForm }),
-    });
-    setEditing(null);
-    setEditForm({});
-    onChanged();
+    try {
+      await api.put(`/api/categories/${cat.id}`, { ...cat, ...editForm });
+      setEditing(null);
+      setEditForm({});
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleReActivate = async (id) => {
-    if (!confirm('재활성화하시겠습니까?')) return;
-    await fetch(`/api/categories/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: 1 }),
-    });
-    onChanged();
+    if (!await confirm('재활성화하시겠습니까?')) return;
+    try {
+      await api.put(`/api/categories/${id}`, { is_active: 1 });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const filteredCategories = showInactive 
@@ -273,29 +283,193 @@ function CategorySection({ categories, onChanged }) {
   );
 }
 
+const EMPTY_RULE_FORM = { category_id: '', merchant: '', amount: '', day_of_month: '1', payment_method_id: '', payment_style: '일시불', memo: '' };
+
+function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(EMPTY_RULE_FORM);
+  const [showInactive, setShowInactive] = useState(false);
+  const { confirm, alert } = useConfirm();
+
+  const startAdd = () => { setEditingId(null); setForm(EMPTY_RULE_FORM); setShowForm(true); };
+  const startEdit = (r) => {
+    setEditingId(r.id);
+    setForm({
+      category_id: String(r.category_id), merchant: r.merchant, amount: String(r.amount),
+      day_of_month: String(r.day_of_month), payment_method_id: r.payment_method_id ? String(r.payment_method_id) : '',
+      payment_style: r.payment_style, memo: r.memo || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const body = {
+      ...form,
+      category_id: Number(form.category_id),
+      amount: Number(form.amount),
+      day_of_month: Number(form.day_of_month),
+      payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
+    };
+    try {
+      if (editingId) await api.put(`/api/recurring-rules/${editingId}`, body);
+      else await api.post('/api/recurring-rules', body);
+      setShowForm(false);
+      setEditingId(null);
+      setForm(EMPTY_RULE_FORM);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const handleDeactivate = async (id) => {
+    if (!await confirm('이 반복 규칙을 비활성화하시겠습니까? 이번 달 확인 목록에서 더 이상 나타나지 않습니다.')) return;
+    try {
+      await api.del(`/api/recurring-rules/${id}`);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const handleReActivate = async (r) => {
+    try {
+      await api.put(`/api/recurring-rules/${r.id}`, {
+        category_id: r.category_id, merchant: r.merchant, amount: r.amount, day_of_month: r.day_of_month,
+        payment_method_id: r.payment_method_id, payment_style: r.payment_style, memo: r.memo, is_active: 1,
+      });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const filteredRules = showInactive ? rules : rules.filter(r => r.is_active);
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700">반복 거래 관리</h2>
+        <div className="flex gap-2">
+          <button onClick={showForm ? () => setShowForm(false) : startAdd} className="text-xs text-indigo-600 hover:text-indigo-700">
+            {showForm ? '취소' : '+ 추가'}
+          </button>
+          <button onClick={() => setShowInactive(s => !s)} className="text-xs text-slate-500 hover:text-slate-700">
+            {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">
+        매달 금액이 완전히 고정된 지출(구독료 등)만 등록하세요. 통신비처럼 매달 금액이 달라지는 항목은 계속 직접 입력해야 합니다.
+        등록해도 자동으로 거래가 생기지 않고, 대시보드의 "이번 달 반복 거래 확인"에서 매달 확인 후 생성합니다.
+      </p>
+      {showForm && (
+        <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">카테고리</label>
+            <select className={inp} value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} required>
+              <option value="">선택...</option>
+              {categories.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">가맹점/이름</label>
+            <input type="text" className={inp} value={form.merchant} onChange={e => setForm(f => ({ ...f, merchant: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">금액</label>
+            <input type="number" className={inp} placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">매월 며칠</label>
+            <input type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">결제수단</label>
+            <select className={inp} value={form.payment_method_id} onChange={e => setForm(f => ({ ...f, payment_method_id: e.target.value }))}>
+              <option value="">선택...</option>
+              {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">결제방식</label>
+            <select className={inp} value={form.payment_style} onChange={e => setForm(f => ({ ...f, payment_style: e.target.value }))}>
+              <option value="일시불">일시불</option>
+              <option value="해당없음">해당없음</option>
+            </select>
+          </div>
+          <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+            {editingId ? '저장' : '추가'}
+          </button>
+        </form>
+      )}
+      <div className="max-h-72 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 sticky top-0">
+            <tr className="border-b border-slate-200">
+              <th className="text-left px-3 py-2 text-slate-500 font-medium">가맹점</th>
+              <th className="text-left px-3 py-2 text-slate-500 font-medium">카테고리</th>
+              <th className="text-right px-3 py-2 text-slate-500 font-medium">금액</th>
+              <th className="text-right px-3 py-2 text-slate-500 font-medium">매월</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRules.length === 0 ? (
+              <tr><td colSpan={5} className="text-center text-slate-400 text-xs py-6">등록된 반복 규칙이 없습니다.</td></tr>
+            ) : filteredRules.map(r => (
+              <tr key={r.id} className={`border-b border-slate-100 ${!r.is_active ? 'opacity-50' : ''}`}>
+                <td className="px-3 py-2 text-slate-800">{r.merchant}</td>
+                <td className="px-3 py-2 text-slate-500 text-xs">{r.category_name}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmt(r.amount)}</td>
+                <td className="px-3 py-2 text-right text-xs text-slate-500">{r.day_of_month}일</td>
+                <td className="px-3 py-2 text-right">
+                  <button onClick={() => startEdit(r)} className="text-indigo-600 hover:text-indigo-700 text-xs mr-2">수정</button>
+                  {r.is_active ? (
+                    <button onClick={() => handleDeactivate(r.id)} className="text-slate-400 hover:text-rose-600 text-xs">비활성화</button>
+                  ) : (
+                    <button onClick={() => handleReActivate(r)} className="text-slate-400 hover:text-emerald-600 text-xs">재활성화</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function PaymentMethodSection({ paymentMethods, onChanged }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', type: '신용' });
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const { confirm, alert } = useConfirm();
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    await fetch('/api/payment-methods', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    setForm({ name: '', type: '신용' });
-    setShowForm(false);
-    onChanged();
+    try {
+      await api.post('/api/payment-methods', form);
+      setForm({ name: '', type: '신용' });
+      setShowForm(false);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleDeactivate = async (id) => {
-    if (!confirm('비활성화하시겠습니까?')) return;
-    await fetch(`/api/payment-methods/${id}`, { method: 'DELETE' });
-    onChanged();
+    if (!await confirm('비활성화하시겠습니까?')) return;
+    try {
+      await api.del(`/api/payment-methods/${id}`);
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleEditStart = (pm) => {
@@ -309,24 +483,24 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
   };
 
   const handleEditSave = async (pm) => {
-    await fetch(`/api/payment-methods/${pm.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...pm, ...editForm }),
-    });
-    setEditing(null);
-    setEditForm({});
-    onChanged();
+    try {
+      await api.put(`/api/payment-methods/${pm.id}`, { ...pm, ...editForm });
+      setEditing(null);
+      setEditForm({});
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const handleReActivate = async (id) => {
-    if (!confirm('재활성화하시겠습니까?')) return;
-    await fetch(`/api/payment-methods/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: 1 }),
-    });
-    onChanged();
+    if (!await confirm('재활성화하시겠습니까?')) return;
+    try {
+      await api.put(`/api/payment-methods/${id}`, { is_active: 1 });
+      onChanged();
+    } catch (err) {
+      await alert(err.message);
+    }
   };
 
   const filteredPaymentMethods = showInactive 
@@ -452,12 +626,7 @@ function SettingsBackupSection() {
     try {
       const text = await file.text();
       const payload = JSON.parse(text);
-      const res = await fetch('/api/export/settings/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const data = await api.post('/api/export/settings/restore', payload);
       if (data.ok) { setMsg('설정이 복원되었습니다.'); setTimeout(() => window.location.reload(), 1000); }
       else setMsg('복원 실패: ' + data.error);
     } catch (err) {
@@ -485,7 +654,8 @@ function SettingsBackupSection() {
 function TransactionsBackupSection() {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState('');
-  
+  const { confirm } = useConfirm();
+
   const handleExport = () => {
     window.location.href = '/api/data/export';
   };
@@ -521,21 +691,16 @@ function TransactionsBackupSection() {
     if (!preview) return;
     
     // For overwrite, confirm with user
-    if (mode === 'overwrite' && !window.confirm('기존 거래내역이 모두 삭제됩니다. 계속하시겠습니까?')) {
+    if (mode === 'overwrite' && !await confirm('기존 거래내역이 모두 삭제됩니다. 계속하시겠습니까?', { tone: 'danger' })) {
       return;
     }
-    
+
     try {
       const body = { mode, transactions: preview.all };
       // overwrite는 서버가 명시적 확인 토큰을 요구한다(파괴적 동작 방어)
       if (mode === 'overwrite') body.confirm = 'DELETE_ALL';
-      const res = await fetch('/api/data/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      
+      const data = await api.post('/api/data/import', body);
+
       if (data.ok) {
         setMessage(`${data.imported}건 저장됨 (${data.skipped}건 스킵)`);
         setTimeout(() => {
@@ -626,9 +791,7 @@ function CardImportSection() {
     try {
       const fd = new FormData();
       selected.forEach((f) => fd.append('files', f));
-      const res = await fetch('/api/card-import?preview=true', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      const data = await api.raw('/api/card-import?preview=true', { method: 'POST', body: fd });
       setPreview(data);
     } catch (err) {
       setMessage('오류: ' + err.message);
@@ -645,9 +808,7 @@ function CardImportSection() {
     try {
       const fd = new FormData();
       files.forEach((f) => fd.append('files', f));
-      const res = await fetch('/api/card-import', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '알 수 없는 오류');
+      const data = await api.raw('/api/card-import', { method: 'POST', body: fd });
       const t = data.totals || {};
       let msg = `${(t.imported || 0).toLocaleString('ko-KR')}건 임포트 완료 (중복 스킵 ${(t.skipped || 0).toLocaleString('ko-KR')}건`;
       if (t.failed) msg += `, 실패 파일 ${t.failed}개`;
@@ -708,26 +869,115 @@ function CardImportSection() {
   );
 }
 
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file, 'utf-8');
+  });
+}
+
+function CsvImportSection() {
+  const [csvText, setCsvText] = useState(null);
+  const [fileName, setFileName] = useState('');
+  const [preview, setPreview] = useState(null); // { count, skipped, invalid }
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPreview(null);
+    setMessage('');
+    setLoading(true);
+    try {
+      const text = await readFileAsText(file);
+      setCsvText(text);
+      setFileName(file.name);
+      const data = await api.post('/api/csv-import?preview=true', { cardCompany: 'shinhan', csvText: text });
+      setPreview(data);
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleImport = async () => {
+    if (!csvText) return;
+    setLoading(true);
+    setMessage('');
+    try {
+      const data = await api.post('/api/csv-import', { cardCompany: 'shinhan', csvText });
+      let msg = `${(data.imported || 0).toLocaleString('ko-KR')}건 임포트 완료 (중복 스킵 ${(data.skipped || 0).toLocaleString('ko-KR')}건`;
+      if (data.invalid) msg += `, 형식 오류 ${data.invalid}건 제외`;
+      msg += ')';
+      setMessage(msg);
+      setPreview(null);
+      setCsvText(null);
+      setFileName('');
+    } catch (err) {
+      setMessage('오류: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-slate-700">신한카드 CSV 임포트</h2>
+      <p className="text-xs text-slate-500">
+        신한카드는 엑셀 내보내기를 지원하지 않아 CSV 파일로 업로드합니다. 실제 내보내기 파일로 컬럼 구성이 검증되지 않았으니, 미리보기에서 건수를 확인한 뒤 임포트하세요.
+      </p>
+      <div className="flex flex-wrap gap-3 items-center">
+        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+          파일 선택
+          <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={loading} />
+        </label>
+        {loading && <span className="text-xs text-slate-400">처리 중…</span>}
+        {message && <span className="text-xs text-slate-500">{message}</span>}
+      </div>
+      {preview && (
+        <div className="mt-2 space-y-3">
+          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-1">
+            <div className="font-medium text-slate-700 break-all">{fileName}</div>
+            <div className="text-slate-600">
+              신규 {(preview.count || 0).toLocaleString('ko-KR')}건 · 중복 {(preview.skipped || 0).toLocaleString('ko-KR')}건
+              {preview.invalid ? ` · 형식 오류(제외) ${preview.invalid}건` : ''}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleImport} disabled={loading || (preview.count || 0) === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+              신규 {(preview.count || 0).toLocaleString('ko-KR')}건 임포트
+            </button>
+            <button onClick={() => { setPreview(null); setCsvText(null); setFileName(''); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DANGER_CONFIRM_TEXT = '전체삭제';
 
 function DangerZoneSection() {
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState('');
+  const { confirm } = useConfirm();
 
   const handleDeleteAll = async () => {
     if (confirmText !== DANGER_CONFIRM_TEXT) return;
-    if (!window.confirm('정말로 모든 거래내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+    if (!await confirm('정말로 모든 거래내역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.', { tone: 'danger', confirmLabel: '전체 삭제' })) return;
 
     setDeleting(true);
     setMessage('');
     try {
-      const res = await fetch('/api/transactions', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true }),
-      });
-      const data = await res.json();
+      const data = await api.del('/api/transactions', { all: true });
       if (data.ok) {
         setMessage(`${data.deleted}건이 삭제되었습니다.`);
         setConfirmText('');

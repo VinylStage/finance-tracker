@@ -8,13 +8,14 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "build": "cd client && npm run build"
+    "build": "cd client && npm run build",
+    "test": "node --test"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.0",
     "express": "^5.2.1",
     "multer": "^2.2.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "file:vendor/xlsx-0.20.3.tgz"
   },
   "allowScripts": {
     "better-sqlite3@13.0.1": true

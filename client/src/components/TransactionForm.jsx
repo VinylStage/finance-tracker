@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
 
+// 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
+// 프런트(ESM/Vite)와 빌드 도구가 분리되어 있어 값을 공유하지 못하므로 수동 동기화 필요(#90).
 const PAYMENT_STYLES = ['일시불', '할부', '리볼빙', '해당없음'];
 
 const CONFIDENCE_STYLE = {
@@ -9,7 +13,7 @@ const CONFIDENCE_STYLE = {
 };
 
 export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localYMD();
   const [form, setForm] = useState({
     date: today,
     category_id: '',
@@ -33,10 +37,9 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
   const [recentMerchants, setRecentMerchants] = useState([]);
 
   useEffect(() => {
-    fetch('/api/transactions/suggest/merchants?limit=10')
-      .then(r => r.json())
+    api.get('/api/transactions/suggest/merchants?limit=10')
       .then(d => setRecentMerchants(d.data || []))
-      .catch(() => {});
+      .catch(() => {}); // 최근 가맹점 제안은 보조 기능이라 실패해도 무시
   }, []);
 
   const majorTypes = [...new Set(categories.map(c => c.major_type))];
@@ -52,10 +55,13 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
     if (!form.merchant || form.category_id) return;
     setSuggesting(true);
     try {
-      const r = await fetch(`/api/transactions/suggest/category?merchant=${encodeURIComponent(form.merchant)}`);
-      const { category_id, confidence: conf } = await r.json();
+      const { category_id, confidence: conf } = await api.get(
+        `/api/transactions/suggest/category?merchant=${encodeURIComponent(form.merchant)}`
+      );
       setConfidence(conf);
       if (category_id) set('category_id', String(category_id));
+    } catch {
+      // 카테고리 자동 제안 실패는 입력 흐름을 막지 않도록 조용히 무시한다
     } finally {
       setSuggesting(false);
     }

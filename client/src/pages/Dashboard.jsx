@@ -1,9 +1,13 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   AreaChart, Area, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
+import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
+import { useLoader } from '../hooks/useLoader';
+import LoadError from '../components/LoadError';
 
 const PALETTE = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
 const PERIODS = ['일', '주', '월', '연'];
@@ -27,7 +31,7 @@ function monthRange(offset) {
   const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
   const isCurrent = offset === 0;
   const to = isCurrent
-    ? today.toISOString().slice(0, 10)
+    ? localYMD(today)
     : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(lastDay)}`;
   return { from, to };
 }
@@ -38,7 +42,6 @@ function CategoryComparison() {
   const [customTo, setCustomTo] = useState('');
   const [chartType, setChartType] = useState('bar');
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   const range = useMemo(() => {
     if (periodMode === 'this') return monthRange(0);
@@ -46,13 +49,10 @@ function CategoryComparison() {
     return { from: customFrom, to: customTo };
   }, [periodMode, customFrom, customTo]);
 
-  useEffect(() => {
-    if (!range.from || !range.to) { setRows([]); setLoading(false); return; }
-    setLoading(true);
-    fetch(`/api/transactions/summary/category-breakdown?from=${range.from}&to=${range.to}`)
-      .then(r => r.json())
-      .then(d => { setRows(d.data || []); setLoading(false); })
-      .catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    if (!range.from || !range.to) { setRows([]); return; }
+    const d = await api.get(`/api/transactions/summary/category-breakdown?from=${range.from}&to=${range.to}`);
+    setRows(d.data || []);
   }, [range]);
 
   return (
@@ -98,6 +98,8 @@ function CategoryComparison() {
       )}
       {loading ? (
         <div className="text-slate-400 text-sm text-center py-10">로딩 중...</div>
+      ) : error ? (
+        <LoadError error={error} onRetry={reload} />
       ) : rows.length === 0 ? (
         <div className="text-slate-400 text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
       ) : (
@@ -134,6 +136,70 @@ function StatCard({ label, value, sub, color = 'text-slate-800' }) {
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
       {sub && <p className="text-slate-500 text-xs mt-1">{sub}</p>}
     </div>
+  );
+}
+
+function RecurringDueSection({ onConfirmed }) {
+  const [due, setDue] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+
+  const { loading, reload } = useLoader(async () => {
+    const d = await api.get('/api/recurring-rules/due');
+    setDue(d.data || []);
+  }, []);
+
+  if (loading || due.length === 0) return null;
+
+  const handleConfirm = async (id) => {
+    setBusyId(id);
+    try {
+      await api.post(`/api/recurring-rules/${id}/confirm`, {});
+      await Promise.all([reload(), onConfirmed()]);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleSkip = async (id) => {
+    setBusyId(id);
+    try {
+      await api.post(`/api/recurring-rules/${id}/skip`, {});
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Section title="이번 달 반복 거래 확인" caption={`${due.length}건`}>
+      <div className="space-y-2">
+        {due.map(r => (
+          <div key={r.id} className="flex items-center justify-between gap-3 text-sm py-1.5">
+            <div className="min-w-0">
+              <span className="text-slate-800">{r.merchant}</span>
+              <span className="text-slate-400 text-xs ml-2">{r.category_name} · 매월 {r.day_of_month}일</span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="font-medium tabular-nums text-slate-700">{fmt(r.amount)}</span>
+              <button
+                onClick={() => handleConfirm(r.id)}
+                disabled={busyId === r.id}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                생성
+              </button>
+              <button
+                onClick={() => handleSkip(r.id)}
+                disabled={busyId === r.id}
+                className="text-slate-400 hover:text-slate-700 text-xs px-2 py-1.5"
+              >
+                건너뛰기
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
   );
 }
 
@@ -178,18 +244,15 @@ function periodConfig(period, data) {
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [totalDebt, setTotalDebt] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('월');
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/transactions/summary/dashboard').then(r => r.json()),
-      fetch('/api/debts').then(r => r.json()),
-    ]).then(([d, debts]) => {
-      setData(d);
-      setTotalDebt(debts.total_balance || 0);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const { loading, error, reload } = useLoader(async () => {
+    const [d, debts] = await Promise.all([
+      api.get('/api/transactions/summary/dashboard'),
+      api.get('/api/debts'),
+    ]);
+    setData(d);
+    setTotalDebt(debts.total_balance || 0);
   }, []);
 
   const netWorthTrend = useMemo(() => {
@@ -219,6 +282,7 @@ export default function Dashboard() {
   }, [data]);
 
   if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
+  if (error) return <LoadError error={error} onRetry={reload} />;
   if (!data) return <div className="text-rose-600 text-center py-20">데이터를 불러올 수 없습니다.</div>;
 
   const { rows: flowRows, xKey: flowXKey, tick: flowTick } = periodConfig(period, data);
@@ -240,6 +304,8 @@ export default function Dashboard() {
           color={data.available >= 0 ? 'text-indigo-600' : 'text-rose-600'}
         />
       </div>
+
+      <RecurringDueSection onConfirmed={reload} />
 
       {/* 지출 분석 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

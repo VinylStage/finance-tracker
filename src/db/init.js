@@ -6,7 +6,8 @@ const fs = require('fs');
 const DATA_DIR = path.join(__dirname, '../../data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const DB_PATH = path.join(DATA_DIR, 'finance.db');
+// 테스트에서 격리된 임시 DB를 쓸 수 있도록 오버라이드 허용(기본 동작은 그대로).
+const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'finance.db');
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
@@ -119,21 +120,9 @@ db.exec(`
   );
 `);
 
-// --- migrations: additive column changes on pre-existing tables ---
-const debtsColumns = db.prepare(`PRAGMA table_info(debts)`).all().map(c => c.name);
-if (!debtsColumns.includes('type')) {
-  db.exec(`ALTER TABLE debts ADD COLUMN type TEXT DEFAULT '일반'`);
-}
-
-const savingsColumns = db.prepare(`PRAGMA table_info(savings_products)`).all().map(c => c.name);
-if (!savingsColumns.includes('category_id')) {
-  db.exec(`ALTER TABLE savings_products ADD COLUMN category_id INTEGER REFERENCES categories(id)`);
-}
-
-const transactionsColumns = db.prepare(`PRAGMA table_info(transactions)`).all().map(c => c.name);
-if (!transactionsColumns.includes('approval_number')) {
-  db.exec(`ALTER TABLE transactions ADD COLUMN approval_number TEXT`);
-}
+// --- migrations: 기본 스키마(위 CREATE TABLE) 이후의 추가 변경은 migrations/ 로 관리한다(#89) ---
+const { runMigrations } = require('./migrate');
+runMigrations(db);
 
 // --- initial seed: 최초 실행(빈 DB)에서만 범용 카테고리/결제수단 생성 ---
 const categoryCount = db.prepare(`SELECT COUNT(*) AS c FROM categories`).get().c;
