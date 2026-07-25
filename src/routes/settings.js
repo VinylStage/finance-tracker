@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 const DEFAULTS = { initial_balance: '0', monthly_income: '0' };
 
@@ -47,7 +48,7 @@ router.put('/', (req, res) => {
     tx();
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'settings');
   }
 });
 

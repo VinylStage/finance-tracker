@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 function monthsBetween(startDate, endDate) {
   const s = new Date(startDate);
@@ -20,7 +21,7 @@ router.get('/', (req, res) => {
     `).all();
     res.json({ data });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'savings');
   }
 });
 
@@ -37,7 +38,7 @@ router.post('/', (req, res) => {
     `).run(name, monthly_contribution, start_date, maturity_date || null, expected_payout || null, category_id || null);
     res.status(201).json({ id: result.lastInsertRowid, ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'savings');
   }
 });
 
@@ -57,7 +58,7 @@ router.put('/:id', (req, res) => {
     );
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'savings');
   }
 });
 
@@ -101,7 +102,7 @@ router.post('/:id/mature', (req, res) => {
 
     res.json({ ok: true, principal, interest, payout });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'savings');
   }
 });
 

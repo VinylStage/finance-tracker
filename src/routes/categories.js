@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
+const { serverError } = require('../utils/errors');
 
 router.get('/', (req, res) => {
   const includeInactive = req.query.include_inactive;
@@ -26,7 +27,7 @@ router.post('/', (req, res) => {
     ).run(major_type, name, monthly_budget);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'categories');
   }
 });
 
