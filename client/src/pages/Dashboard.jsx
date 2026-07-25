@@ -5,6 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { api } from '../lib/api';
+import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
 
@@ -30,7 +31,7 @@ function monthRange(offset) {
   const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
   const isCurrent = offset === 0;
   const to = isCurrent
-    ? today.toISOString().slice(0, 10)
+    ? localYMD(today)
     : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(lastDay)}`;
   return { from, to };
 }
