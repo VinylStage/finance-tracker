@@ -9,7 +9,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "build": "cd client && npm run build",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.0",
