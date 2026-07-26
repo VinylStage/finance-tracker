@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { pad2 } = require('../utils/date');
+const { installmentsDueForMonth } = require('../utils/aggregation');
 
 const MONTHS_ELAPSED = `
   (CAST(strftime('%Y','now') AS INT) - CAST(strftime('%Y', i.start_billing_month || '-01') AS INT)) * 12
@@ -29,12 +31,11 @@ router.get('/', (req, res) => {
     const data = db.prepare(sql).all(...params);
 
     const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const this_month_total = db.prepare(`
-      SELECT COALESCE(SUM(monthly_amount), 0) AS total
-      FROM installments
-      WHERE status = '진행중' AND start_billing_month <= ?
-    `).get(thisMonth).total;
+    const thisMonth = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    // FND-05(감사): 여기서 청구 기간 종료를 반영하지 않던 별도 쿼리를 쓰고 있었다.
+    // 대시보드(/api/transactions/summary/dashboard)의 installmentsDue와 항상
+    // 같은 값을 내도록 동일 함수를 공유한다.
+    const this_month_total = installmentsDueForMonth(thisMonth);
 
     res.json({ data, this_month_total });
   } catch (e) {

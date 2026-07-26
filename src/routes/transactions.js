@@ -5,6 +5,8 @@ const db = require('../db/init');
 const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { PAYMENT_STYLES } = require('../constants');
+const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD } = require('../utils/date');
+const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth } = require('../utils/aggregation');
 
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
 router.get('/', (req, res) => {
@@ -47,13 +49,12 @@ const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
 
 function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); } // month: 1-indexed
 function fmtYMD(y, m, d) { return `${y}-${pad2(m)}-${pad2(d)}`; }
-function fmtDateObj(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
 
 function rangeTotalsByDate(from, to) {
   const rows = db.prepare(`
     SELECT t.date AS date,
-      COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-      COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+      COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
     FROM transactions t
     JOIN categories c ON t.category_id = c.id
     WHERE t.date >= ? AND t.date <= ?
@@ -65,8 +66,8 @@ function rangeTotalsByDate(from, to) {
 function totalsForRange(from, to) {
   return db.prepare(`
     SELECT
-      COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-      COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+      COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
     FROM transactions t
     JOIN categories c ON t.category_id = c.id
     WHERE t.date >= ? AND t.date <= ?
@@ -124,15 +125,15 @@ function periodComparisonWeekly(anchor) {
   const curSunday = new Date(curMonday); curSunday.setDate(curMonday.getDate() + 6);
   const prevSunday = new Date(prevMonday); prevSunday.setDate(prevMonday.getDate() + 6);
 
-  const curFrom = fmtDateObj(curMonday), curTo = fmtDateObj(curSunday);
-  const prevFrom = fmtDateObj(prevMonday), prevTo = fmtDateObj(prevSunday);
+  const curFrom = localYMD(curMonday), curTo = localYMD(curSunday);
+  const prevFrom = localYMD(prevMonday), prevTo = localYMD(prevSunday);
   const curMap = rangeTotalsByDate(curFrom, curTo);
   const prevMap = rangeTotalsByDate(prevFrom, prevTo);
 
   const data = WEEKDAY_LABELS.map((label, i) => {
     const cDate = new Date(curMonday); cDate.setDate(curMonday.getDate() + i);
     const pDate = new Date(prevMonday); pDate.setDate(prevMonday.getDate() + i);
-    const cKey = fmtDateObj(cDate), pKey = fmtDateObj(pDate);
+    const cKey = localYMD(cDate), pKey = localYMD(pDate);
     const c = curMap.get(cKey) || { income: 0, expense: 0 };
     const p = prevMap.get(pKey) || { income: 0, expense: 0 };
     return {
@@ -157,8 +158,8 @@ function periodComparisonMonthly(anchor) {
   const monthRowsFor = (year) => {
     const rows = db.prepare(`
       SELECT strftime('%m', t.date) AS m,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       WHERE strftime('%Y', t.date) = ?
@@ -195,8 +196,8 @@ function periodComparisonYearly(anchor) {
     const from = `${years[0]}-01-01`, to = `${years[4]}-12-31`;
     const rows = db.prepare(`
       SELECT strftime('%Y', t.date) AS yr,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       WHERE t.date >= ? AND t.date <= ?
@@ -245,7 +246,7 @@ router.get('/period-comparison', (req, res) => {
 
     res.json({
       period,
-      anchorDate: fmtDateObj(anchor),
+      anchorDate: localYMD(anchor),
       currentLabel: result.currentLabel,
       previousLabel: result.previousLabel,
       data: result.data,
@@ -356,51 +357,6 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-function pad2(n) { return String(n).padStart(2, '0'); }
-
-function lastNDates(n) {
-  const arr = [];
-  const today = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    arr.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`);
-  }
-  return arr;
-}
-
-function mondayOf(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return d;
-}
-
-function lastNWeeks(n) {
-  const weeks = [];
-  const thisMonday = mondayOf(new Date());
-  for (let i = n - 1; i >= 0; i--) {
-    const start = new Date(thisMonday);
-    start.setDate(thisMonday.getDate() - i * 7);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    const fmtDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-    weeks.push({ week: fmtDate(start), start: fmtDate(start), end: fmtDate(end) });
-  }
-  return weeks;
-}
-
-function lastNMonths(n) {
-  const arr = [];
-  const today = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    arr.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
-  }
-  return arr;
-}
-
 // GET /api/transactions/summary/dashboard — 대시보드 집계
 router.get('/summary/dashboard', (req, res) => {
   try {
@@ -422,14 +378,9 @@ router.get('/summary/dashboard', (req, res) => {
       AND t.payment_style NOT IN ('할부','리볼빙')
     `).get(thisMonth).total;
 
-    // 청구 기간(start_billing_month 부터 months 개월)이 이번 달을 포함하는 건만 합산한다
-    const installmentsDue = db.prepare(`
-      SELECT COALESCE(SUM(monthly_amount),0) AS total
-      FROM installments
-      WHERE status = '진행중'
-        AND start_billing_month <= ?
-        AND ? < strftime('%Y-%m', date(start_billing_month || '-01', '+' || months || ' months'))
-    `).get(thisMonth, thisMonth).total;
+    // FND-05(감사): 이 정확한 버전을 /api/installments가 별도로 재구현하며
+    // 청구 기간 종료를 놓쳐 서로 다른 값을 반환했다. 공유 함수로 통일.
+    const installmentsDue = installmentsDueForMonth(thisMonth);
 
     const revolvingPaid = db.prepare(`
       SELECT COALESCE(SUM(paid_amount), 0) AS total
@@ -461,8 +412,8 @@ router.get('/summary/dashboard', (req, res) => {
     // 최근 30일 일별 수입/지출
     const dailyRows = db.prepare(`
       SELECT t.date AS date,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       WHERE t.date >= date('now', '-29 days')
@@ -481,18 +432,18 @@ router.get('/summary/dashboard', (req, res) => {
     const weeklyTrend = weeks.map(w => {
       let income = 0, expense = 0;
       for (let d = new Date(w.start), end = new Date(w.end); d <= end; d.setDate(d.getDate() + 1)) {
-        const r = weekDayMap.get(fmtDateObj(d));
+        const r = weekDayMap.get(localYMD(d));
         if (r) { income += r.income; expense += r.expense; }
       }
-      return { week: w.week, income, expense };
+      return { week: w.label, income, expense };
     });
 
     // 최근 12개월 월별 수입/지출 — 범위 전체를 월별 GROUP BY 로 한 번 조회(N+1 제거)
     const months = lastNMonths(12);
     const monthRows = db.prepare(`
       SELECT strftime('%Y-%m', t.date) AS ym,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       WHERE strftime('%Y-%m', t.date) >= ? AND strftime('%Y-%m', t.date) <= ?
