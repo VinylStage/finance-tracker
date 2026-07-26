@@ -8,20 +8,47 @@ const { PAYMENT_STYLES } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD } = require('../utils/date');
 const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth } = require('../utils/aggregation');
 
-// GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
+// FND-02(감사): 화면(client/Transactions.jsx)이 최대 5000건을 요청했지만
+// 서버가 500건으로 잘라(응답의 total은 정확했지만 화면이 안 씀) 검색/월별합계/
+// 연도탭이 최신 500건 범위 안에서만 동작했다. 근본 해결은 검색·집계를 서버
+// 파라미터로 전부 넘기는 것 — 이 함수가 그 필터를 목록/월별요약 두 라우트가
+// 공유하는 단일 WHERE 절로 만든다(중복 방지).
+function buildTransactionFilters(query) {
+  const { from, to, category_id, merchant, memo, min_amount, max_amount, payment_method_id } = query;
+  let where = ' WHERE 1=1';
+  const params = [];
+  if (from) { where += ' AND t.date >= ?'; params.push(from); }
+  if (to)   { where += ' AND t.date <= ?'; params.push(to); }
+  if (category_id) {
+    const ids = String(category_id).split(',').map(s => asInt(s.trim())).filter(v => v !== null);
+    if (ids.length) { where += ` AND t.category_id IN (${ids.map(() => '?').join(',')})`; params.push(...ids); }
+  }
+  if (merchant) { where += ` AND t.merchant LIKE ? ESCAPE '\\'`; params.push(`%${escapeLike(merchant)}%`); }
+  if (memo) { where += ` AND t.memo LIKE ? ESCAPE '\\'`; params.push(`%${escapeLike(memo)}%`); }
+  if (min_amount !== undefined && min_amount !== '') {
+    const v = asInt(min_amount);
+    if (v !== null) { where += ' AND t.amount >= ?'; params.push(v); }
+  }
+  if (max_amount !== undefined && max_amount !== '') {
+    const v = asInt(max_amount);
+    if (v !== null) { where += ' AND t.amount <= ?'; params.push(v); }
+  }
+  if (payment_method_id) {
+    const v = asInt(payment_method_id);
+    if (v !== null) { where += ' AND t.payment_method_id = ?'; params.push(v); }
+  }
+  return { where, params };
+}
+
+// GET /api/transactions?limit=50&offset=0&from=&to=&category_id=&merchant=&memo=&min_amount=&max_amount=&payment_method_id=
 router.get('/', (req, res) => {
   try {
-    const { from, to, category_id } = req.query;
     // limit/offset 은 정수로 강제하고 범위를 제한한다(잘못된 값으로 인한 500·과도한 조회 방지)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
 
     // WHERE 절을 목록 쿼리와 카운트 쿼리가 공유한다(total 이 필터를 반영하도록)
-    let where = ' WHERE 1=1';
-    const whereParams = [];
-    if (from) { where += ' AND t.date >= ?'; whereParams.push(from); }
-    if (to)   { where += ' AND t.date <= ?'; whereParams.push(to); }
-    if (category_id) { where += ' AND t.category_id = ?'; whereParams.push(category_id); }
+    const { where, params: whereParams } = buildTransactionFilters(req.query);
 
     const rows = db.prepare(`
       SELECT t.*, c.name AS category_name, c.major_type,
@@ -274,6 +301,50 @@ router.delete('/', (req, res) => {
       return res.json({ ok: true, deleted });
     }
     return res.status(400).json({ error: 'ids (non-empty array) or all=true required' });
+  } catch (e) {
+    serverError(res, e, 'transactions');
+  }
+});
+
+// GET /api/transactions/years — 거래가 존재하는 연도 목록(내림차순)
+// FND-02(감사): 화면의 연도 탭이 (500건 클램프로 잘린) 인메모리 목록에서
+// 파생됐다. 실제 존재하는 연도를 서버가 직접 계산해 내려준다.
+// 등록 순서 중요: 아래 /:id 라우트보다 반드시 앞에 있어야 함(동일 세그먼트 매칭 충돌)
+router.get('/years', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT DISTINCT strftime('%Y', date) AS year FROM transactions ORDER BY year DESC
+    `).all();
+    res.json({ data: rows.map(r => r.year) });
+  } catch (e) {
+    serverError(res, e, 'transactions');
+  }
+});
+
+// GET /api/transactions/summary/by-month?year=YYYY&merchant=&memo=&min_amount=&max_amount=&payment_method_id=&category_id=
+// FND-02(감사): 월별 수입/지출 합계·건수를 (500건 클램프로 잘린) 인메모리
+// 목록에서 계산했다. 서버가 GROUP BY로 직접 계산해, 필터가 걸려도 화면에
+// 보이는 합계가 항상 전체 데이터 기준이 되도록 한다.
+// 등록 순서 무관(세그먼트 2개라 /:id 와 충돌 없음) — 가독성상 /:id 근처에 둔다.
+router.get('/summary/by-month', (req, res) => {
+  try {
+    const { year } = req.query;
+    if (!year || !/^\d{4}$/.test(year)) return res.status(400).json({ error: 'year (YYYY) required' });
+    const { where, params } = buildTransactionFilters({
+      ...req.query, from: `${year}-01-01`, to: `${year}-12-31`,
+    });
+    const rows = db.prepare(`
+      SELECT strftime('%Y-%m', t.date) AS month,
+        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense,
+        COUNT(*) AS count
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      ${where}
+      GROUP BY month
+      ORDER BY month DESC
+    `).all(...params);
+    res.json({ data: rows });
   } catch (e) {
     serverError(res, e, 'transactions');
   }
