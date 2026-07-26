@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
-const { localYearMonth } = require('../utils/date');
+const { localYearMonth, localYMD } = require('../utils/date');
 const { installmentsDueForMonth } = require('../utils/aggregation');
 
 // FND-20(감사): 여기서 쓰던 strftime(...,'now')는 UTC라서 KST 자정~9시 사이엔
@@ -15,9 +15,24 @@ const MONTHS_ELAPSED = `
   + 1
 `;
 
+// #121(감사 파생): status='진행중'을 사람이 수동으로 '완료'로 바꿔야 했다.
+// 이 앱엔 배치/스케줄러가 없으므로, remaining_months를 매 조회마다 동적으로
+// 계산하는 이 라우트의 기존 방식과 일관되게 조회 시점에 자가교정한다 —
+// 청구 기간이 끝난 '진행중' 행을 GET 때마다 '완료'로 갱신.
+function completeExpiredInstallments() {
+  const today = localYMD();
+  db.prepare(`
+    UPDATE installments
+    SET status = '완료'
+    WHERE status = '진행중'
+      AND ? >= strftime('%Y-%m-%d', date(start_billing_month || '-01', '+' || months || ' months'))
+  `).run(today);
+}
+
 // GET /api/installments?status=진행중
 router.get('/', (req, res) => {
   try {
+    completeExpiredInstallments();
     const { status } = req.query;
     const [curYear, curMonth] = localYearMonth();
     let sql = `

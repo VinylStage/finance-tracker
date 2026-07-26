@@ -87,3 +87,27 @@ test('FND-20: remaining_months/billed_months가 bind 파라미터 방식으로 �
   assert.strictEqual(threeMonthsAgoRow.billed_months, 4);
   assert.strictEqual(threeMonthsAgoRow.remaining_months, 2);
 });
+
+test('#121: 청구 기간이 끝난 진행중 할부는 GET 시점에 자동으로 완료 처리됨', async () => {
+  // 2년 전에 시작해서 3개월짜리라 이미 한참 끝났어야 하는 할부
+  const createResp = await fetch(`${BASE}/api/installments`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      purchase_date: '2024-01-01', merchant: '오래전종료된할부',
+      total_amount: 300000, months: 3, monthly_amount: 100000,
+      start_billing_month: '2024-01',
+    }),
+  });
+  assert.strictEqual(createResp.status, 201);
+  const { id } = await createResp.json();
+
+  // GET 핸들러가 응답을 만들기 전에 매번 자가교정하므로, 최초 GET 호출만으로도
+  // 이미 완료 처리돼 있어야 한다.
+  const afterList = await (await fetch(`${BASE}/api/installments`)).json();
+  const updated = afterList.data.find(i => i.id === id);
+  assert.strictEqual(updated.status, '완료', '청구 기간이 끝난 진행중 할부는 자동으로 완료 처리돼야 함');
+
+  // status=진행중 필터에는 더 이상 나타나지 않아야 함
+  const stillActiveList = await (await fetch(`${BASE}/api/installments?status=진행중`)).json();
+  assert.ok(!stillActiveList.data.some(i => i.id === id), '완료 처리된 할부는 진행중 필터에서 빠져야 함');
+});
