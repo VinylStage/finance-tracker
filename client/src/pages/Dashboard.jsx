@@ -66,20 +66,20 @@ function CategoryComparison() {
                 key={mode}
                 onClick={() => setPeriodMode(mode)}
                 className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                  periodMode === mode ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                  periodMode === mode ? 'bg-accent-soft text-accent-strong font-medium' : 'text-ink-faint hover:text-ink-body hover:bg-surface-muted'
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <div className="flex gap-1 border-l border-slate-200 pl-3">
+          <div className="flex gap-1 border-l border-line pl-3">
             {[['bar', '막대'], ['line', '라인']].map(([type, label]) => (
               <button
                 key={type}
                 onClick={() => setChartType(type)}
                 className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                  chartType === type ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                  chartType === type ? 'bg-accent-soft text-accent-strong font-medium' : 'text-ink-faint hover:text-ink-body hover:bg-surface-muted'
                 }`}
               >
                 {label}
@@ -91,17 +91,17 @@ function CategoryComparison() {
     >
       {periodMode === 'custom' && (
         <div className="flex items-center gap-2 mb-4 text-xs">
-          <input type="date" aria-label="기간 시작일" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
-          <span className="text-slate-400">~</span>
-          <input type="date" aria-label="기간 종료일" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customTo} onChange={e => setCustomTo(e.target.value)} />
+          <input type="date" aria-label="기간 시작일" className="bg-surface border border-line-strong rounded-lg px-2 py-1 text-ink-body" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
+          <span className="text-ink-faint">~</span>
+          <input type="date" aria-label="기간 종료일" className="bg-surface border border-line-strong rounded-lg px-2 py-1 text-ink-body" value={customTo} onChange={e => setCustomTo(e.target.value)} />
         </div>
       )}
       {loading ? (
-        <div className="text-slate-400 text-sm text-center py-10">로딩 중...</div>
+        <div className="text-ink-faint text-sm text-center py-10">로딩 중...</div>
       ) : error ? (
         <LoadError error={error} onRetry={reload} />
       ) : rows.length === 0 ? (
-        <div className="text-slate-400 text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
+        <div className="text-ink-faint text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           {chartType === 'bar' ? (
@@ -129,12 +129,12 @@ function CategoryComparison() {
   );
 }
 
-function StatCard({ label, value, sub, color = 'text-slate-800' }) {
+function StatCard({ label, value, sub, color = 'text-ink' }) {
   return (
-    <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-      <p className="text-slate-500 text-sm mb-1">{label}</p>
+    <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+      <p className="text-ink-subtle text-sm mb-1">{label}</p>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-slate-500 text-xs mt-1">{sub}</p>}
+      {sub && <p className="text-ink-subtle text-xs mt-1">{sub}</p>}
     </div>
   );
 }
@@ -176,22 +176,22 @@ function RecurringDueSection({ onConfirmed }) {
         {due.map(r => (
           <div key={r.id} className="flex items-center justify-between gap-3 text-sm py-1.5">
             <div className="min-w-0">
-              <span className="text-slate-800">{r.merchant}</span>
-              <span className="text-slate-400 text-xs ml-2">{r.category_name} · 매월 {r.day_of_month}일</span>
+              <span className="text-ink">{r.merchant}</span>
+              <span className="text-ink-faint text-xs ml-2">{r.category_name} · 매월 {r.day_of_month}일</span>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="font-medium tabular-nums text-slate-700">{fmt(r.amount)}</span>
+              <span className="font-medium tabular-nums text-ink-body">{fmt(r.amount)}</span>
               <button
                 onClick={() => handleConfirm(r.id)}
                 disabled={busyId === r.id}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                className="bg-accent hover:bg-accent-strong text-white text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
               >
                 생성
               </button>
               <button
                 onClick={() => handleSkip(r.id)}
                 disabled={busyId === r.id}
-                className="text-slate-400 hover:text-slate-700 text-xs px-2 py-1.5"
+                className="text-ink-faint hover:text-ink-body text-xs px-2 py-1.5"
               >
                 건너뛰기
               </button>
@@ -205,10 +205,10 @@ function RecurringDueSection({ onConfirmed }) {
 
 function Section({ title, children, caption }) {
   return (
-    <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
+    <div className="bg-surface shadow-card rounded-card p-5 border border-line">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
-        {caption && <span className="text-xs text-slate-400">{caption}</span>}
+        <h2 className="text-sm font-semibold text-ink-body">{title}</h2>
+        {caption && <span className="text-xs text-ink-faint">{caption}</span>}
       </div>
       {children}
     </div>
@@ -281,9 +281,9 @@ export default function Dashboard() {
     };
   }, [data]);
 
-  if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
+  if (loading) return <div className="text-ink-subtle text-center py-20">로딩 중...</div>;
   if (error) return <LoadError error={error} onRetry={reload} />;
-  if (!data) return <div className="text-rose-600 text-center py-20">데이터를 불러올 수 없습니다.</div>;
+  if (!data) return <div className="text-expense text-center py-20">데이터를 불러올 수 없습니다.</div>;
 
   const { rows: flowRows, xKey: flowXKey, tick: flowTick } = periodConfig(period, data);
   const topCategories = (data.categoryBreakdown || []).slice(0, 5);
@@ -291,17 +291,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold text-slate-800">{data.thisMonth} 대시보드</h1>
+      <h1 className="text-xl font-semibold text-ink">{data.thisMonth} 대시보드</h1>
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="이번달 수입" value={fmt(data.income)} color="text-emerald-600" />
-        <StatCard label="이번달 지출" value={fmt(data.expense)} color="text-rose-600" />
+        <StatCard label="이번달 수입" value={fmt(data.income)} color="text-income" />
+        <StatCard label="이번달 지출" value={fmt(data.expense)} color="text-expense" />
         <StatCard
           label="가용 현금"
           value={fmt(data.available)}
           sub={`할부 청구 예정 ${fmt(data.installmentsDue)} 제외`}
-          color={data.available >= 0 ? 'text-indigo-600' : 'text-rose-600'}
+          color={data.available >= 0 ? 'text-accent' : 'text-expense'}
         />
       </div>
 
@@ -311,7 +311,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Section title="카테고리별 지출">
           {topCategories.length === 0 ? (
-            <div className="text-slate-400 text-sm text-center py-10">이번 달 지출 내역이 없습니다.</div>
+            <div className="text-ink-faint text-sm text-center py-10">이번 달 지출 내역이 없습니다.</div>
           ) : (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="55%" height={220}>
@@ -334,11 +334,11 @@ export default function Dashboard() {
               <div className="flex-1 space-y-1.5 text-xs">
                 {data.categoryBreakdown.slice(0, 8).map((c, i) => (
                   <div key={c.category} className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-slate-600 truncate">
+                    <span className="flex items-center gap-1.5 text-ink-muted truncate">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />
                       {c.category}
                     </span>
-                    <span className="text-slate-800 font-medium tabular-nums">{fmt(c.total)}</span>
+                    <span className="text-ink font-medium tabular-nums">{fmt(c.total)}</span>
                   </div>
                 ))}
               </div>
@@ -348,7 +348,7 @@ export default function Dashboard() {
 
         <Section title="예산 대비 실적">
           {(!data.budgets || data.budgets.length === 0) ? (
-            <div className="text-slate-400 text-sm text-center py-10">설정된 예산이 없습니다.</div>
+            <div className="text-ink-faint text-sm text-center py-10">설정된 예산이 없습니다.</div>
           ) : (
             <div className="space-y-3">
               {data.budgets.map(b => {
@@ -357,14 +357,14 @@ export default function Dashboard() {
                 return (
                   <div key={b.name}>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-500">{b.name}</span>
-                      <span className={over ? 'text-rose-600' : 'text-slate-600'}>
+                      <span className="text-ink-subtle">{b.name}</span>
+                      <span className={over ? 'text-expense' : 'text-ink-muted'}>
                         {fmt(b.spent)} / {fmt(b.monthly_budget)}
                       </span>
                     </div>
-                    <div className="h-1.5 bg-slate-100 rounded-full">
+                    <div className="h-1.5 bg-surface-sunken rounded-full">
                       <div
-                        className={`h-1.5 rounded-full ${over ? 'bg-rose-500' : 'bg-indigo-500'}`}
+                        className={`h-1.5 rounded-full ${over ? 'bg-expense-bar' : 'bg-accent-bar'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -388,7 +388,7 @@ export default function Dashboard() {
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                  period === p ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                  period === p ? 'bg-accent-soft text-accent-strong font-medium' : 'text-ink-faint hover:text-ink-body hover:bg-surface-muted'
                 }`}
               >
                 {p}
@@ -399,19 +399,19 @@ export default function Dashboard() {
       >
         {monthComparison && (
           <div className="flex flex-wrap gap-4 mb-4 text-xs">
-            <span className="text-slate-400">전월 대비</span>
-            <span className="text-slate-600">
-              수입 <span className="text-emerald-600 font-medium">{fmt(monthComparison.income.curr)}</span>
+            <span className="text-ink-faint">전월 대비</span>
+            <span className="text-ink-muted">
+              수입 <span className="text-income font-medium">{fmt(monthComparison.income.curr)}</span>
               {monthComparison.income.pct !== null && (
-                <span className={monthComparison.income.pct >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                <span className={monthComparison.income.pct >= 0 ? 'text-income' : 'text-expense'}>
                   {' '}({monthComparison.income.pct >= 0 ? '+' : ''}{monthComparison.income.pct}%)
                 </span>
               )}
             </span>
-            <span className="text-slate-600">
-              지출 <span className="text-rose-600 font-medium">{fmt(monthComparison.expense.curr)}</span>
+            <span className="text-ink-muted">
+              지출 <span className="text-expense font-medium">{fmt(monthComparison.expense.curr)}</span>
               {monthComparison.expense.pct !== null && (
-                <span className={monthComparison.expense.pct <= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                <span className={monthComparison.expense.pct <= 0 ? 'text-income' : 'text-expense'}>
                   {' '}({monthComparison.expense.pct >= 0 ? '+' : ''}{monthComparison.expense.pct}%)
                 </span>
               )}
@@ -440,7 +440,7 @@ export default function Dashboard() {
         </ResponsiveContainer>
 
         <div className="mt-5">
-          <h3 className="text-xs font-medium text-slate-500 mb-2">일별 지출 (최근 30일)</h3>
+          <h3 className="text-xs font-medium text-ink-subtle mb-2">일별 지출 (최근 30일)</h3>
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={data.dailyTrend}>
               <defs>
@@ -495,16 +495,16 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Section title="이번달 Top 5 가맹점">
           {topMerchants.length === 0 ? (
-            <div className="text-slate-400 text-sm text-center py-6">이번 달 거래 내역이 없습니다.</div>
+            <div className="text-ink-faint text-sm text-center py-6">이번 달 거래 내역이 없습니다.</div>
           ) : (
             <div className="space-y-2">
               {topMerchants.map((m, i) => (
                 <div key={m.merchant} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-600">
-                    <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 text-xs flex items-center justify-center font-medium">{i + 1}</span>
+                  <span className="flex items-center gap-2 text-ink-muted">
+                    <span className="w-5 h-5 rounded-full bg-surface-sunken text-ink-subtle text-xs flex items-center justify-center font-medium">{i + 1}</span>
                     {m.merchant}
                   </span>
-                  <span className="text-slate-800 font-medium tabular-nums">{fmt(m.total)}</span>
+                  <span className="text-ink font-medium tabular-nums">{fmt(m.total)}</span>
                 </div>
               ))}
             </div>
@@ -513,16 +513,16 @@ export default function Dashboard() {
 
         <Section title="이번달 Top 5 카테고리">
           {topCategories.length === 0 ? (
-            <div className="text-slate-400 text-sm text-center py-6">이번 달 지출 내역이 없습니다.</div>
+            <div className="text-ink-faint text-sm text-center py-6">이번 달 지출 내역이 없습니다.</div>
           ) : (
             <div className="space-y-2">
               {topCategories.map((c, i) => (
                 <div key={c.category} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-600">
-                    <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 text-xs flex items-center justify-center font-medium">{i + 1}</span>
+                  <span className="flex items-center gap-2 text-ink-muted">
+                    <span className="w-5 h-5 rounded-full bg-surface-sunken text-ink-subtle text-xs flex items-center justify-center font-medium">{i + 1}</span>
                     {c.category}
                   </span>
-                  <span className="text-slate-800 font-medium tabular-nums">{fmt(c.total)}</span>
+                  <span className="text-ink font-medium tabular-nums">{fmt(c.total)}</span>
                 </div>
               ))}
             </div>

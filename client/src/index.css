@@ -1,7 +1,62 @@
 @import "tailwindcss";
 
+/* 시맨틱 디자인 토큰 (#190).
+   값은 전부 Tailwind v4 기본 팔레트에서 그대로 가져온 것이라 치환 전후 렌더 결과가 같다.
+   주석의 `= xxx-600` 은 어느 유틸리티를 대체하는지를 가리킨다.
+   `@theme`(inline 아님)이므로 유틸리티가 var() 를 참조한다 — 다크모드(#201)에서
+   :root 아래 변수만 덮어쓰면 컴포넌트 수정 없이 팔레트를 교체할 수 있다. */
+@theme {
+  /* 의미 색상 — 수입/지출/경고/강조 */
+  --color-income: oklch(59.6% 0.145 163.225);        /* = emerald-600 */
+  --color-income-strong: oklch(50.8% 0.118 165.612); /* = emerald-700 */
+  --color-income-soft: oklch(97.9% 0.021 166.113);   /* = emerald-50 */
+
+  --color-expense: oklch(58.6% 0.253 17.585);        /* = rose-600 */
+  --color-expense-bar: oklch(64.5% 0.246 16.439);    /* = rose-500 */
+  --color-expense-soft: oklch(96.9% 0.015 12.422);   /* = rose-50 */
+
+  --color-warning: oklch(55.5% 0.163 48.998);        /* = amber-700 */
+  --color-warning-bar: oklch(76.9% 0.188 70.08);     /* = amber-500 */
+  --color-warning-soft: oklch(98.7% 0.022 95.277);   /* = amber-50 */
+
+  --color-accent: oklch(51.1% 0.262 276.966);        /* = indigo-600 */
+  --color-accent-strong: oklch(45.7% 0.24 277.023);  /* = indigo-700 */
+  --color-accent-bar: oklch(58.5% 0.233 277.117);    /* = indigo-500 */
+  --color-accent-soft: oklch(96.2% 0.018 272.314);   /* = indigo-50 */
+
+  /* 카테고리 대분류 6종 */
+  --color-cat-income: oklch(59.6% 0.145 163.225);    /* 수입 = emerald-600 */
+  --color-cat-fixed: oklch(58.6% 0.253 17.585);      /* 고정지출 = rose-600 */
+  --color-cat-needs: oklch(64.6% 0.222 41.116);      /* 변동필수 = orange-600 */
+  --color-cat-debt: oklch(57.7% 0.245 27.325);       /* 부채상환 = red-600 */
+  --color-cat-wants: oklch(68.1% 0.162 75.834);      /* 선택지출 = yellow-600 */
+  --color-cat-savings: oklch(54.6% 0.245 262.881);   /* 저축 = blue-600 */
+
+  /* 표면·경계 */
+  --color-surface: #ffffff;
+  --color-surface-muted: oklch(98.4% 0.003 247.858);  /* = slate-50 */
+  --color-surface-sunken: oklch(96.8% 0.007 247.896); /* = slate-100 */
+  --color-line-soft: oklch(96.8% 0.007 247.896);      /* = slate-100 */
+  --color-line: oklch(92.9% 0.013 255.508);           /* = slate-200 */
+  --color-line-strong: oklch(86.9% 0.022 252.894);    /* = slate-300, 입력 필드 테두리 */
+
+  /* 텍스트 — ink 가 가장 진하고 ghost 로 갈수록 옅어진다.
+     line-* 과 값이 겹치는 단계가 있어도 역할이 달라 토큰을 분리해 둔다
+     (다크모드에서 테두리와 글자는 서로 다른 밝기로 가야 한다). */
+  --color-ink: oklch(27.9% 0.041 260.031);        /* = slate-800 */
+  --color-ink-body: oklch(37.2% 0.044 257.287);   /* = slate-700 */
+  --color-ink-muted: oklch(44.6% 0.043 257.281);  /* = slate-600 */
+  --color-ink-subtle: oklch(55.4% 0.046 257.417); /* = slate-500 */
+  --color-ink-faint: oklch(70.4% 0.04 256.788);   /* = slate-400 */
+  --color-ink-ghost: oklch(86.9% 0.022 252.894);  /* = slate-300, 빈 값 표시용 */
+
+  /* 형태 */
+  --radius-card: 0.75rem; /* = rounded-xl */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); /* = shadow-sm */
+}
+
 body {
-  background-color: #f8fafc;
-  color: #1e293b;
+  background-color: var(--color-surface-muted);
+  color: var(--color-ink);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
