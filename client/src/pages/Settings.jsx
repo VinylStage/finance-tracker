@@ -3,6 +3,8 @@ import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import CategoryBadge from '../components/CategoryBadge';
+import { categoryStyle } from '../lib/categoryStyle';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -194,7 +196,7 @@ function CategorySection({ categories, onChanged }) {
           <div>
             <label htmlFor="category-major-type" className="block text-xs text-slate-500 mb-1">유형</label>
             <select id="category-major-type" className={inp} value={form.major_type} onChange={e => setForm(f => ({ ...f, major_type: e.target.value }))}>
-              {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {CATEGORY_TYPES.map(t => <option key={t} value={t}>{categoryStyle(t).icon} {t}</option>)}
             </select>
           </div>
           <div>
@@ -230,7 +232,7 @@ function CategorySection({ categories, onChanged }) {
                         value={editForm.major_type}
                         onChange={e => setEditForm(f => ({ ...f, major_type: e.target.value }))}
                       >
-                        {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        {CATEGORY_TYPES.map(t => <option key={t} value={t}>{categoryStyle(t).icon} {t}</option>)}
                       </select>
                     </td>
                     <td className="px-3 py-2">
@@ -258,7 +260,9 @@ function CategorySection({ categories, onChanged }) {
                   </>
                 ) : (
                   <>
-                    <td className="px-3 py-2 text-slate-500 text-xs">{c.major_type}</td>
+                    <td className="px-3 py-2 text-xs">
+                      <CategoryBadge majorType={c.major_type} name={c.major_type} />
+                    </td>
                     <td className="px-3 py-2 text-slate-800">{c.name}</td>
                     <td className="px-3 py-2 text-right">
                       <input
