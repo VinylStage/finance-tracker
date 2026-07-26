@@ -2,7 +2,12 @@
 const express = require('express');
 const path = require('path');
 const { csrfGuard } = require('./utils/csrfGuard');
+const { securityHeaders } = require('./utils/securityHeaders');
+const { serverError } = require('./utils/errors');
 const app = express();
+
+app.disable('x-powered-by');
+app.use(securityHeaders);
 
 // 백업 복원(import)은 큰 JSON 본문을 받는다. 전역 파서가 먼저 실행되므로
 // 라우트별 limit 설정은 무효가 된다. 전역에서 한도를 올려 통일한다.
@@ -43,6 +48,17 @@ app.use((_req, res) => {
   } else {
     res.json({ message: 'finance-tracker API running. Frontend not built yet.' });
   }
+});
+
+// 전역 에러 미들웨어(FND-04/15) — 반드시 마지막에 등록한다.
+// Express 5는 라우트 핸들러의 동기 throw와 async 핸들러의 reject를 자동으로
+// 여기까지 전달하므로, 개별 핸들러의 try/catch 누락 여부와 무관하게
+// 이 지점이 항상 최종 방어선이 된다. NODE_ENV와 무관하게 항상 내부 정보를
+// 감춘 응답만 내려보내(serverError와 동일 정책) Express 기본 에러 핸들러의
+// 스택트레이스 노출로 새지 않도록 한다.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  serverError(res, err, 'unhandled');
 });
 
 const HOST = process.env.HOST || '127.0.0.1';

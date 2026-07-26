@@ -26,9 +26,11 @@ cd client && npm install && cd ..
 npm run build
 
 # 4. 서버 시작
-npm start
+NODE_ENV=production npm start
 # → http://localhost:3000
 ```
+
+`NODE_ENV=production`을 권장한다 — 전역 에러 미들웨어(`src/server.js`)가 이미 항상 내부 정보를 감춘 500 응답만 내려보내지만, 방어적으로 Express 자체의 개발용 동작(상세 에러 렌더링 등)도 꺼두는 편이 안전하다.
 
 처음 실행 시 빈 DB로 시작합니다. 기본 카테고리(수입/고정지출/변동필수/선택지출/저축/부채상환)와 결제수단(신용카드/체크카드/현금/계좌이체/간편결제)이 자동으로 세팅되며, **설정** 페이지에서 자유롭게 추가·수정할 수 있습니다.
 
