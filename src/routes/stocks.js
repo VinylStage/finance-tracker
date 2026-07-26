@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const kisService = require('../services/kisService');
+const { serverError } = require('../utils/errors');
 
 /**
  * 주식 가격 조회 API
@@ -20,9 +21,10 @@ router.get('/:ticker', async (req, res) => {
     
     res.json(result);
   } catch (error) {
-    res.status(503).json({
-      error: 'KIS API integration not yet enabled',
-    });
+    // FND-18(감사): "미활성화" 상태는 이제 kisService가 예외 대신 값으로
+    // 돌려주므로(위 if 분기가 처리), 여기 도달하는 에러는 전부 실제로
+    // 예상 못한 것이다 — serverError()로 보내 로그를 남긴다.
+    serverError(res, error, 'stocks');
   }
 });
 
