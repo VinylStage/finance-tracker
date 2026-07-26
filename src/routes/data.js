@@ -8,6 +8,60 @@ const { asInt } = require('../utils/validate');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// FND-14(감사): POST /import 핸들러 하나에 입력검증·카테고리 폴백·레거시
+// 필드 판정·FK 폴백·트랜잭션 실행이 전부 들어있어 순환복잡도가 43까지
+// 올라갔다. 거래 1건을 검증·정규화하는 부분만 떼어낸다 — 유효하면 삽입할
+// 행 객체를, 스킵 대상이면 null을 반환한다. lookups는 카테고리/FK
+// 존재확인용 조회 테이블(모든 행이 공유, 한 번만 만들면 됨)이다.
+function resolveImportRow(tx, lookups) {
+  // Skip if required fields are missing
+  if (!tx.date || tx.amount === undefined || tx.amount === null) return null;
+
+  // FND-06(감사): date 형식/amount 타입을 검증하지 않아 백업 파일을 통해
+  // 문자열 금액이 그대로 들어올 수 있었다. 형식이 안 맞는 행은 (기존의
+  // 필드 누락 행과 동일하게) 스킵하고 나머지는 정상 복원한다.
+  if (!DATE_RE.test(tx.date)) return null;
+  const amount = asInt(tx.amount);
+  if (amount === null) return null;
+
+  // If category_id doesn't exist, try to find by category_name (O(1) 조회)
+  let categoryId = tx.category_id;
+  if (!categoryId || !lookups.categoryIds.has(categoryId)) {
+    const foundId = lookups.categoryByName.get(tx.category_name);
+    if (foundId === undefined) return null;
+    categoryId = foundId;
+  }
+
+  // Handle legacy fields — 신버전 백업은 필드가 null 이어도 존재한다.
+  // 하나라도 undefined(필드 자체 부재)면 구버전 백업으로 보고 legacy 플래그를 세운다.
+  const isLegacy = tx.payment_style === undefined || tx.payment_method_id === undefined ||
+    tx.approval_number === undefined || tx.installment_id === undefined ||
+    tx.created_at === undefined;
+
+  let payment_method_id = tx.payment_method_id !== undefined ? tx.payment_method_id : null;
+  const payment_style = tx.payment_style !== undefined ? tx.payment_style : '일시불';
+  const approval_number = tx.approval_number !== undefined ? tx.approval_number : null;
+  let installment_id = tx.installment_id !== undefined ? tx.installment_id : null;
+  const created_at = tx.created_at !== undefined ? tx.created_at : null;
+
+  // 현재 DB에 존재하지 않는 FK 값은 NULL로 폴백(전체 롤백 방지)
+  let fkFallback = false;
+  if (payment_method_id !== null && !lookups.paymentMethodIds.has(payment_method_id)) {
+    payment_method_id = null;
+    fkFallback = true;
+  }
+  if (installment_id !== null && !lookups.installmentIds.has(installment_id)) {
+    installment_id = null;
+    fkFallback = true;
+  }
+
+  return {
+    date: tx.date, merchant: tx.merchant, amount, categoryId, memo: tx.memo,
+    payment_method_id, payment_style, approval_number, installment_id, created_at,
+    isLegacy, fkFallback,
+  };
+}
+
 // GET /api/data/export - Export all transactions with category names
 router.get('/export', (req, res) => {
   try {
@@ -77,87 +131,38 @@ router.post('/import', (req, res) => {
     let fk_fallback = false;
     let deleted = 0;
 
-    // Get all current categories for lookups — id 존재확인/이름조회를 O(1)로
-    const allCategories = db.prepare('SELECT id, name FROM categories').all();
-    const categoryIds = new Set(allCategories.map(c => c.id));
-    const categoryByName = new Map(allCategories.map(c => [c.name, c.id]));
+    // Get all current lookups — id 존재확인/이름조회를 O(1)로.
     // 백업의 FK 값이 현재 DB에 존재하지 않을 수 있다(다른 기기 복원, 결제수단/할부 초기화 등).
     // foreign_keys=ON 이므로 없는 FK를 그대로 넣으면 트랜잭션 전체가 롤백된다. 존재하는 값만 넣고 나머지는 NULL로 폴백한다.
-    const paymentMethodIds = new Set(db.prepare('SELECT id FROM payment_methods').all().map(r => r.id));
-    const installmentIds = new Set(db.prepare('SELECT id FROM installments').all().map(r => r.id));
-    
+    const allCategories = db.prepare('SELECT id, name FROM categories').all();
+    const lookups = {
+      categoryIds: new Set(allCategories.map(c => c.id)),
+      categoryByName: new Map(allCategories.map(c => [c.name, c.id])),
+      paymentMethodIds: new Set(db.prepare('SELECT id FROM payment_methods').all().map(r => r.id)),
+      installmentIds: new Set(db.prepare('SELECT id FROM installments').all().map(r => r.id)),
+    };
+
     const restore = db.transaction(() => {
       // If overwrite mode, delete existing transactions
       if (mode === 'overwrite') {
         deleted = db.prepare('DELETE FROM transactions').run().changes;
       }
-      
-      // Process and insert transactions
+
       // created_at 은 백업값을 복원하되, 없으면(구버전 백업) COALESCE 로 현재 시각을 쓴다
       const insertTx = db.prepare(`
         INSERT INTO transactions (date, merchant, amount, category_id, memo, payment_method_id, payment_style, approval_number, installment_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
       `);
-      
+
       for (const tx of transactions) {
-        // Skip if required fields are missing
-        if (!tx.date || tx.amount === undefined || tx.amount === null) {
-          skipped++;
-          continue;
-        }
-
-        // FND-06(감사): date 형식/amount 타입을 검증하지 않아 백업 파일을 통해
-        // 문자열 금액이 그대로 들어올 수 있었다. 형식이 안 맞는 행은 (기존의
-        // 필드 누락 행과 동일하게) 스킵하고 나머지는 정상 복원한다.
-        if (!DATE_RE.test(tx.date)) {
-          skipped++;
-          continue;
-        }
-        const amount = asInt(tx.amount);
-        if (amount === null) {
-          skipped++;
-          continue;
-        }
-
-        let categoryId = tx.category_id;
-        
-        // If category_id doesn't exist, try to find by category_name (O(1) 조회)
-        if (!categoryId || !categoryIds.has(categoryId)) {
-          const foundId = categoryByName.get(tx.category_name);
-          if (foundId !== undefined) {
-            categoryId = foundId;
-          } else {
-            skipped++;
-            continue;
-          }
-        }
-        
-        // Handle legacy fields — 신버전 백업은 필드가 null 이어도 존재한다.
-        // 하나라도 undefined(필드 자체 부재)면 구버전 백업으로 보고 legacy 플래그를 세운다.
-        if (tx.payment_style === undefined || tx.payment_method_id === undefined ||
-            tx.approval_number === undefined || tx.installment_id === undefined ||
-            tx.created_at === undefined) {
-          legacy_fields_defaulted = true;
-        }
-
-        let payment_method_id = tx.payment_method_id !== undefined ? tx.payment_method_id : null;
-        const payment_style = tx.payment_style !== undefined ? tx.payment_style : '일시불';
-        const approval_number = tx.approval_number !== undefined ? tx.approval_number : null;
-        let installment_id = tx.installment_id !== undefined ? tx.installment_id : null;
-        const created_at = tx.created_at !== undefined ? tx.created_at : null;
-
-        // 현재 DB에 존재하지 않는 FK 값은 NULL로 폴백(전체 롤백 방지)
-        if (payment_method_id !== null && !paymentMethodIds.has(payment_method_id)) {
-          payment_method_id = null;
-          fk_fallback = true;
-        }
-        if (installment_id !== null && !installmentIds.has(installment_id)) {
-          installment_id = null;
-          fk_fallback = true;
-        }
-
-        // Insert transaction
-        insertTx.run(tx.date, tx.merchant, amount, categoryId, tx.memo, payment_method_id, payment_style, approval_number, installment_id, created_at);
+        const row = resolveImportRow(tx, lookups);
+        if (!row) { skipped++; continue; }
+        if (row.isLegacy) legacy_fields_defaulted = true;
+        if (row.fkFallback) fk_fallback = true;
+        insertTx.run(
+          row.date, row.merchant, row.amount, row.categoryId, row.memo,
+          row.payment_method_id, row.payment_style, row.approval_number, row.installment_id, row.created_at
+        );
         imported++;
       }
     });

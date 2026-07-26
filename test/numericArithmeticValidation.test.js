@@ -137,13 +137,17 @@ test('FND-06: data.js import — amount가 숫자가 아닌 행은 skip, date �
         { date: '2026-01-15', amount: '5000', category_name: category.name, merchant: '정상(문자열금액)' },
         { date: '2026-01-16', amount: 'NaN원', category_name: category.name, merchant: '숫자아님' },
         { date: '2026/01/17', amount: 3000, category_name: category.name, merchant: '날짜형식오류' },
+        // FND-14(#148) 리팩토링 대상 분기 — category_id/category_name 둘 다
+        // 현재 DB에서 못 찾으면 이 행만 skip되고 나머지 행은 계속 처리돼야
+        // 한다(전체 트랜잭션이 실패하면 안 됨).
+        { date: '2026-01-18', amount: 4000, category_name: '존재하지않는카테고리', merchant: '카테고리못찾음' },
       ],
     }),
   });
   assert.strictEqual(importResp.status, 200);
   const result = await importResp.json();
   assert.strictEqual(result.imported, 1);
-  assert.strictEqual(result.skipped, 2);
+  assert.strictEqual(result.skipped, 3);
 
   const listResp = await fetch(`${BASE}/api/transactions?limit=10`);
   const list = await listResp.json();
