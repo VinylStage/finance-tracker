@@ -2,7 +2,7 @@ process.env.TZ = 'Asia/Seoul';
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { localYMD, localYearMonth } = require('../src/utils/date.js');
+const { localYMD, localYearMonth, monthBounds } = require('../src/utils/date.js');
 
 describe('localYMD', () => {
   test('2026-03-15 00:00 KST (자정)', () => {
@@ -53,5 +53,37 @@ describe('localYearMonth', () => {
     const [y, m] = localYearMonth(new Date('2026-12-31T23:59:00.000Z'));
     assert.strictEqual(y, 2027);
     assert.strictEqual(m, 1);
+  });
+});
+
+// FND-08(감사): "strftime('%Y-%m', t.date) = ?" 형태의 WHERE는 idx_tx_date를
+// 못 써 풀스캔이었다(EXPLAIN QUERY PLAN으로 SCAN t 확인됨). [해당 월 1일,
+// 다음 달 1일) 범위로 바꿨는데, 그 경계 계산 자체가 31일짜리 달·2월·12월
+// 롤오버에서 하루도 안 새는지 여기서 직접 확인한다(HTTP 레벨 테스트는
+// "오늘"이 마침 31일인 달일 때만 이 경계를 우연히 건드려 놓치기 쉽다).
+describe('monthBounds', () => {
+  test('31일짜리 달 — 마지막날(31일)이 상한 밖으로 새면 안 됨', () => {
+    const [start, end] = monthBounds('2026-01');
+    assert.strictEqual(start, '2026-01-01');
+    assert.strictEqual(end, '2026-02-01');
+    assert.ok('2026-01-31' < end, '1월 31일이 반개구간 상한보다 작아야(포함되어야) 함');
+  });
+
+  test('30일짜리 달', () => {
+    const [start, end] = monthBounds('2026-04');
+    assert.strictEqual(start, '2026-04-01');
+    assert.strictEqual(end, '2026-05-01');
+  });
+
+  test('2월(평년, 28일)', () => {
+    const [start, end] = monthBounds('2026-02');
+    assert.strictEqual(start, '2026-02-01');
+    assert.strictEqual(end, '2026-03-01');
+  });
+
+  test('12월 — 연도 롤오버', () => {
+    const [start, end] = monthBounds('2026-12');
+    assert.strictEqual(start, '2026-12-01');
+    assert.strictEqual(end, '2027-01-01');
   });
 });
