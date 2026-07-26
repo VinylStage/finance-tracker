@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# confirm-chain 승인 트레일러 (prepare-commit-msg)
+#
+# pre-commit 게이트를 통과한 문서 변경 커밋에 승인 스레드 ID를 트레일러로 남긴다.
+# 목적은 사후 감사다 — `git log` 의 트레일러만 훑어도 "이 문서 변경이 승인
+# 절차를 거쳤는가"를 재구성할 수 있다(위임 비율 감사에 쓰는 Co-Authored-By
+# 트레일러 감사 기법과 같은 방식).
+set -uo pipefail
+
+MSG_FILE="$1"
+MARKER="$(git rev-parse --git-dir)/confirm-chain-approved"
+
+[ -f "$MARKER" ] || exit 0
+
+THREAD="$(cat "$MARKER")"
+rm -f "$MARKER"
+
+[ -n "$THREAD" ] || exit 0
+grep -q "^Doc-Approval:" "$MSG_FILE" 2>/dev/null && exit 0
+
+# 커밋 메시지 끝에 트레일러를 붙인다. 다른 트레일러가 있으면 같은 블록에 들어간다.
+printf '\nDoc-Approval: %s\n' "$THREAD" >> "$MSG_FILE"

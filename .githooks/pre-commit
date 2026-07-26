@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# confirm-chain 문서 변경 게이트 (pre-commit)
+#
+# 감시 대상 경로의 문서가 스테이징돼 있으면, 그 내용에 대한 process_doc 트랙
+# 승인이 있는지 확인하고 없으면 커밋을 중단한다.
+#
+# 이 훅은 특정 프로젝트에 종속되지 않는다. 감시 대상은 저장소 루트의
+# .confirm-chain-paths 파일에서, 도구 위치는 git config confirmchain.dir 에서 읽는다.
+#
+# 스레드 ID는 "스테이징된 문서 변경 내용"의 해시로 만든다 — 내용이 한 글자라도
+# 바뀌면 다른 스레드가 되므로 승인이 자동으로 무효화된다(승인 재사용 방지).
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PATHS_FILE="$REPO_ROOT/.confirm-chain-paths"
+
+# 감시 대상 설정이 없으면 이 저장소는 게이트 미적용이다.
+[ -f "$PATHS_FILE" ] || exit 0
+
+# 주석(#)과 빈 줄을 제거한 감시 glob 목록.
+# macOS 기본 bash 는 3.2 라 mapfile/readarray 가 없다 — 이식성 있는 방식만 쓴다.
+WATCHED="$(grep -vE '^[[:space:]]*(#|$)' "$PATHS_FILE" 2>/dev/null || true)"
+[ -n "$WATCHED" ] || exit 0
+
+# 스테이징된 파일 중 감시 대상에 걸리는 것만 추린다(추가/수정/이름변경).
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -n "$STAGED" ] || exit 0
+
+MATCHED=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  while IFS= read -r w; do
+    [ -n "$w" ] || continue
+    case "$f" in
+      $w) MATCHED="$MATCHED$f
+"; break ;;
+    esac
+  done <<EOF
+$WATCHED
+EOF
+done <<EOF
+$STAGED
+EOF
+
+# 감시 대상 변경이 없으면 통과
+[ -n "$MATCHED" ] || exit 0
+
+MATCHED_LIST="$(printf '%s' "$MATCHED" | sed '/^$/d' | sort)"
+
+# --- 도구 위치 확인 ---
+CHAIN_DIR="$(git config --get confirmchain.dir || true)"
+if [ -z "$CHAIN_DIR" ] && [ -d "$REPO_ROOT/tools/confirm-chain" ]; then
+  CHAIN_DIR="$REPO_ROOT/tools/confirm-chain"
+fi
+if [ -z "$CHAIN_DIR" ] || [ ! -f "$CHAIN_DIR/confirm_chain.py" ]; then
+  cat >&2 <<EOF
+[confirm-chain] 문서 변경 게이트가 켜져 있으나 도구를 찾지 못했습니다.
+
+  대상 파일:
+$(printf '%s\n' "$MATCHED_LIST" | sed 's/^/    /')
+
+  해결: confirm-chain 이 있는 경로를 이 저장소에 등록하세요.
+    git config confirmchain.dir /path/to/tools/confirm-chain
+
+  (게이트를 의도적으로 건너뛰려면: git commit --no-verify — 다만 승인 기록이
+   남지 않으므로 사후 감사에서 누락으로 잡힙니다.)
+EOF
+  exit 1
+fi
+
+POETRY="${CONFIRM_CHAIN_POETRY:-$HOME/.local/pipx/venvs/poetry/bin/poetry}"
+if [ ! -x "$POETRY" ]; then
+  POETRY="$(command -v poetry || true)"
+fi
+if [ -z "$POETRY" ]; then
+  echo "[confirm-chain] poetry 를 찾지 못했습니다. CONFIRM_CHAIN_POETRY 로 경로를 지정하세요." >&2
+  exit 1
+fi
+
+# --- 스레드 ID: 스테이징된 문서 변경 내용의 해시 ---
+# 파일 목록과 스테이징된 diff 내용을 함께 해싱한다.
+HASH="$(
+  {
+    printf '%s\n' "$MATCHED_LIST"
+    # shellcheck disable=SC2086
+    git diff --cached -- $(printf '%s ' $MATCHED_LIST)
+  } | shasum -a 256 | cut -c1-12
+)"
+THREAD="doc-$HASH"
+DB="$REPO_ROOT/.confirm-chain.sqlite"
+
+STATUS_JSON="$(cd "$CHAIN_DIR" && "$POETRY" run python3 confirm_chain.py \
+  --status --thread "$THREAD" --db "$DB" 2>/dev/null)"
+RC=$?
+
+if [ "$RC" -eq 0 ]; then
+  # 승인됨 — prepare-commit-msg 가 트레일러를 붙일 수 있게 남긴다.
+  echo "$THREAD" > "$(git rev-parse --git-dir)/confirm-chain-approved"
+  echo "[confirm-chain] 문서 변경 승인 확인됨 ($THREAD)"
+  exit 0
+fi
+
+RUN_CMD="cd $CHAIN_DIR && $POETRY run python3 confirm_chain.py"
+{
+  echo
+  echo "[confirm-chain] ⛔ 문서 변경이 승인 게이트를 통과하지 않았습니다."
+  echo
+  echo "  대상 파일:"
+  printf '%s\n' "$MATCHED_LIST" | sed 's/^/    /'
+  echo
+  echo "  현재 상태: ${STATUS_JSON:-조회 실패}"
+  echo "  스레드   : $THREAD"
+  echo
+  if [ "$RC" -eq 2 ]; then
+    echo "  이미 승인 대기 중입니다. 산출물을 확인한 뒤 승인하세요:"
+    echo "    $RUN_CMD --resume approve --thread $THREAD --db $DB"
+    echo "    $RUN_CMD --resume 'reject:<사유>' --thread $THREAD --db $DB"
+  else
+    echo "  승인 절차를 시작하세요:"
+    echo "    $RUN_CMD process_doc '<변경 요약>' --thread $THREAD --db $DB"
+    echo "    $RUN_CMD --resume approve --thread $THREAD --db $DB"
+  fi
+  echo
+  echo "  (의도적으로 건너뛰려면: git commit --no-verify — 승인 기록이 남지"
+  echo "   않으므로 사후 감사에서 누락으로 잡힙니다.)"
+  echo
+} >&2
+exit 1
