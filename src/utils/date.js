@@ -66,4 +66,14 @@ function localYearMonth(d = new Date()) {
   return [d.getFullYear(), d.getMonth() + 1];
 }
 
-module.exports = { localYMD, pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, lastNYears, localYearMonth };
+// FND-08(감사): "strftime('%Y-%m', t.date) = ?" 형태의 WHERE는 인덱스 컬럼을
+// 함수로 감싸 idx_tx_date를 못 쓴다(풀스캔). 대신 [해당 월 1일, 다음 달 1일)
+// 범위 비교를 쓰면 인덱스를 그대로 탈 수 있다. 이 경계값을 계산한다.
+function monthBounds(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const start = `${ym}-01`;
+  const endExclusive = m === 12 ? `${y + 1}-01-01` : `${y}-${pad2(m + 1)}-01`;
+  return [start, endExclusive];
+}
+
+module.exports = { localYMD, pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, lastNYears, localYearMonth, monthBounds };

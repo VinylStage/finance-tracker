@@ -40,4 +40,25 @@ function rangeTotalsByDate(from, to) {
   return new Map(rows.map(r => [r.date, r]));
 }
 
-module.exports = { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate };
+// FND-08(감사): transactions.js 대시보드의 월별 트렌드가
+// "strftime('%Y-%m', t.date) >= ? AND strftime('%Y-%m', t.date) <= ?"로
+// 필터링해 인덱스 컬럼을 함수로 감싼 탓에 풀스캔이었다. [시작월 1일, 끝월
+// 다음달 1일) 범위 비교로 바꿔 idx_tx_date를 타도록 한다. GROUP BY 표현식
+// 자체는 strftime을 써도 무방하다 — WHERE만 sargable하면 인덱스를 쓴다.
+function monthlyTotalsInRange(startMonth, endMonthInclusive) {
+  const start = `${startMonth}-01`;
+  const [endY, endM] = endMonthInclusive.split('-').map(Number);
+  const endExclusive = endM === 12 ? `${endY + 1}-01-01` : `${endY}-${String(endM + 1).padStart(2, '0')}-01`;
+  const rows = db.prepare(`
+    SELECT strftime('%Y-%m', t.date) AS month,
+      COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+      COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
+    FROM transactions t
+    JOIN categories c ON t.category_id = c.id
+    WHERE t.date >= ? AND t.date < ?
+    GROUP BY month
+  `).all(start, endExclusive);
+  return new Map(rows.map(r => [r.month, r]));
+}
+
+module.exports = { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange };
