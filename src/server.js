@@ -37,6 +37,12 @@ app.use('/api/guide',        require('./routes/guide'));
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
+// FND-10(감사): 아래 SPA 폴백이 /api/* 를 예외 처리하지 않아, 오타 난 API
+// 경로가 404 JSON이 아니라 200 + index.html을 반환했다. client/src/lib/api.js는
+// res.ok만 보고 성공으로 간주하므로 HTML을 그대로 성공 응답처럼 처리했다.
+// 등록된 API 라우트를 전부 통과했는데도 /api로 시작하면 여기서 확실히 404를 낸다.
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
 // Serve React build (Phase 1+)
 const PUBLIC = path.join(__dirname, '../public');
 app.use(express.static(PUBLIC));
