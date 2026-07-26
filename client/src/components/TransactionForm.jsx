@@ -7,9 +7,9 @@ import { localYMD } from '../lib/date';
 const PAYMENT_STYLES = ['일시불', '할부', '리볼빙', '해당없음'];
 
 const CONFIDENCE_STYLE = {
-  '완전일치': 'bg-emerald-50 text-emerald-700',
-  '부분일치': 'bg-amber-50 text-amber-700',
-  '없음': 'bg-slate-100 text-slate-500',
+  '완전일치': 'bg-income-soft text-income-strong',
+  '부분일치': 'bg-warning-soft text-warning',
+  '없음': 'bg-surface-sunken text-ink-subtle',
 };
 
 export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel }) {
@@ -77,22 +77,22 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
     });
   };
 
-  const inp = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500';
+  const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">
+    <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-body">
         {initial ? '거래 수정' : '새 거래 추가'}
       </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="tx-date" className="block text-xs text-slate-500 mb-1">날짜 *</label>
+          <label htmlFor="tx-date" className="block text-xs text-ink-subtle mb-1">날짜 *</label>
           <input id="tx-date" type="date" className={inp} value={form.date} onChange={e => set('date', e.target.value)} required />
         </div>
 
         <div>
-          <label htmlFor="tx-amount" className="block text-xs text-slate-500 mb-1">금액 (원) *</label>
+          <label htmlFor="tx-amount" className="block text-xs text-ink-subtle mb-1">금액 (원) *</label>
           <input
             id="tx-amount" type="number" className={inp} placeholder="0"
             value={form.amount} onChange={e => set('amount', e.target.value)} required
@@ -100,7 +100,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label htmlFor="tx-category" className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+          <label htmlFor="tx-category" className="flex items-center gap-1.5 text-xs text-ink-subtle mb-1">
             카테고리 *
             {confidence && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${CONFIDENCE_STYLE[confidence]}`}>
@@ -121,7 +121,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label htmlFor="tx-payment-method" className="block text-xs text-slate-500 mb-1">결제수단</label>
+          <label htmlFor="tx-payment-method" className="block text-xs text-ink-subtle mb-1">결제수단</label>
           <select id="tx-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
             <option value="">선택...</option>
             {paymentMethods.map(p => (
@@ -131,16 +131,16 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label htmlFor="tx-payment-style" className="block text-xs text-slate-500 mb-1">결제방식</label>
+          <label htmlFor="tx-payment-style" className="block text-xs text-ink-subtle mb-1">결제방식</label>
           <select id="tx-payment-style" className={inp} value={form.payment_style} onChange={e => set('payment_style', e.target.value)}>
             {PAYMENT_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
         <div>
-          <label htmlFor="tx-merchant" className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+          <label htmlFor="tx-merchant" className="flex items-center gap-1.5 text-xs text-ink-subtle mb-1">
             가맹점/내용
-            {suggesting && <span className="text-indigo-500 text-[10px]">제안 중...</span>}
+            {suggesting && <span className="text-accent-bar text-[10px]">제안 중...</span>}
           </label>
           <input
             id="tx-merchant" type="text" className={inp} placeholder="가맹점명 (자동 카테고리 제안)"
@@ -156,18 +156,18 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       </div>
 
       <div>
-        <label htmlFor="tx-memo" className="block text-xs text-slate-500 mb-1">메모</label>
+        <label htmlFor="tx-memo" className="block text-xs text-ink-subtle mb-1">메모</label>
         <input id="tx-memo" type="text" className={inp} placeholder="메모 (선택)"
           value={form.memo} onChange={e => set('memo', e.target.value)} />
       </div>
 
       <div className="flex gap-3 pt-1">
         <button type="submit"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-5 py-2 rounded-lg transition-colors">
+          className="bg-accent hover:bg-accent-strong text-white text-sm px-5 py-2 rounded-lg transition-colors">
           {initial ? '저장' : '추가'}
         </button>
         <button type="button" onClick={onCancel}
-          className="text-slate-500 hover:text-slate-800 text-sm px-4 py-2 rounded-lg hover:bg-slate-100 transition-colors">
+          className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg hover:bg-surface-sunken transition-colors">
           취소
         </button>
       </div>
