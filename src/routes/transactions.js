@@ -459,17 +459,21 @@ router.get('/summary/dashboard', (req, res) => {
     `).all(thisMonth);
 
     // 최근 30일 일별 수입/지출
+    // FND-20(감사): date('now', '-29 days')는 UTC 기준이라 KST 자정~9시 사이엔
+    // 경계가 하루 밀렸다. 이미 KST 기준으로 정확한 lastNDates(30)의 첫 날짜를
+    // 그대로 바인딩해 SQL이 'now'를 참조하지 않도록 한다.
+    const dailyDates = lastNDates(30);
     const dailyRows = db.prepare(`
       SELECT t.date AS date,
         COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
         COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= date('now', '-29 days')
+      WHERE t.date >= ?
       GROUP BY t.date
-    `).all();
+    `).all(dailyDates[0]);
     const dailyMap = Object.fromEntries(dailyRows.map(r => [r.date, r]));
-    const dailyTrend = lastNDates(30).map(date => ({
+    const dailyTrend = dailyDates.map(date => ({
       date,
       income: dailyMap[date]?.income || 0,
       expense: dailyMap[date]?.expense || 0,
