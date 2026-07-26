@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
-import Dashboard from './pages/Dashboard';
-import Transactions from './pages/Transactions';
-import Comparison from './pages/Comparison';
-import Installments from './pages/Installments';
-import Revolving from './pages/Revolving';
-import Debts from './pages/Debts';
-import Simulator from './pages/Simulator';
-import Savings from './pages/Savings';
-import Settings from './pages/Settings';
-import Guide from './pages/Guide';
+import React, { useState, lazy, Suspense } from 'react';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Transactions = lazy(() => import('./pages/Transactions'));
+const Comparison = lazy(() => import('./pages/Comparison'));
+const Installments = lazy(() => import('./pages/Installments'));
+const Revolving = lazy(() => import('./pages/Revolving'));
+const Debts = lazy(() => import('./pages/Debts'));
+const Simulator = lazy(() => import('./pages/Simulator'));
+const Savings = lazy(() => import('./pages/Savings'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Guide = lazy(() => import('./pages/Guide'));
 
 const NAV = [
   { id: 'dashboard', label: '대시보드' },
@@ -50,16 +51,18 @@ export default function App() {
 
       {/* Page */}
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6">
-        {page === 'dashboard' && <Dashboard />}
-        {page === 'transactions' && <Transactions />}
-        {page === 'comparison' && <Comparison />}
-        {page === 'installments' && <Installments />}
-        {page === 'revolving' && <Revolving />}
-        {page === 'debts' && <Debts />}
-        {page === 'savings' && <Savings />}
-        {page === 'simulator' && <Simulator />}
-        {page === 'settings' && <Settings />}
-        {page === 'guide' && <Guide />}
+        <Suspense fallback={<div className="text-slate-500 text-center py-20">로딩 중...</div>}>
+          {page === 'dashboard' && <Dashboard />}
+          {page === 'transactions' && <Transactions />}
+          {page === 'comparison' && <Comparison />}
+          {page === 'installments' && <Installments />}
+          {page === 'revolving' && <Revolving />}
+          {page === 'debts' && <Debts />}
+          {page === 'savings' && <Savings />}
+          {page === 'simulator' && <Simulator />}
+          {page === 'settings' && <Settings />}
+          {page === 'guide' && <Guide />}
+        </Suspense>
       </main>
     </div>
   );
