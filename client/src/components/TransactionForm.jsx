@@ -87,20 +87,20 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">날짜 *</label>
-          <input type="date" className={inp} value={form.date} onChange={e => set('date', e.target.value)} required />
+          <label htmlFor="tx-date" className="block text-xs text-slate-500 mb-1">날짜 *</label>
+          <input id="tx-date" type="date" className={inp} value={form.date} onChange={e => set('date', e.target.value)} required />
         </div>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1">금액 (원) *</label>
+          <label htmlFor="tx-amount" className="block text-xs text-slate-500 mb-1">금액 (원) *</label>
           <input
-            type="number" className={inp} placeholder="0"
+            id="tx-amount" type="number" className={inp} placeholder="0"
             value={form.amount} onChange={e => set('amount', e.target.value)} required
           />
         </div>
 
         <div>
-          <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+          <label htmlFor="tx-category" className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
             카테고리 *
             {confidence && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${CONFIDENCE_STYLE[confidence]}`}>
@@ -108,7 +108,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
               </span>
             )}
           </label>
-          <select className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)} required>
+          <select id="tx-category" className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)} required>
             <option value="">선택...</option>
             {majorTypes.map(mt => (
               <optgroup key={mt} label={mt}>
@@ -121,8 +121,8 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1">결제수단</label>
-          <select className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
+          <label htmlFor="tx-payment-method" className="block text-xs text-slate-500 mb-1">결제수단</label>
+          <select id="tx-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
             <option value="">선택...</option>
             {paymentMethods.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -131,19 +131,19 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label className="block text-xs text-slate-500 mb-1">결제방식</label>
-          <select className={inp} value={form.payment_style} onChange={e => set('payment_style', e.target.value)}>
+          <label htmlFor="tx-payment-style" className="block text-xs text-slate-500 mb-1">결제방식</label>
+          <select id="tx-payment-style" className={inp} value={form.payment_style} onChange={e => set('payment_style', e.target.value)}>
             {PAYMENT_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
+          <label htmlFor="tx-merchant" className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">
             가맹점/내용
             {suggesting && <span className="text-indigo-500 text-[10px]">제안 중...</span>}
           </label>
           <input
-            type="text" className={inp} placeholder="가맹점명 (자동 카테고리 제안)"
+            id="tx-merchant" type="text" className={inp} placeholder="가맹점명 (자동 카테고리 제안)"
             list="recent-merchants"
             value={form.merchant}
             onChange={e => handleMerchantChange(e.target.value)}
@@ -156,8 +156,8 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       </div>
 
       <div>
-        <label className="block text-xs text-slate-500 mb-1">메모</label>
-        <input type="text" className={inp} placeholder="메모 (선택)"
+        <label htmlFor="tx-memo" className="block text-xs text-slate-500 mb-1">메모</label>
+        <input id="tx-memo" type="text" className={inp} placeholder="메모 (선택)"
           value={form.memo} onChange={e => set('memo', e.target.value)} />
       </div>
 

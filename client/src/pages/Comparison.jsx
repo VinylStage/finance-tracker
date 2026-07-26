@@ -89,6 +89,7 @@ export default function Comparison() {
         <h1 className="text-xl font-semibold text-slate-800">기간 비교</h1>
         <input
           type="date"
+          aria-label="기준일"
           value={date}
           onChange={e => setDate(e.target.value)}
           className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-indigo-500"

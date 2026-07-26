@@ -201,39 +201,39 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
       <h2 className="text-sm font-semibold text-slate-600">할부 등록</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">구매일 *</label>
-          <input type="date" className={inp} value={form.purchase_date} onChange={e => set('purchase_date', e.target.value)} required />
+          <label htmlFor="inst-purchase-date" className="block text-xs text-slate-500 mb-1">구매일 *</label>
+          <input id="inst-purchase-date" type="date" className={inp} value={form.purchase_date} onChange={e => set('purchase_date', e.target.value)} required />
         </div>
         <div className="sm:col-span-2">
-          <label className="block text-xs text-slate-500 mb-1">가맹점 *</label>
-          <input type="text" className={inp} value={form.merchant} onChange={e => set('merchant', e.target.value)} required />
+          <label htmlFor="inst-merchant" className="block text-xs text-slate-500 mb-1">가맹점 *</label>
+          <input id="inst-merchant" type="text" className={inp} value={form.merchant} onChange={e => set('merchant', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">총액 (원) *</label>
-          <input type="number" className={inp} value={form.total_amount} onChange={e => set('total_amount', e.target.value)} required />
+          <label htmlFor="inst-total-amount" className="block text-xs text-slate-500 mb-1">총액 (원) *</label>
+          <input id="inst-total-amount" type="number" className={inp} value={form.total_amount} onChange={e => set('total_amount', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">개월수 *</label>
-          <input type="number" min="2" className={inp} value={form.months} onChange={e => set('months', e.target.value)} required />
+          <label htmlFor="inst-months" className="block text-xs text-slate-500 mb-1">개월수 *</label>
+          <input id="inst-months" type="number" min="2" className={inp} value={form.months} onChange={e => set('months', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">월납부액 (원) *</label>
-          <input type="number" className={inp} value={form.monthly_amount} onChange={e => set('monthly_amount', e.target.value)} required />
+          <label htmlFor="inst-monthly-amount" className="block text-xs text-slate-500 mb-1">월납부액 (원) *</label>
+          <input id="inst-monthly-amount" type="number" className={inp} value={form.monthly_amount} onChange={e => set('monthly_amount', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">월 수수료 (원)</label>
-          <input type="number" className={inp} placeholder="0" value={form.fee_per_month} onChange={e => set('fee_per_month', e.target.value)} />
+          <label htmlFor="inst-fee-per-month" className="block text-xs text-slate-500 mb-1">월 수수료 (원)</label>
+          <input id="inst-fee-per-month" type="number" className={inp} placeholder="0" value={form.fee_per_month} onChange={e => set('fee_per_month', e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">카드</label>
-          <select className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
+          <label htmlFor="inst-payment-method" className="block text-xs text-slate-500 mb-1">카드</label>
+          <select id="inst-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
             <option value="">선택...</option>
             {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">청구 시작월 *</label>
-          <input type="month" className={inp} value={form.start_billing_month} onChange={e => set('start_billing_month', e.target.value)} required />
+          <label htmlFor="inst-start-billing-month" className="block text-xs text-slate-500 mb-1">청구 시작월 *</label>
+          <input id="inst-start-billing-month" type="month" className={inp} value={form.start_billing_month} onChange={e => set('start_billing_month', e.target.value)} required />
         </div>
       </div>
       <div className="flex gap-3 pt-1">
