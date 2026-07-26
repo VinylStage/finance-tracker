@@ -3,12 +3,15 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
-const { pad2 } = require('../utils/date');
+const { localYearMonth } = require('../utils/date');
 const { installmentsDueForMonth } = require('../utils/aggregation');
 
+// FND-20(감사): 여기서 쓰던 strftime(...,'now')는 UTC라서 KST 자정~9시 사이엔
+// remaining_months/billed_months가 1개월 어긋났다. SQL이 직접 'now'를
+// 참조하지 않도록, 현재 연/월을 JS(localYearMonth)에서 계산해 바인딩한다.
 const MONTHS_ELAPSED = `
-  (CAST(strftime('%Y','now') AS INT) - CAST(strftime('%Y', i.start_billing_month || '-01') AS INT)) * 12
-  + CAST(strftime('%m','now') AS INT) - CAST(strftime('%m', i.start_billing_month || '-01') AS INT)
+  (? - CAST(strftime('%Y', i.start_billing_month || '-01') AS INT)) * 12
+  + ? - CAST(strftime('%m', i.start_billing_month || '-01') AS INT)
   + 1
 `;
 
@@ -16,6 +19,7 @@ const MONTHS_ELAPSED = `
 router.get('/', (req, res) => {
   try {
     const { status } = req.query;
+    const [curYear, curMonth] = localYearMonth();
     let sql = `
       SELECT i.*,
         p.name AS payment_method_name,
@@ -25,13 +29,12 @@ router.get('/', (req, res) => {
       LEFT JOIN payment_methods p ON i.payment_method_id = p.id
       WHERE 1=1
     `;
-    const params = [];
+    const params = [curYear, curMonth, curYear, curMonth];
     if (status) { sql += ' AND i.status = ?'; params.push(status); }
     sql += ' ORDER BY i.status ASC, i.start_billing_month DESC';
     const data = db.prepare(sql).all(...params);
 
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    const thisMonth = `${curYear}-${String(curMonth).padStart(2, '0')}`;
     // FND-05(감사): 여기서 청구 기간 종료를 반영하지 않던 별도 쿼리를 쓰고 있었다.
     // 대시보드(/api/transactions/summary/dashboard)의 installmentsDue와 항상
     // 같은 값을 내도록 동일 함수를 공유한다.
