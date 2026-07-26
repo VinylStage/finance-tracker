@@ -21,7 +21,7 @@ jobs:
       - run: npm ci
         working-directory: client
       - name: Check JS syntax
-        run: find src -name '*.js' -exec node --check {} \;
+        run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
       - run: npm run build
         working-directory: client
       - run: npm run test --if-present
