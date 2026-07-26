@@ -23,7 +23,7 @@ router.get('/', (req, res) => {
       monthly_income: asNumber(map.monthly_income) ?? Number(DEFAULTS.monthly_income),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    serverError(res, e, 'settings');
   }
 });
 
