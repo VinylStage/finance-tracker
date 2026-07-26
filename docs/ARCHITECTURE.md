@@ -15,22 +15,30 @@
 
 ## 컴포넌트 구조
 
-### 백엔드 라우트 (10개):
+### 백엔드 라우트 (17개 파일 / API 마운트 18개 — 파일 기반 17개 + 인라인 헬스체크 1개):
+- `cardImport.js`
 - `cashflow.js`
 - `categories.js`
+- `csvImport.js`
+- `data.js`
 - `debts.js`
+- `exchange.js`
 - `export.js`
+- `guide.js`
 - `installments.js`
 - `paymentMethods.js`
+- `recurringRules.js`
 - `revolving.js`
 - `savings.js`
 - `settings.js`
+- `stocks.js`
 - `transactions.js`
 
-### 프론트엔드 페이지 (9개):
+### 프론트엔드 페이지 (10개):
 - `Comparison.jsx`
 - `Dashboard.jsx`
 - `Debts.jsx`
+- `Guide.jsx`
 - `Installments.jsx`
 - `Revolving.jsx`
 - `Savings.jsx`
@@ -38,7 +46,10 @@
 - `Simulator.jsx`
 - `Transactions.jsx`
 
-### 프론트엔드 공용 컴포넌트 (2개):
+### 프론트엔드 공용 컴포넌트 (5개):
+- `ConfirmProvider.jsx`
+- `ErrorBoundary.jsx`
+- `LoadError.jsx`
 - `TransactionForm.jsx`
 - `TransactionList.jsx`
 
