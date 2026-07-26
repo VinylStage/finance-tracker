@@ -1,13 +1,6 @@
 import React, { useRef } from 'react';
-
-const TYPE_COLOR = {
-  '수입': 'text-cat-income',
-  '고정지출': 'text-cat-fixed',
-  '변동필수': 'text-cat-needs',
-  '부채상환': 'text-cat-debt',
-  '선택지출': 'text-cat-wants',
-  '저축': 'text-cat-savings',
-};
+import CategoryBadge from './CategoryBadge';
+import { AMOUNT_MARK } from '../lib/categoryStyle';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -81,9 +74,11 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
               )}
               <td className="px-4 py-3 text-ink-subtle whitespace-nowrap">{tx.date}</td>
               <td className="px-4 py-3">
-                <span className={`text-xs font-medium ${TYPE_COLOR[tx.major_type] || 'text-ink-muted'}`}>
-                  {tx.category_name}
-                </span>
+                <CategoryBadge
+                  majorType={tx.major_type}
+                  name={tx.category_name}
+                  className="text-xs font-medium max-w-[10rem]"
+                />
               </td>
               <td className="px-4 py-3 text-ink-muted hidden md:table-cell max-w-xs truncate">
                 {tx.merchant || <span className="text-ink-ghost">—</span>}
@@ -91,7 +86,10 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
               <td className={`px-4 py-3 text-right font-medium tabular-nums ${
                 tx.major_type === '수입' ? 'text-income' : 'text-ink'
               }`}>
-                {tx.major_type === '수입' ? '+' : '-'}{fmt(tx.amount)}
+                <span aria-hidden="true" className="mr-0.5 text-[10px] align-middle">
+                  {tx.major_type === '수입' ? AMOUNT_MARK.income.arrow : AMOUNT_MARK.expense.arrow}
+                </span>
+                {tx.major_type === '수입' ? AMOUNT_MARK.income.sign : AMOUNT_MARK.expense.sign}{fmt(tx.amount)}
               </td>
               <td className="px-4 py-3 text-ink-faint text-xs hidden sm:table-cell">
                 {tx.payment_method_name || '—'}

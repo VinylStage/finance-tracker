@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
+import { categoryStyle } from '../lib/categoryStyle';
 
 // 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
 // 프런트(ESM/Vite)와 빌드 도구가 분리되어 있어 값을 공유하지 못하므로 수동 동기화 필요(#90).
@@ -111,7 +112,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           <select id="tx-category" className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)} required>
             <option value="">선택...</option>
             {majorTypes.map(mt => (
-              <optgroup key={mt} label={mt}>
+              <optgroup key={mt} label={`${categoryStyle(mt).icon} ${mt}`}>
                 {categories.filter(c => c.major_type === mt).map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
