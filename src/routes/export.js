@@ -7,6 +7,14 @@ const { localYMD } = require('../utils/date');
 
 const SCHEMA_VERSION = 1;
 
+// FND-19(감사): from/to가 검증 없이 Content-Disposition 헤더와 SQL 바인딩에 쓰였다.
+// CRLF는 Node가 헤더 값에서 자체적으로 거부하지만(ERR_INVALID_CHAR), 따옴표로
+// 파일명을 조작하거나 제어문자로 500을 유발할 수 있었다. 날짜 형식만 허용한다.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function isInvalidDateParam(value) {
+  return value !== undefined && value !== null && value !== '' && !DATE_RE.test(value);
+}
+
 function csvEscape(val) {
   if (val === null || val === undefined) return '';
   const s = String(val);
@@ -60,6 +68,9 @@ function getFullBackup(from, to) {
 }
 
 function sendCsv(res, from, to) {
+  if (isInvalidDateParam(from) || isInvalidDateParam(to)) {
+    return res.status(400).json({ error: 'from/to must be in YYYY-MM-DD format' });
+  }
   const transactions = getTransactionsForRange(from, to);
   const csv = toCsv(transactions, ['id', 'date', 'major_type', 'category', 'amount', 'payment_method', 'payment_style', 'merchant', 'memo']);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -68,6 +79,9 @@ function sendCsv(res, from, to) {
 }
 
 function sendJson(res, from, to) {
+  if (isInvalidDateParam(from) || isInvalidDateParam(to)) {
+    return res.status(400).json({ error: 'from/to must be in YYYY-MM-DD format' });
+  }
   const data = getFullBackup(from, to);
   res.setHeader('Content-Disposition', `attachment; filename="finance-tracker-export_${from || 'all'}_${to || 'all'}.json"`);
   res.json(data);
