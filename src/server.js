@@ -77,3 +77,11 @@ app.listen(PORT, HOST, () => {
     console.log(`[server] http://${HOST}:${PORT}`);
   }
 });
+
+// #157(FND-12 후속): HTTP 테스트가 서버를 자식 프로세스로 띄우고 SIGTERM으로
+// 죽이는데, 핸들러 없는 기본 SIGTERM은 process.exit()을 거치지 않고 즉시
+// 종료돼 NODE_V8_COVERAGE가 커버리지를 디스크에 못 쓴다(src/routes/** 커버리지가
+// 항상 0%로 보이던 원인). process.exit()을 명시적으로 호출해 정상 종료
+// 경로를 타게 한다 — 프로덕션에서도 즉시 종료라는 동작 자체는 동일하다.
+process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT', () => process.exit(0));
