@@ -12,3 +12,4 @@ docs/02_*
 docs/03_*
 .claude/
 public/
+coverage/

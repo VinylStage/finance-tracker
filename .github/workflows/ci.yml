@@ -29,4 +29,4 @@ jobs:
         working-directory: client
       - run: npm run build
         working-directory: client
-      - run: npm run test --if-present
+      - run: npm run test:coverage --if-present
