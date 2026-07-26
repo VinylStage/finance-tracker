@@ -15,22 +15,30 @@
 
 ## 컴포넌트 구조
 
-### 백엔드 라우트 (10개):
+### 백엔드 라우트 (17개 파일 / API 마운트 18개 — 파일 기반 17개 + 인라인 헬스체크 1개):
+- `cardImport.js`
 - `cashflow.js`
 - `categories.js`
+- `csvImport.js`
+- `data.js`
 - `debts.js`
+- `exchange.js`
 - `export.js`
+- `guide.js`
 - `installments.js`
 - `paymentMethods.js`
+- `recurringRules.js`
 - `revolving.js`
 - `savings.js`
 - `settings.js`
+- `stocks.js`
 - `transactions.js`
 
-### 프론트엔드 페이지 (9개):
+### 프론트엔드 페이지 (10개):
 - `Comparison.jsx`
 - `Dashboard.jsx`
 - `Debts.jsx`
+- `Guide.jsx`
 - `Installments.jsx`
 - `Revolving.jsx`
 - `Savings.jsx`
@@ -38,7 +46,10 @@
 - `Simulator.jsx`
 - `Transactions.jsx`
 
-### 프론트엔드 공용 컴포넌트 (2개):
+### 프론트엔드 공용 컴포넌트 (5개):
+- `ConfirmProvider.jsx`
+- `ErrorBoundary.jsx`
+- `LoadError.jsx`
 - `TransactionForm.jsx`
 - `TransactionList.jsx`
 
@@ -49,6 +60,19 @@
 3. [이중계산 방지 로직](./diagrams/03-double-counting-prevention.md) - 할부·리볼빙 결제는 전용 테이블에만 기록해 지출 통계와 분리
 4. [마이너스통장 이자 자가증식 흐름](./diagrams/04-minus-tongjang-interest.md) - 마이너스통장 이자 발생 시 로그 기록 및 잔액 갱신
 5. [대시보드 데이터 집계 흐름](./diagrams/05-dashboard-aggregation.md) - 대시보드 정보 요청 시 병렬 엔드포인트 호출 및 집계
+
+## 대량 목록 화면의 조회 패턴 — 서버 측 필터·집계
+
+`Transactions.jsx`는 한때 전체 거래를 `?limit=5000`으로 한 번에 불러와 검색·월별합계·연도탭을 전부 클라이언트에서 계산했다. 서버가 `limit`을 500건으로 강제 클램프하면서(`total`은 정확했지만 화면이 안 씀), 데이터가 500건을 넘는 순간부터 검색·집계·연도탭이 조용히 "최신 500건" 범위 안에서만 맞는 상태가 됐다(독립 감사 2026-07, FND-02).
+
+근본 해결은 **"화면에 보이는 숫자는 항상 클라이언트가 들고 있는 부분집합이 아니라 서버가 계산한 전체 결과"** 라는 원칙을 지키는 것이다. `transactions.js`가 이 패턴의 참조 구현이다:
+
+- `GET /api/transactions/years` — 존재하는 연도 목록을 서버가 `DISTINCT`로 직접 계산. 탭 목록이 클라이언트가 로드한 부분집합에서 파생되지 않는다.
+- `GET /api/transactions/summary/by-month?year=` — 월별 합계·건수를 서버가 `GROUP BY`로 직접 계산. 검색 필터가 걸려도 합계는 항상 그 필터에 해당하는 전체 데이터 기준이다.
+- 실제 행(목록)은 사용자가 지금 펼친 범위(예: 펼친 달)만 서버에 요청한다 — 화면에 보이지 않는 데이터까지 미리 클라이언트 메모리에 올리지 않는다.
+- 필터(가맹점/메모/금액범위/결제수단/카테고리)는 위 세 조회가 공유하는 단일 WHERE 절 빌더(`buildTransactionFilters`)로 전달돼, 어느 조회를 쓰든 같은 데이터를 가리킨다.
+
+앞으로 목록 화면에 검색·필터·집계를 추가할 때는 "전체를 불러와 클라이언트에서 거른다"가 아니라 이 패턴(서버 집계 + 필요한 범위만 조회)을 기본값으로 삼는다.
 
 ## 핵심 설계 원칙
 
@@ -79,7 +103,16 @@
 
 예외는 `npm run build` 로 빌드한 결과물을 Express가 직접 서빙하는 경우다. 이때 다른 기기에서 접근하려면 `HOST=0.0.0.0` 이 필요하며, 그 시점에는 무인증 노출을 감수하는 것이므로 신뢰된 사설망에서만 사용해야 한다.
 
+### 신뢰 경계에 포함되지 않는 것 — 같은 기기의 브라우저
+
+루프백 바인딩은 **다른 기기로부터의 접근**은 막지만 **같은 기기의 브라우저가 방문하는 임의 웹사이트로부터의 접근**은 막지 못한다. 이 앱이 켜져 있는 상태에서 사용자가 다른 웹사이트를 방문하면, 그 페이지의 HTML `<form>`이나 `fetch()`가 인증 없이 `http://127.0.0.1:3000`의 API를 그대로 호출할 수 있다 — 독립 감사(2026-07, FND-01)가 CSRF로 전체 거래내역을 원격 삭제하는 것을 실증했다.
+
+**이 간극은 네트워크 바인딩으로 막을 수 없다.** 대응은 애플리케이션 계층의 별도 방어다 — `src/utils/csrfGuard.js`가 상태 변경 요청(POST/PUT/DELETE/PATCH)에 대해 `Sec-Fetch-Site`(우선) 또는 `Origin`(폴백) 헤더로 같은 오리진에서 온 요청인지 검증하고, 아니면 403으로 거부한다. GET 요청은 부작용이 없다는 전제로 검증 대상에서 제외한다.
+
+즉 네트워크 바인딩(다른 기기 차단)과 CSRF 가드(같은 기기의 다른 웹사이트 차단)는 서로 다른 위협을 막는 별개의 통제이며, 인증 계층이 없는 이 앱에서는 **둘 다 필요**하다.
+
 ### 관련 결정
 
 - 무인증 상태에서의 잔존 리스크는 `docs/decisions/0003-xlsx-vulnerability-risk-acceptance.md`(→ `0004-xlsx-vendored-upgrade.md` 로 대체)에 기록돼 있다.
 - 외부 터널링(ngrok 등)은 사용하지 않는다.
+- 파괴적 엔드포인트(전체 삭제 등)를 새로 추가할 때는 CSRF 가드가 해당 라우트를 실제로 커버하는지 PR에서 확인한다.

@@ -1,0 +1,39 @@
+{
+  "url": "http://localhost:3099",
+  "runs": 3,
+  "note": "INP는 필드(RUM) 전용 지표라 랩 측정 불가 — TBT를 대체 지표로 기록",
+  "median": {
+    "performanceScore": 0.97,
+    "lcp": 1045.22735,
+    "cls": 0,
+    "tbt": 0,
+    "fcp": 921.5192999999999,
+    "speedIndex": 921.5192999999999
+  },
+  "raw": [
+    {
+      "performanceScore": 0.97,
+      "lcp": 1046.09045,
+      "cls": 0,
+      "tbt": 0,
+      "fcp": 922.0603,
+      "speedIndex": 922.0603
+    },
+    {
+      "performanceScore": 0.97,
+      "lcp": 1045.22735,
+      "cls": 0,
+      "tbt": 0,
+      "fcp": 921.4848999999999,
+      "speedIndex": 921.4848999999999
+    },
+    {
+      "performanceScore": 0.97,
+      "lcp": 1044.27895,
+      "cls": 0,
+      "tbt": 0,
+      "fcp": 921.5192999999999,
+      "speedIndex": 921.5192999999999
+    }
+  ]
+}

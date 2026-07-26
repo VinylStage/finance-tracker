@@ -1,14 +1,15 @@
 # 구현 감사 (Implementation Audit)
 
-최종 확인일: 2026-07-23
+최종 확인일: 2026-07-26
 
-## 현재 구현된 프론트엔드 페이지 (9개)
+## 현재 구현된 프론트엔드 페이지 (10개)
 
 | 파일명 | 역할 |
 |--------|------|
 | Comparison.jsx | 수입과 지출의 비교 분석 페이지 |
 | Dashboard.jsx | 메인 대시보드 페이지 |
 | Debts.jsx | 부채 관리 페이지 |
+| Guide.jsx | 사용 가이드 페이지 |
 | Installments.jsx | 할부 결제 페이지 |
 | Revolving.jsx | 순환 신용 페이지 |
 | Savings.jsx | 적금 페이지 |
@@ -16,19 +17,26 @@
 | Simulator.jsx | 재무 시뮬레이터 페이지 |
 | Transactions.jsx | 거래 내역 페이지 |
 
-## 현재 구현된 백엔드 라우트 (10개)
+## 현재 구현된 백엔드 라우트 (17개 파일 / API 마운트 18개 — 파일 기반 17개 + 인라인 헬스체크 1개)
 
 | 파일명 | 담당 API 영역 |
 |--------|---------------|
+| cardImport.js | 카드사 엑셀 명세서 일괄 임포트 관련 API |
 | cashflow.js | 현금 흐름 관련 API |
 | categories.js | 카테고리 관련 API |
+| csvImport.js | 신한카드 CSV 임포트 관련 API |
+| data.js | 전체 백업 내보내기/복원 관련 API |
 | debts.js | 부채 관련 API |
-| export.js | 데이터 내보내기 관련 API |
+| exchange.js | 환율 조회 관련 API |
+| export.js | 거래 내역/설정 내보내기 관련 API |
+| guide.js | 사용 가이드 콘텐츠 관련 API |
 | installments.js | 할부 결제 관련 API |
 | paymentMethods.js | 결제 수단 관련 API |
+| recurringRules.js | 반복거래 자동등록 관련 API |
 | revolving.js | 순환 신용 관련 API |
 | savings.js | 적금 관련 API |
 | settings.js | 설정 관련 API |
+| stocks.js | 주식 시세 조회 관련 API(KIS 실연동 미구현) |
 | transactions.js | 거래 내역 관련 API |
 
 # Implementation Audit - Phase 2

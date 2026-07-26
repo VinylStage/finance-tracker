@@ -21,7 +21,12 @@ jobs:
       - run: npm ci
         working-directory: client
       - name: Check JS syntax
-        run: find src -name '*.js' -exec node --check {} \;
+        run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Audit dependencies (root)
+        run: npm audit --audit-level=high
+      - name: Audit dependencies (client)
+        run: npm audit --audit-level=high
+        working-directory: client
       - run: npm run build
         working-directory: client
-      - run: npm run test --if-present
+      - run: npm run test:coverage --if-present

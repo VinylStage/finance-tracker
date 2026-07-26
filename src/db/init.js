@@ -61,6 +61,10 @@ db.exec(`
     status TEXT NOT NULL DEFAULT '진행중'
   );
 
+  -- FND-08(감사): installments에 인덱스가 하나도 없어 이번달 청구 합산 등
+  -- status/start_billing_month로 거르는 조회가 전부 풀스캔이었다.
+  CREATE INDEX IF NOT EXISTS idx_installments_status_start ON installments(status, start_billing_month);
+
   CREATE TABLE IF NOT EXISTS revolving_history (
     id INTEGER PRIMARY KEY,
     month TEXT NOT NULL,

@@ -114,6 +114,7 @@ HTML위장(현대) 7개: FAIL — "Can't find end of central directory : is this
 - Dependabot 취약점 알림 2건은 이 변경 반영(0.20.3) 후 재스캔되면 자동 해소된다.
 - 향후 SheetJS가 npm 배포를 재개하면(현재는 재확인 결과 미발생) `vendor/` 벤더링을 걷어내고 통상적인 semver 의존성으로 되돌리는 것을 우선 검토한다.
 - `vendor/xlsx-*.tgz` 업그레이드 시 이 ADR을 갱신하거나, 사소한 패치 버전업이면 이슈 코멘트로 갱신 이력만 남긴다.
+- **`file:` 의존성은 `npm audit`/Dependabot의 어드바이저리 매칭 대상이 아니다**(독립 감사 2026-07, A7) — 이 패키지에 대해서만은 자동 스캔이 "취약점 없음"을 보장하지 않는다. Dependabot이 이 저장소의 다른(semver) 의존성 취약점을 감지해 PR을 열 때마다, 그 김에 SheetJS CDN(`cdn.sheetjs.com`)의 최신 배포 여부도 수동으로 함께 확인한다 — 별도 주기를 새로 만들지 않고 기존 Dependabot 알림에 편승시킨다.
 
 ## 위임 방법론 부기
 

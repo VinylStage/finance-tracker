@@ -45,6 +45,7 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
               <th className="px-4 py-3 w-8">
                 <input
                   type="checkbox"
+                  aria-label="전체 선택"
                   checked={allSelected}
                   onChange={() => onToggleSelectAll?.(items.map(tx => tx.id), !allSelected)}
                   className="cursor-pointer"
@@ -71,6 +72,7 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                 <td className="px-4 py-3">
                   <input
                     type="checkbox"
+                    aria-label={`${tx.date} ${tx.merchant || tx.category_name} 거래 선택`}
                     checked={selectedIds.has(tx.id)}
                     onChange={(e) => handleCheckboxChange(e, tx.id, i)}
                     className="cursor-pointer"

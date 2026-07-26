@@ -5,21 +5,50 @@ const db = require('../db/init');
 const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { PAYMENT_STYLES } = require('../constants');
+const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
+const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
 
-// GET /api/transactions?limit=50&offset=0&from=&to=&category_id=
+// FND-02(감사): 화면(client/Transactions.jsx)이 최대 5000건을 요청했지만
+// 서버가 500건으로 잘라(응답의 total은 정확했지만 화면이 안 씀) 검색/월별합계/
+// 연도탭이 최신 500건 범위 안에서만 동작했다. 근본 해결은 검색·집계를 서버
+// 파라미터로 전부 넘기는 것 — 이 함수가 그 필터를 목록/월별요약 두 라우트가
+// 공유하는 단일 WHERE 절로 만든다(중복 방지).
+function buildTransactionFilters(query) {
+  const { from, to, category_id, merchant, memo, min_amount, max_amount, payment_method_id } = query;
+  let where = ' WHERE 1=1';
+  const params = [];
+  if (from) { where += ' AND t.date >= ?'; params.push(from); }
+  if (to)   { where += ' AND t.date <= ?'; params.push(to); }
+  if (category_id) {
+    const ids = String(category_id).split(',').map(s => asInt(s.trim())).filter(v => v !== null);
+    if (ids.length) { where += ` AND t.category_id IN (${ids.map(() => '?').join(',')})`; params.push(...ids); }
+  }
+  if (merchant) { where += ` AND t.merchant LIKE ? ESCAPE '\\'`; params.push(`%${escapeLike(merchant)}%`); }
+  if (memo) { where += ` AND t.memo LIKE ? ESCAPE '\\'`; params.push(`%${escapeLike(memo)}%`); }
+  if (min_amount !== undefined && min_amount !== '') {
+    const v = asInt(min_amount);
+    if (v !== null) { where += ' AND t.amount >= ?'; params.push(v); }
+  }
+  if (max_amount !== undefined && max_amount !== '') {
+    const v = asInt(max_amount);
+    if (v !== null) { where += ' AND t.amount <= ?'; params.push(v); }
+  }
+  if (payment_method_id) {
+    const v = asInt(payment_method_id);
+    if (v !== null) { where += ' AND t.payment_method_id = ?'; params.push(v); }
+  }
+  return { where, params };
+}
+
+// GET /api/transactions?limit=50&offset=0&from=&to=&category_id=&merchant=&memo=&min_amount=&max_amount=&payment_method_id=
 router.get('/', (req, res) => {
   try {
-    const { from, to, category_id } = req.query;
     // limit/offset 은 정수로 강제하고 범위를 제한한다(잘못된 값으로 인한 500·과도한 조회 방지)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
 
     // WHERE 절을 목록 쿼리와 카운트 쿼리가 공유한다(total 이 필터를 반영하도록)
-    let where = ' WHERE 1=1';
-    const whereParams = [];
-    if (from) { where += ' AND t.date >= ?'; whereParams.push(from); }
-    if (to)   { where += ' AND t.date <= ?'; whereParams.push(to); }
-    if (category_id) { where += ' AND t.category_id = ?'; whereParams.push(category_id); }
+    const { where, params: whereParams } = buildTransactionFilters(req.query);
 
     const rows = db.prepare(`
       SELECT t.*, c.name AS category_name, c.major_type,
@@ -47,26 +76,12 @@ const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
 
 function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); } // month: 1-indexed
 function fmtYMD(y, m, d) { return `${y}-${pad2(m)}-${pad2(d)}`; }
-function fmtDateObj(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
-
-function rangeTotalsByDate(from, to) {
-  const rows = db.prepare(`
-    SELECT t.date AS date,
-      COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-      COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
-    FROM transactions t
-    JOIN categories c ON t.category_id = c.id
-    WHERE t.date >= ? AND t.date <= ?
-    GROUP BY t.date
-  `).all(from, to);
-  return new Map(rows.map(r => [r.date, r]));
-}
 
 function totalsForRange(from, to) {
   return db.prepare(`
     SELECT
-      COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-      COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+      COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+      COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
     FROM transactions t
     JOIN categories c ON t.category_id = c.id
     WHERE t.date >= ? AND t.date <= ?
@@ -124,15 +139,15 @@ function periodComparisonWeekly(anchor) {
   const curSunday = new Date(curMonday); curSunday.setDate(curMonday.getDate() + 6);
   const prevSunday = new Date(prevMonday); prevSunday.setDate(prevMonday.getDate() + 6);
 
-  const curFrom = fmtDateObj(curMonday), curTo = fmtDateObj(curSunday);
-  const prevFrom = fmtDateObj(prevMonday), prevTo = fmtDateObj(prevSunday);
+  const curFrom = localYMD(curMonday), curTo = localYMD(curSunday);
+  const prevFrom = localYMD(prevMonday), prevTo = localYMD(prevSunday);
   const curMap = rangeTotalsByDate(curFrom, curTo);
   const prevMap = rangeTotalsByDate(prevFrom, prevTo);
 
   const data = WEEKDAY_LABELS.map((label, i) => {
     const cDate = new Date(curMonday); cDate.setDate(curMonday.getDate() + i);
     const pDate = new Date(prevMonday); pDate.setDate(prevMonday.getDate() + i);
-    const cKey = fmtDateObj(cDate), pKey = fmtDateObj(pDate);
+    const cKey = localYMD(cDate), pKey = localYMD(pDate);
     const c = curMap.get(cKey) || { income: 0, expense: 0 };
     const p = prevMap.get(pKey) || { income: 0, expense: 0 };
     return {
@@ -154,16 +169,19 @@ function periodComparisonMonthly(anchor) {
   const curFrom = `${y}-01-01`, curTo = `${y}-12-31`;
   const prevFrom = `${py}-01-01`, prevTo = `${py}-12-31`;
 
+  // FND-08(감사): strftime('%Y', t.date) = ? 는 인덱스 컬럼을 함수로 감싸
+  // idx_tx_date를 못 쓴다(풀스캔). [해당 연도 1/1, 다음 연도 1/1) 범위
+  // 비교로 바꾼다 — GROUP BY의 strftime('%m', ...)은 그대로 둬도 무방하다.
   const monthRowsFor = (year) => {
     const rows = db.prepare(`
       SELECT strftime('%m', t.date) AS m,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE strftime('%Y', t.date) = ?
+      WHERE t.date >= ? AND t.date < ?
       GROUP BY m
-    `).all(String(year));
+    `).all(`${year}-01-01`, `${year + 1}-01-01`);
     return new Map(rows.map(r => [r.m, r]));
   };
   const curMap = monthRowsFor(y);
@@ -195,8 +213,8 @@ function periodComparisonYearly(anchor) {
     const from = `${years[0]}-01-01`, to = `${years[4]}-12-31`;
     const rows = db.prepare(`
       SELECT strftime('%Y', t.date) AS yr,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       WHERE t.date >= ? AND t.date <= ?
@@ -245,7 +263,7 @@ router.get('/period-comparison', (req, res) => {
 
     res.json({
       period,
-      anchorDate: fmtDateObj(anchor),
+      anchorDate: localYMD(anchor),
       currentLabel: result.currentLabel,
       previousLabel: result.previousLabel,
       data: result.data,
@@ -273,6 +291,50 @@ router.delete('/', (req, res) => {
       return res.json({ ok: true, deleted });
     }
     return res.status(400).json({ error: 'ids (non-empty array) or all=true required' });
+  } catch (e) {
+    serverError(res, e, 'transactions');
+  }
+});
+
+// GET /api/transactions/years — 거래가 존재하는 연도 목록(내림차순)
+// FND-02(감사): 화면의 연도 탭이 (500건 클램프로 잘린) 인메모리 목록에서
+// 파생됐다. 실제 존재하는 연도를 서버가 직접 계산해 내려준다.
+// 등록 순서 중요: 아래 /:id 라우트보다 반드시 앞에 있어야 함(동일 세그먼트 매칭 충돌)
+router.get('/years', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT DISTINCT strftime('%Y', date) AS year FROM transactions ORDER BY year DESC
+    `).all();
+    res.json({ data: rows.map(r => r.year) });
+  } catch (e) {
+    serverError(res, e, 'transactions');
+  }
+});
+
+// GET /api/transactions/summary/by-month?year=YYYY&merchant=&memo=&min_amount=&max_amount=&payment_method_id=&category_id=
+// FND-02(감사): 월별 수입/지출 합계·건수를 (500건 클램프로 잘린) 인메모리
+// 목록에서 계산했다. 서버가 GROUP BY로 직접 계산해, 필터가 걸려도 화면에
+// 보이는 합계가 항상 전체 데이터 기준이 되도록 한다.
+// 등록 순서 무관(세그먼트 2개라 /:id 와 충돌 없음) — 가독성상 /:id 근처에 둔다.
+router.get('/summary/by-month', (req, res) => {
+  try {
+    const { year } = req.query;
+    if (!year || !/^\d{4}$/.test(year)) return res.status(400).json({ error: 'year (YYYY) required' });
+    const { where, params } = buildTransactionFilters({
+      ...req.query, from: `${year}-01-01`, to: `${year}-12-31`,
+    });
+    const rows = db.prepare(`
+      SELECT strftime('%Y-%m', t.date) AS month,
+        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
+        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense,
+        COUNT(*) AS count
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      ${where}
+      GROUP BY month
+      ORDER BY month DESC
+    `).all(...params);
+    res.json({ data: rows });
   } catch (e) {
     serverError(res, e, 'transactions');
   }
@@ -356,80 +418,34 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-function pad2(n) { return String(n).padStart(2, '0'); }
-
-function lastNDates(n) {
-  const arr = [];
-  const today = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    arr.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`);
-  }
-  return arr;
-}
-
-function mondayOf(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return d;
-}
-
-function lastNWeeks(n) {
-  const weeks = [];
-  const thisMonday = mondayOf(new Date());
-  for (let i = n - 1; i >= 0; i--) {
-    const start = new Date(thisMonday);
-    start.setDate(thisMonday.getDate() - i * 7);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    const fmtDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-    weeks.push({ week: fmtDate(start), start: fmtDate(start), end: fmtDate(end) });
-  }
-  return weeks;
-}
-
-function lastNMonths(n) {
-  const arr = [];
-  const today = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    arr.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
-  }
-  return arr;
-}
-
 // GET /api/transactions/summary/dashboard — 대시보드 집계
 router.get('/summary/dashboard', (req, res) => {
   try {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    // FND-08(감사): strftime('%Y-%m', t.date) = ? 는 인덱스 컬럼을 함수로
+    // 감싸 idx_tx_date를 못 쓴다(풀스캔). 이번 달의 [1일, 다음달 1일) 범위
+    // 비교로 바꿔 이 라우트의 모든 "이번 달" 조회에서 재사용한다.
+    const [monthStart, monthEnd] = monthBounds(thisMonth);
 
     const income = db.prepare(`
       SELECT COALESCE(SUM(t.amount),0) AS total
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE strftime('%Y-%m', t.date) = ? AND c.major_type = '수입'
-    `).get(thisMonth).total;
+      WHERE t.date >= ? AND t.date < ? AND c.major_type = '수입'
+    `).get(monthStart, monthEnd).total;
 
     const expense = db.prepare(`
       SELECT COALESCE(SUM(t.amount),0) AS total
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE strftime('%Y-%m', t.date) = ? AND c.major_type != '수입'
+      WHERE t.date >= ? AND t.date < ? AND c.major_type != '수입'
       AND t.payment_style NOT IN ('할부','리볼빙')
-    `).get(thisMonth).total;
+    `).get(monthStart, monthEnd).total;
 
-    // 청구 기간(start_billing_month 부터 months 개월)이 이번 달을 포함하는 건만 합산한다
-    const installmentsDue = db.prepare(`
-      SELECT COALESCE(SUM(monthly_amount),0) AS total
-      FROM installments
-      WHERE status = '진행중'
-        AND start_billing_month <= ?
-        AND ? < strftime('%Y-%m', date(start_billing_month || '-01', '+' || months || ' months'))
-    `).get(thisMonth, thisMonth).total;
+    // FND-05(감사): 이 정확한 버전을 /api/installments가 별도로 재구현하며
+    // 청구 기간 종료를 놓쳐 서로 다른 값을 반환했다. 공유 함수로 통일.
+    const installmentsDue = installmentsDueForMonth(thisMonth);
 
     const revolvingPaid = db.prepare(`
       SELECT COALESCE(SUM(paid_amount), 0) AS total
@@ -441,35 +457,39 @@ router.get('/summary/dashboard', (req, res) => {
       SELECT c.name, c.major_type, c.monthly_budget,
         COALESCE(SUM(t.amount),0) AS spent
       FROM categories c
-      LEFT JOIN transactions t ON t.category_id = c.id AND strftime('%Y-%m', t.date) = ?
+      LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date < ?
       WHERE c.is_active = 1 AND c.monthly_budget > 0
       GROUP BY c.id
-    `).all(thisMonth);
+    `).all(monthStart, monthEnd);
 
     // 카테고리별 지출 분석 (도넛 차트용)
     const categoryBreakdown = db.prepare(`
       SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total, c.monthly_budget AS budget
       FROM categories c
-      LEFT JOIN transactions t ON t.category_id = c.id AND strftime('%Y-%m', t.date) = ?
+      LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date < ?
         AND t.payment_style NOT IN ('할부','리볼빙')
       WHERE c.is_active = 1 AND c.major_type != '수입'
       GROUP BY c.id
       HAVING total > 0
       ORDER BY total DESC
-    `).all(thisMonth);
+    `).all(monthStart, monthEnd);
 
     // 최근 30일 일별 수입/지출
+    // FND-20(감사): date('now', '-29 days')는 UTC 기준이라 KST 자정~9시 사이엔
+    // 경계가 하루 밀렸다. 이미 KST 기준으로 정확한 lastNDates(30)의 첫 날짜를
+    // 그대로 바인딩해 SQL이 'now'를 참조하지 않도록 한다.
+    const dailyDates = lastNDates(30);
     const dailyRows = db.prepare(`
       SELECT t.date AS date,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= date('now', '-29 days')
+      WHERE t.date >= ?
       GROUP BY t.date
-    `).all();
+    `).all(dailyDates[0]);
     const dailyMap = Object.fromEntries(dailyRows.map(r => [r.date, r]));
-    const dailyTrend = lastNDates(30).map(date => ({
+    const dailyTrend = dailyDates.map(date => ({
       date,
       income: dailyMap[date]?.income || 0,
       expense: dailyMap[date]?.expense || 0,
@@ -481,24 +501,17 @@ router.get('/summary/dashboard', (req, res) => {
     const weeklyTrend = weeks.map(w => {
       let income = 0, expense = 0;
       for (let d = new Date(w.start), end = new Date(w.end); d <= end; d.setDate(d.getDate() + 1)) {
-        const r = weekDayMap.get(fmtDateObj(d));
+        const r = weekDayMap.get(localYMD(d));
         if (r) { income += r.income; expense += r.expense; }
       }
-      return { week: w.week, income, expense };
+      return { week: w.label, income, expense };
     });
 
     // 최근 12개월 월별 수입/지출 — 범위 전체를 월별 GROUP BY 로 한 번 조회(N+1 제거)
+    // FND-08(감사): WHERE 절도 strftime 등호 비교(비sargable) 대신 범위
+    // 비교로 바꿔 cashflow.js와 함께 쓰는 공유 함수로 통일한다.
     const months = lastNMonths(12);
-    const monthRows = db.prepare(`
-      SELECT strftime('%Y-%m', t.date) AS ym,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense
-      FROM transactions t
-      JOIN categories c ON t.category_id = c.id
-      WHERE strftime('%Y-%m', t.date) >= ? AND strftime('%Y-%m', t.date) <= ?
-      GROUP BY ym
-    `).all(months[0], months[months.length - 1]);
-    const monthMap = new Map(monthRows.map(r => [r.ym, r]));
+    const monthMap = monthlyTotalsInRange(months[0], months[months.length - 1]);
     const monthlyTrend = months.map(month => {
       const r = monthMap.get(month) || { income: 0, expense: 0 };
       return { month, income: r.income, expense: r.expense };
@@ -509,13 +522,13 @@ router.get('/summary/dashboard', (req, res) => {
       SELECT t.merchant AS merchant, SUM(t.amount) AS total
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE strftime('%Y-%m', t.date) = ? AND c.major_type != '수입'
+      WHERE t.date >= ? AND t.date < ? AND c.major_type != '수입'
         AND t.payment_style NOT IN ('할부','리볼빙')
         AND t.merchant IS NOT NULL AND t.merchant != ''
       GROUP BY t.merchant
       ORDER BY total DESC
       LIMIT 5
-    `).all(thisMonth);
+    `).all(monthStart, monthEnd);
 
     res.json({
       thisMonth, income, expense,

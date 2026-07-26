@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    # xlsx는 file: 벤더링 의존성(docs/decisions/0004-xlsx-vendored-upgrade.md)이라
+    # Dependabot의 어드바이저리 매칭 대상이 아니다 — 여기서 관리하지 않는다.
+    ignore:
+      - dependency-name: "xlsx"
+
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

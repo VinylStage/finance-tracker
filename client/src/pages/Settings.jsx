@@ -80,12 +80,12 @@ function AppSettingsSection({ initial, onSaved }) {
       <h2 className="text-sm font-semibold text-slate-700">기본 설정</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">초기 잔액 (원)</label>
-          <input type="number" className={inp} value={form.initial_balance} onChange={e => setForm(f => ({ ...f, initial_balance: e.target.value }))} />
+          <label htmlFor="settings-initial-balance" className="block text-xs text-slate-500 mb-1">초기 잔액 (원)</label>
+          <input id="settings-initial-balance" type="number" className={inp} value={form.initial_balance} onChange={e => setForm(f => ({ ...f, initial_balance: e.target.value }))} />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">월 수입 기준값 (원)</label>
-          <input type="number" className={inp} value={form.monthly_income} onChange={e => setForm(f => ({ ...f, monthly_income: e.target.value }))} />
+          <label htmlFor="settings-monthly-income" className="block text-xs text-slate-500 mb-1">월 수입 기준값 (원)</label>
+          <input id="settings-monthly-income" type="number" className={inp} value={form.monthly_income} onChange={e => setForm(f => ({ ...f, monthly_income: e.target.value }))} />
         </div>
       </div>
       <div className="flex items-center gap-3">
@@ -192,18 +192,18 @@ function CategorySection({ categories, onChanged }) {
       {showForm && (
         <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">유형</label>
-            <select className={inp} value={form.major_type} onChange={e => setForm(f => ({ ...f, major_type: e.target.value }))}>
+            <label htmlFor="category-major-type" className="block text-xs text-slate-500 mb-1">유형</label>
+            <select id="category-major-type" className={inp} value={form.major_type} onChange={e => setForm(f => ({ ...f, major_type: e.target.value }))}>
               {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">이름</label>
-            <input type="text" className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+            <label htmlFor="category-name" className="block text-xs text-slate-500 mb-1">이름</label>
+            <input id="category-name" type="text" className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">월 예산</label>
-            <input type="number" className={inp} placeholder="0" value={form.monthly_budget} onChange={e => setForm(f => ({ ...f, monthly_budget: e.target.value }))} />
+            <label htmlFor="category-monthly-budget" className="block text-xs text-slate-500 mb-1">월 예산</label>
+            <input id="category-monthly-budget" type="number" className={inp} placeholder="0" value={form.monthly_budget} onChange={e => setForm(f => ({ ...f, monthly_budget: e.target.value }))} />
           </div>
           <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">추가</button>
         </form>
@@ -224,7 +224,8 @@ function CategorySection({ categories, onChanged }) {
                 {editing === c.id ? (
                   <>
                     <td className="px-3 py-2">
-                      <select 
+                      <select
+                        aria-label={`${c.name} 유형 수정`}
                         className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
                         value={editForm.major_type}
                         onChange={e => setEditForm(f => ({ ...f, major_type: e.target.value }))}
@@ -235,6 +236,7 @@ function CategorySection({ categories, onChanged }) {
                     <td className="px-3 py-2">
                       <input
                         type="text"
+                        aria-label={`${c.name} 이름 수정`}
                         className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
                         value={editForm.name}
                         onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
@@ -243,6 +245,7 @@ function CategorySection({ categories, onChanged }) {
                     <td className="px-3 py-2 text-right">
                       <input
                         type="number"
+                        aria-label={`${c.name} 월 예산 수정`}
                         className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs"
                         value={editForm.monthly_budget}
                         onChange={e => setEditForm(f => ({ ...f, monthly_budget: e.target.value }))}
@@ -260,6 +263,7 @@ function CategorySection({ categories, onChanged }) {
                     <td className="px-3 py-2 text-right">
                       <input
                         type="number" defaultValue={c.monthly_budget}
+                        aria-label={`${c.name} 월 예산`}
                         onBlur={e => handleBudgetChange(c, e.target.value)}
                         className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs"
                       />
@@ -368,34 +372,34 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
       {showForm && (
         <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">카테고리</label>
-            <select className={inp} value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} required>
+            <label htmlFor="rule-category" className="block text-xs text-slate-500 mb-1">카테고리</label>
+            <select id="rule-category" className={inp} value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} required>
               <option value="">선택...</option>
               {categories.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">가맹점/이름</label>
-            <input type="text" className={inp} value={form.merchant} onChange={e => setForm(f => ({ ...f, merchant: e.target.value }))} required />
+            <label htmlFor="rule-merchant" className="block text-xs text-slate-500 mb-1">가맹점/이름</label>
+            <input id="rule-merchant" type="text" className={inp} value={form.merchant} onChange={e => setForm(f => ({ ...f, merchant: e.target.value }))} required />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">금액</label>
-            <input type="number" className={inp} placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
+            <label htmlFor="rule-amount" className="block text-xs text-slate-500 mb-1">금액</label>
+            <input id="rule-amount" type="number" className={inp} placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">매월 며칠</label>
-            <input type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
+            <label htmlFor="rule-day-of-month" className="block text-xs text-slate-500 mb-1">매월 며칠</label>
+            <input id="rule-day-of-month" type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">결제수단</label>
-            <select className={inp} value={form.payment_method_id} onChange={e => setForm(f => ({ ...f, payment_method_id: e.target.value }))}>
+            <label htmlFor="rule-payment-method" className="block text-xs text-slate-500 mb-1">결제수단</label>
+            <select id="rule-payment-method" className={inp} value={form.payment_method_id} onChange={e => setForm(f => ({ ...f, payment_method_id: e.target.value }))}>
               <option value="">선택...</option>
               {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">결제방식</label>
-            <select className={inp} value={form.payment_style} onChange={e => setForm(f => ({ ...f, payment_style: e.target.value }))}>
+            <label htmlFor="rule-payment-style" className="block text-xs text-slate-500 mb-1">결제방식</label>
+            <select id="rule-payment-style" className={inp} value={form.payment_style} onChange={e => setForm(f => ({ ...f, payment_style: e.target.value }))}>
               <option value="일시불">일시불</option>
               <option value="해당없음">해당없음</option>
             </select>
@@ -529,12 +533,12 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
       {showForm && (
         <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">이름</label>
-            <input type="text" className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+            <label htmlFor="pm-name" className="block text-xs text-slate-500 mb-1">이름</label>
+            <input id="pm-name" type="text" className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">유형</label>
-            <select className={inp} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+            <label htmlFor="pm-type" className="block text-xs text-slate-500 mb-1">유형</label>
+            <select id="pm-type" className={inp} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
               {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
@@ -548,11 +552,13 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
               <>
                 <input
                   type="text"
+                  aria-label={`${p.name} 이름 수정`}
                   className="bg-white border border-slate-300 rounded px-2 py-1 text-xs w-16"
                   value={editForm.name}
                   onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                 />
-                <select 
+                <select
+                  aria-label={`${p.name} 유형 수정`}
                   className="bg-white border border-slate-300 rounded px-2 py-1 text-xs"
                   value={editForm.type}
                   onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}
@@ -599,12 +605,12 @@ function ExportSection() {
       <h2 className="text-sm font-semibold text-slate-700">데이터 내보내기</h2>
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">시작일 (CSV, 선택)</label>
-          <input type="date" className={inp} value={from} onChange={e => setFrom(e.target.value)} />
+          <label htmlFor="export-from" className="block text-xs text-slate-500 mb-1">시작일 (CSV, 선택)</label>
+          <input id="export-from" type="date" className={inp} value={from} onChange={e => setFrom(e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">종료일 (CSV, 선택)</label>
-          <input type="date" className={inp} value={to} onChange={e => setTo(e.target.value)} />
+          <label htmlFor="export-to" className="block text-xs text-slate-500 mb-1">종료일 (CSV, 선택)</label>
+          <input id="export-to" type="date" className={inp} value={to} onChange={e => setTo(e.target.value)} />
         </div>
         <button onClick={() => handleExport('csv')} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">CSV 다운로드 (거래내역)</button>
         <button onClick={() => handleExport('json')} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">JSON 다운로드 (전체 백업)</button>
@@ -615,6 +621,7 @@ function ExportSection() {
 
 function SettingsBackupSection() {
   const [msg, setMsg] = useState('');
+  const { confirm, alert } = useConfirm();
 
   const handleExport = () => {
     window.location.href = '/api/export/settings';
@@ -624,13 +631,17 @@ function SettingsBackupSection() {
     const file = e.target.files[0];
     if (!file) return;
     try {
+      if (!await confirm('현재 카테고리·결제수단·설정값을 파일 내용으로 덮어씁니다. 계속할까요?', { tone: 'danger', confirmLabel: '복원' })) {
+        e.target.value = '';
+        return;
+      }
       const text = await file.text();
       const payload = JSON.parse(text);
-      const data = await api.post('/api/export/settings/restore', payload);
+      const data = await api.post('/api/export/settings/restore', { ...payload, confirm: 'OVERWRITE_SETTINGS' });
       if (data.ok) { setMsg('설정이 복원되었습니다.'); setTimeout(() => window.location.reload(), 1000); }
       else setMsg('복원 실패: ' + data.error);
     } catch (err) {
-      setMsg('오류: ' + err.message);
+      await alert(err.message);
     }
     e.target.value = '';
   };
@@ -1001,6 +1012,7 @@ function DangerZoneSection() {
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
+          aria-label={`확인을 위해 "${DANGER_CONFIRM_TEXT}" 입력`}
           className="bg-white border border-rose-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-rose-500"
           placeholder={`확인을 위해 "${DANGER_CONFIRM_TEXT}" 입력`}
           value={confirmText}

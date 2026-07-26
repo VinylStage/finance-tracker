@@ -261,26 +261,26 @@ function DebtForm({ initial, onSave, onCancel }) {
       <h2 className="text-sm font-semibold text-slate-600">{initial ? '부채 수정' : '부채 추가'}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">부채명 *</label>
-          <input type="text" className={inp} value={form.name} onChange={e => set('name', e.target.value)} required />
+          <label htmlFor="debt-name" className="block text-xs text-slate-500 mb-1">부채명 *</label>
+          <input id="debt-name" type="text" className={inp} value={form.name} onChange={e => set('name', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">타입</label>
-          <select className={inp} value={form.type} onChange={e => set('type', e.target.value)}>
+          <label htmlFor="debt-type" className="block text-xs text-slate-500 mb-1">타입</label>
+          <select id="debt-type" className={inp} value={form.type} onChange={e => set('type', e.target.value)}>
             {DEBT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">잔액 (원) *</label>
-          <input type="number" className={inp} value={form.balance} onChange={e => set('balance', e.target.value)} required />
+          <label htmlFor="debt-balance" className="block text-xs text-slate-500 mb-1">잔액 (원) *</label>
+          <input id="debt-balance" type="number" className={inp} value={form.balance} onChange={e => set('balance', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">연이율 (%)</label>
-          <input type="number" step="0.01" className={inp} placeholder="0" value={form.annual_rate} onChange={e => set('annual_rate', e.target.value)} />
+          <label htmlFor="debt-annual-rate" className="block text-xs text-slate-500 mb-1">연이율 (%)</label>
+          <input id="debt-annual-rate" type="number" step="0.01" className={inp} placeholder="0" value={form.annual_rate} onChange={e => set('annual_rate', e.target.value)} />
         </div>
         <div className="sm:col-span-2">
-          <label className="block text-xs text-slate-500 mb-1">메모</label>
-          <input type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
+          <label htmlFor="debt-memo" className="block text-xs text-slate-500 mb-1">메모</label>
+          <input id="debt-memo" type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
         </div>
       </div>
       <div className="flex gap-3 pt-1">
@@ -324,20 +324,20 @@ function InterestForm({ debt, onSave, onCancel }) {
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">날짜 *</label>
-          <input type="date" className={inp} value={form.log_date} onChange={e => set('log_date', e.target.value)} required />
+          <label htmlFor="interest-log-date" className="block text-xs text-slate-500 mb-1">날짜 *</label>
+          <input id="interest-log-date" type="date" className={inp} value={form.log_date} onChange={e => set('log_date', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">현재 금리 (%) *</label>
-          <input type="number" step="0.01" className={inp} value={form.rate} onChange={e => set('rate', e.target.value)} required />
+          <label htmlFor="interest-rate" className="block text-xs text-slate-500 mb-1">현재 금리 (%) *</label>
+          <input id="interest-rate" type="number" step="0.01" className={inp} value={form.rate} onChange={e => set('rate', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">이자 금액 (원) *</label>
-          <input type="number" className={inp} value={form.interest_amount} onChange={e => set('interest_amount', e.target.value)} required />
+          <label htmlFor="interest-amount" className="block text-xs text-slate-500 mb-1">이자 금액 (원) *</label>
+          <input id="interest-amount" type="number" className={inp} value={form.interest_amount} onChange={e => set('interest_amount', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">메모</label>
-          <input type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
+          <label htmlFor="interest-memo" className="block text-xs text-slate-500 mb-1">메모</label>
+          <input id="interest-memo" type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
         </div>
       </div>
       <p className="text-xs text-slate-400">이자 금액은 부채 잔액에 자동으로 더해집니다.</p>
