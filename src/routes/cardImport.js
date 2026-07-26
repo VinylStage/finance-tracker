@@ -3,11 +3,25 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const path = require('path');
 const db = require('../db/init');
 const { serverError, errMsg } = require('../utils/errors');
 const { parseCardExcel, detectCardCompany } = require('../services/cardExcelImport');
 
-const upload = multer({ storage: multer.memoryStorage() });
+// FND-09(감사): 파일 개수(30개)만 제한하고 크기·형식 제한이 없어 memoryStorage에
+// 임의 크기·형식의 바이너리가 그대로 적재될 수 있었다. 실제 카드사 엑셀 명세서는
+// 수백 KB 수준이라 파일당 10MB(다른 곳의 JSON 본문 한도와 동일 기준)면 충분하다.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.xlsx' && ext !== '.xls') {
+      return cb(new Error('UNSUPPORTED_FILE_TYPE: .xlsx 또는 .xls 파일만 업로드할 수 있습니다.'));
+    }
+    cb(null, true);
+  },
+});
 
 // Function to process transactions (shared logic between preview and real import)
 function processTransactions(cardCompany, originalname, fileBuffer, isPreview = false) {
@@ -129,6 +143,20 @@ function decodeFilename(name) {
   return Buffer.from(name, 'latin1').toString('utf8');
 }
 
+// multer 미들웨어(크기 초과·fileFilter 거부 등)의 오류는 next(err)로 라우트 핸들러를
+// 건너뛰고 곧장 에러 미들웨어로 가버린다 — 여기서 잡아 사용자 입력 오류(400)로 변환한다.
+function uploadOrReject(multerMiddleware) {
+  return (req, res, next) => {
+    multerMiddleware(req, res, (err) => {
+      if (!err) return next();
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: '파일 크기가 너무 큽니다 (파일당 최대 10MB)' });
+      }
+      return res.status(400).json({ error: errMsg(err).replace(/^UNSUPPORTED_FILE_TYPE:\s*/, '') || '파일을 업로드할 수 없습니다.' });
+    });
+  };
+}
+
 // 파싱/입력 오류(사용자 문제)는 400 대상, 그 외는 서버 오류로 구분한다.
 function isUserInputError(message) {
   return /^(UNSUPPORTED_CARD|SHEET_NOT_FOUND|PARSE_FAILED):/.test(message);
@@ -160,7 +188,7 @@ function aggregate(results) {
   return totals;
 }
 
-router.post('/', upload.array('files', 30), async (req, res) => {
+router.post('/', uploadOrReject(upload.array('files', 30)), async (req, res) => {
   try {
     const files = req.files;
     if (!files || files.length === 0) {
@@ -178,7 +206,7 @@ router.post('/', upload.array('files', 30), async (req, res) => {
 });
 
 // 단일 파일 하위호환 라우트 (기존 'file' 필드로 호출하는 클라이언트 대응)
-router.post('/single', upload.single('file'), async (req, res) => {
+router.post('/single', uploadOrReject(upload.single('file')), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file is required' });
     const isPreview = req.query.preview === 'true';
