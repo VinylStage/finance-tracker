@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const path = require('path');
+const { csrfGuard } = require('./utils/csrfGuard');
 const { securityHeaders } = require('./utils/securityHeaders');
 const { serverError } = require('./utils/errors');
 const app = express();
@@ -12,6 +13,7 @@ app.use(securityHeaders);
 // 라우트별 limit 설정은 무효가 된다. 전역에서 한도를 올려 통일한다.
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+app.use(csrfGuard);
 
 // API routes
 app.use('/api/transactions', require('./routes/transactions'));
