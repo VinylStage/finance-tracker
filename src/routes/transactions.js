@@ -6,7 +6,7 @@ const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { PAYMENT_STYLES } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD } = require('../utils/date');
-const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth } = require('../utils/aggregation');
+const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate } = require('../utils/aggregation');
 
 // FND-02(감사): 화면(client/Transactions.jsx)이 최대 5000건을 요청했지만
 // 서버가 500건으로 잘라(응답의 total은 정확했지만 화면이 안 씀) 검색/월별합계/
@@ -76,19 +76,6 @@ const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
 
 function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); } // month: 1-indexed
 function fmtYMD(y, m, d) { return `${y}-${pad2(m)}-${pad2(d)}`; }
-
-function rangeTotalsByDate(from, to) {
-  const rows = db.prepare(`
-    SELECT t.date AS date,
-      COALESCE(SUM(${INCOME_CASE}), 0) AS income,
-      COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
-    FROM transactions t
-    JOIN categories c ON t.category_id = c.id
-    WHERE t.date >= ? AND t.date <= ?
-    GROUP BY t.date
-  `).all(from, to);
-  return new Map(rows.map(r => [r.date, r]));
-}
 
 function totalsForRange(from, to) {
   return db.prepare(`
