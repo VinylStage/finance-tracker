@@ -4,6 +4,9 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYMD } = require('../utils/date');
+const { asInt } = require('../utils/validate');
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // GET /api/data/export - Export all transactions with category names
 router.get('/export', (req, res) => {
@@ -102,7 +105,20 @@ router.post('/import', (req, res) => {
           skipped++;
           continue;
         }
-        
+
+        // FND-06(감사): date 형식/amount 타입을 검증하지 않아 백업 파일을 통해
+        // 문자열 금액이 그대로 들어올 수 있었다. 형식이 안 맞는 행은 (기존의
+        // 필드 누락 행과 동일하게) 스킵하고 나머지는 정상 복원한다.
+        if (!DATE_RE.test(tx.date)) {
+          skipped++;
+          continue;
+        }
+        const amount = asInt(tx.amount);
+        if (amount === null) {
+          skipped++;
+          continue;
+        }
+
         let categoryId = tx.category_id;
         
         // If category_id doesn't exist, try to find by category_name (O(1) 조회)
@@ -141,7 +157,7 @@ router.post('/import', (req, res) => {
         }
 
         // Insert transaction
-        insertTx.run(tx.date, tx.merchant, tx.amount, categoryId, tx.memo, payment_method_id, payment_style, approval_number, installment_id, created_at);
+        insertTx.run(tx.date, tx.merchant, amount, categoryId, tx.memo, payment_method_id, payment_style, approval_number, installment_id, created_at);
         imported++;
       }
     });
