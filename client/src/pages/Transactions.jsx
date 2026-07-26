@@ -238,23 +238,23 @@ export default function Transactions() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <input
-            type="text" placeholder="가맹점 검색" className={inp}
+            type="text" placeholder="가맹점 검색" aria-label="가맹점 검색" className={inp}
             value={filters.merchant} onChange={e => setFilters(f => ({ ...f, merchant: e.target.value }))}
           />
           <input
-            type="text" placeholder="메모 검색" className={inp}
+            type="text" placeholder="메모 검색" aria-label="메모 검색" className={inp}
             value={filters.memo} onChange={e => setFilters(f => ({ ...f, memo: e.target.value }))}
           />
           <input
-            type="number" placeholder="최소 금액" className={inp}
+            type="number" placeholder="최소 금액" aria-label="최소 금액" className={inp}
             value={filters.minAmount} onChange={e => setFilters(f => ({ ...f, minAmount: e.target.value }))}
           />
           <input
-            type="number" placeholder="최대 금액" className={inp}
+            type="number" placeholder="최대 금액" aria-label="최대 금액" className={inp}
             value={filters.maxAmount} onChange={e => setFilters(f => ({ ...f, maxAmount: e.target.value }))}
           />
           <select
-            className={inp}
+            aria-label="결제수단 필터" className={inp}
             value={filters.paymentMethodId} onChange={e => setFilters(f => ({ ...f, paymentMethodId: e.target.value }))}
           >
             <option value="">결제수단 전체</option>

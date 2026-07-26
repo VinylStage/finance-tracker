@@ -77,24 +77,24 @@ export default function Simulator() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">월 수입 (원)</label>
-                <input type="number" className={inp} placeholder="0" value={form.income} onChange={e => set('income', e.target.value)} />
+                <label htmlFor="sim-income" className="block text-xs text-slate-500 mb-1">월 수입 (원)</label>
+                <input id="sim-income" type="number" className={inp} placeholder="0" value={form.income} onChange={e => set('income', e.target.value)} />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">월 지출/고정비 (원)</label>
-                <input type="number" className={inp} placeholder="0" value={form.expense} onChange={e => set('expense', e.target.value)} />
+                <label htmlFor="sim-expense" className="block text-xs text-slate-500 mb-1">월 지출/고정비 (원)</label>
+                <input id="sim-expense" type="number" className={inp} placeholder="0" value={form.expense} onChange={e => set('expense', e.target.value)} />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">부채상환 (원)</label>
-                <input type="number" className={inp} placeholder="0" value={form.debtPayment} onChange={e => set('debtPayment', e.target.value)} />
+                <label htmlFor="sim-debt-payment" className="block text-xs text-slate-500 mb-1">부채상환 (원)</label>
+                <input id="sim-debt-payment" type="number" className={inp} placeholder="0" value={form.debtPayment} onChange={e => set('debtPayment', e.target.value)} />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">저축 (원)</label>
-                <input type="number" className={inp} placeholder="0" value={form.savings} onChange={e => set('savings', e.target.value)} />
+                <label htmlFor="sim-savings" className="block text-xs text-slate-500 mb-1">저축 (원)</label>
+                <input id="sim-savings" type="number" className={inp} placeholder="0" value={form.savings} onChange={e => set('savings', e.target.value)} />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">기간 (개월)</label>
-                <input type="number" min="1" className={inp} value={form.months} onChange={e => set('months', e.target.value)} />
+                <label htmlFor="sim-months" className="block text-xs text-slate-500 mb-1">기간 (개월)</label>
+                <input id="sim-months" type="number" min="1" className={inp} value={form.months} onChange={e => set('months', e.target.value)} />
               </div>
             </div>
           </div>

@@ -91,9 +91,9 @@ function CategoryComparison() {
     >
       {periodMode === 'custom' && (
         <div className="flex items-center gap-2 mb-4 text-xs">
-          <input type="date" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
+          <input type="date" aria-label="기간 시작일" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
           <span className="text-slate-400">~</span>
-          <input type="date" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customTo} onChange={e => setCustomTo(e.target.value)} />
+          <input type="date" aria-label="기간 종료일" className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700" value={customTo} onChange={e => setCustomTo(e.target.value)} />
         </div>
       )}
       {loading ? (

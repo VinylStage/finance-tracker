@@ -159,28 +159,28 @@ function SavingsForm({ initial, categories, onSave, onCancel }) {
       <h2 className="text-sm font-semibold text-slate-600">{initial ? '상품 수정' : '상품 등록'}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="sm:col-span-2">
-          <label className="block text-xs text-slate-500 mb-1">상품명 *</label>
-          <input type="text" className={inp} value={form.name} onChange={e => set('name', e.target.value)} required />
+          <label htmlFor="savings-name" className="block text-xs text-slate-500 mb-1">상품명 *</label>
+          <input id="savings-name" type="text" className={inp} value={form.name} onChange={e => set('name', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">월 납입액 (원) *</label>
-          <input type="number" className={inp} value={form.monthly_contribution} onChange={e => set('monthly_contribution', e.target.value)} required />
+          <label htmlFor="savings-monthly-contribution" className="block text-xs text-slate-500 mb-1">월 납입액 (원) *</label>
+          <input id="savings-monthly-contribution" type="number" className={inp} value={form.monthly_contribution} onChange={e => set('monthly_contribution', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">시작일 *</label>
-          <input type="date" className={inp} value={form.start_date} onChange={e => set('start_date', e.target.value)} required />
+          <label htmlFor="savings-start-date" className="block text-xs text-slate-500 mb-1">시작일 *</label>
+          <input id="savings-start-date" type="date" className={inp} value={form.start_date} onChange={e => set('start_date', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">만기일</label>
-          <input type="date" className={inp} value={form.maturity_date} onChange={e => set('maturity_date', e.target.value)} />
+          <label htmlFor="savings-maturity-date" className="block text-xs text-slate-500 mb-1">만기일</label>
+          <input id="savings-maturity-date" type="date" className={inp} value={form.maturity_date} onChange={e => set('maturity_date', e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">예상 수령액 (원)</label>
-          <input type="number" className={inp} placeholder="원금+이자" value={form.expected_payout} onChange={e => set('expected_payout', e.target.value)} />
+          <label htmlFor="savings-expected-payout" className="block text-xs text-slate-500 mb-1">예상 수령액 (원)</label>
+          <input id="savings-expected-payout" type="number" className={inp} placeholder="원금+이자" value={form.expected_payout} onChange={e => set('expected_payout', e.target.value)} />
         </div>
         <div className="sm:col-span-3">
-          <label className="block text-xs text-slate-500 mb-1">저축 카테고리 (만기 시 원금 회수 기록에 사용)</label>
-          <select className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)}>
+          <label htmlFor="savings-category" className="block text-xs text-slate-500 mb-1">저축 카테고리 (만기 시 원금 회수 기록에 사용)</label>
+          <select id="savings-category" className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)}>
             <option value="">선택 안 함</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>

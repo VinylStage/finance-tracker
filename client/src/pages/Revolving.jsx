@@ -73,6 +73,7 @@ export default function Revolving() {
 
       <div className="flex items-center justify-between">
         <select
+          aria-label="카드 필터"
           className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-800"
           value={cardFilter}
           onChange={e => setCardFilter(e.target.value)}
@@ -172,31 +173,31 @@ function RevolvingForm({ paymentMethods, error, onSave, onCancel }) {
       {error && <p className="text-rose-600 text-xs">{error}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">월 *</label>
-          <input type="month" className={inp} value={form.month} onChange={e => set('month', e.target.value)} required />
+          <label htmlFor="rev-month" className="block text-xs text-slate-500 mb-1">월 *</label>
+          <input id="rev-month" type="month" className={inp} value={form.month} onChange={e => set('month', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">카드 *</label>
-          <select className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)} required>
+          <label htmlFor="rev-payment-method" className="block text-xs text-slate-500 mb-1">카드 *</label>
+          <select id="rev-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)} required>
             <option value="">선택...</option>
             {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">이월잔액 (원)</label>
-          <input type="number" className={inp} placeholder="0" value={form.carried_balance} onChange={e => set('carried_balance', e.target.value)} />
+          <label htmlFor="rev-carried-balance" className="block text-xs text-slate-500 mb-1">이월잔액 (원)</label>
+          <input id="rev-carried-balance" type="number" className={inp} placeholder="0" value={form.carried_balance} onChange={e => set('carried_balance', e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">신규사용액 (원)</label>
-          <input type="number" className={inp} placeholder="0" value={form.new_charge} onChange={e => set('new_charge', e.target.value)} />
+          <label htmlFor="rev-new-charge" className="block text-xs text-slate-500 mb-1">신규사용액 (원)</label>
+          <input id="rev-new-charge" type="number" className={inp} placeholder="0" value={form.new_charge} onChange={e => set('new_charge', e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">납부액 (원) *</label>
-          <input type="number" className={inp} placeholder="0" value={form.paid_amount} onChange={e => set('paid_amount', e.target.value)} required />
+          <label htmlFor="rev-paid-amount" className="block text-xs text-slate-500 mb-1">납부액 (원) *</label>
+          <input id="rev-paid-amount" type="number" className={inp} placeholder="0" value={form.paid_amount} onChange={e => set('paid_amount', e.target.value)} required />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">이자 (원)</label>
-          <input type="number" className={inp} placeholder="0" value={form.interest} onChange={e => set('interest', e.target.value)} />
+          <label htmlFor="rev-interest" className="block text-xs text-slate-500 mb-1">이자 (원)</label>
+          <input id="rev-interest" type="number" className={inp} placeholder="0" value={form.interest} onChange={e => set('interest', e.target.value)} />
         </div>
       </div>
       <div className="flex gap-3 pt-1">
