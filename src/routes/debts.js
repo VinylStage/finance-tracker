@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { asInt } = require('../utils/validate');
 
 // GET /api/debts
 router.get('/', (req, res) => {
@@ -73,15 +74,19 @@ router.post('/:id/interest', (req, res) => {
     if (rate === undefined || interest_amount === undefined || !log_date) {
       return res.status(400).json({ error: 'rate, interest_amount, log_date required' });
     }
+    // FND-06(감사): interest_amount가 문자열이면 balance_after 산술이 문자열
+    // 연결로 동작해 부채 잔액이 오염될 수 있었다. INTEGER 컬럼이라 asInt로 강제한다.
+    const interestAmount = asInt(interest_amount);
+    if (interestAmount === null) return res.status(400).json({ error: 'interest_amount must be an integer' });
 
     const balance_before = debt.balance;
-    const balance_after = balance_before + interest_amount;
+    const balance_after = balance_before + interestAmount;
 
     const tx = db.transaction(() => {
       db.prepare(`
         INSERT INTO debt_interest_log (debt_id, log_date, rate_at_time, interest_amount, balance_before, balance_after, memo)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(req.params.id, log_date, rate, interest_amount, balance_before, balance_after, memo || null);
+      `).run(req.params.id, log_date, rate, interestAmount, balance_before, balance_after, memo || null);
 
       db.prepare(`
         UPDATE debts SET balance=?, annual_rate=?, updated_at=CURRENT_TIMESTAMP WHERE id=?

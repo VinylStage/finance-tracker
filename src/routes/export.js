@@ -127,21 +127,40 @@ function getSettingsBackup() {
   };
 }
 
+// FND-03(감사): DELETE 후 INSERT 방식은 거래가 1건이라도 있으면 categories의
+// DELETE가 FK 제약 위반으로 실패해 복원이 항상 실패했다. 근본 문제는 기술적
+// 제약만이 아니다 — 이 백업은 설정(카테고리/결제수단/앱설정)만 담고 거래는
+// 담지 않으므로, "백업에 없는 카테고리를 지운다"는 판단 자체를 이 함수가 안전하게
+// 내릴 수 없다(그 카테고리를 참조하는 거래가 지금 DB에 있는지 알 방법이 없다).
+// 그래서 삭제 없이 UPSERT만 한다 — 백업에 있는 항목은 갱신/추가되고, 백업에
+// 없는 기존 항목은 그대로 남는다.
 function restoreSettings(payload) {
   const restore = db.transaction(() => {
     if (payload.categories) {
-      db.prepare('DELETE FROM categories').run();
-      const ins = db.prepare('INSERT INTO categories (id, major_type, name, monthly_budget, is_active) VALUES (@id, @major_type, @name, @monthly_budget, @is_active)');
+      const ins = db.prepare(`
+        INSERT INTO categories (id, major_type, name, monthly_budget, is_active)
+        VALUES (@id, @major_type, @name, @monthly_budget, @is_active)
+        ON CONFLICT(id) DO UPDATE SET
+          major_type = excluded.major_type, name = excluded.name,
+          monthly_budget = excluded.monthly_budget, is_active = excluded.is_active
+      `);
       payload.categories.forEach(r => ins.run(r));
     }
     if (payload.payment_methods) {
-      db.prepare('DELETE FROM payment_methods').run();
-      const ins = db.prepare('INSERT INTO payment_methods (id, name, type, is_active, created_at) VALUES (@id, @name, @type, @is_active, @created_at)');
+      const ins = db.prepare(`
+        INSERT INTO payment_methods (id, name, type, is_active, created_at)
+        VALUES (@id, @name, @type, @is_active, @created_at)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name, type = excluded.type,
+          is_active = excluded.is_active, created_at = excluded.created_at
+      `);
       payload.payment_methods.forEach(r => ins.run(r));
     }
     if (payload.app_settings) {
-      db.prepare('DELETE FROM app_settings').run();
-      const ins = db.prepare('INSERT INTO app_settings (key, value) VALUES (@key, @value)');
+      const ins = db.prepare(`
+        INSERT INTO app_settings (key, value) VALUES (@key, @value)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `);
       payload.app_settings.forEach(r => ins.run(r));
     }
   });
@@ -160,9 +179,17 @@ router.get('/settings', (req, res) => {
 });
 
 // POST /api/export/settings/restore — 설정 전용 복원
-router.post('/settings/restore', express.json({ limit: '10mb' }), (req, res) => {
+// FND-03: 기존 카테고리/결제수단/설정을 덮어쓰는 파괴적 동작인데 확인 절차가
+// 없었다. data.js의 DELETE_ALL 정책과 동일한 원칙을 적용하되, 이 라우트는
+// 삭제가 아니라 덮어쓰기라 문구를 다르게 둔다.
+// (라우트 단위 express.json() 재마운트는 죽은 코드였다 — server.js의 전역
+// 파서가 먼저 실행되므로 여기서 다시 걸어도 적용되지 않는다. 제거했다.)
+router.post('/settings/restore', (req, res) => {
   try {
-    const payload = req.body;
+    const { confirm, ...payload } = req.body || {};
+    if (confirm !== 'OVERWRITE_SETTINGS') {
+      return res.status(400).json({ error: 'confirm: "OVERWRITE_SETTINGS" required' });
+    }
     if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'invalid payload' });
     if (!payload.categories && !payload.payment_methods && !payload.app_settings) {
       return res.status(400).json({ error: 'payload must contain at least one of categories, payment_methods, app_settings' });

@@ -615,6 +615,7 @@ function ExportSection() {
 
 function SettingsBackupSection() {
   const [msg, setMsg] = useState('');
+  const { confirm, alert } = useConfirm();
 
   const handleExport = () => {
     window.location.href = '/api/export/settings';
@@ -624,13 +625,17 @@ function SettingsBackupSection() {
     const file = e.target.files[0];
     if (!file) return;
     try {
+      if (!await confirm('현재 카테고리·결제수단·설정값을 파일 내용으로 덮어씁니다. 계속할까요?', { tone: 'danger', confirmLabel: '복원' })) {
+        e.target.value = '';
+        return;
+      }
       const text = await file.text();
       const payload = JSON.parse(text);
-      const data = await api.post('/api/export/settings/restore', payload);
+      const data = await api.post('/api/export/settings/restore', { ...payload, confirm: 'OVERWRITE_SETTINGS' });
       if (data.ok) { setMsg('설정이 복원되었습니다.'); setTimeout(() => window.location.reload(), 1000); }
       else setMsg('복원 실패: ' + data.error);
     } catch (err) {
-      setMsg('오류: ' + err.message);
+      await alert(err.message);
     }
     e.target.value = '';
   };
