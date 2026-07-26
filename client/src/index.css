@@ -60,3 +60,70 @@ body {
   color: var(--color-ink);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+
+/* 거래 테이블 모바일 카드뷰(#192).
+   기존에는 md 미만에서 가맹점·결제수단 컬럼을 hidden 으로 아예 지워 정보가 손실됐다.
+   여기서는 컬럼을 지우는 대신 <tr> 을 블록으로 재배열해 카드처럼 보이게 하고,
+   원래 컬럼 헤더를 data-label 로 각 셀 앞에 노출한다. 정보는 전부 남는다.
+
+   주의: CSS display 를 바꾸면 브라우저가 표의 암묵 role 을 벗겨내 스크린리더가
+   더 이상 표로 인식하지 못한다. 그래서 마크업 쪽에서 role="table"/"rowgroup"/
+   "row"/"columnheader"/"cell" 을 명시해 의미를 되살려 둔다(TransactionList.jsx).
+   thead 도 display:none 이 아니라 시각적으로만 숨겨 접근성 트리에 남긴다. */
+@media (max-width: 47.999rem) {
+  .tx-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tx-table,
+  .tx-table tbody,
+  .tx-table tr,
+  .tx-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .tx-table tr {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    padding: 0.25rem 0;
+    margin-bottom: 0.5rem;
+  }
+
+  .tx-table td {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    text-align: right;
+    padding: 0.375rem 0.75rem;
+    max-width: none;
+  }
+
+  .tx-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    /* 라벨은 왼쪽 끝, 값은 오른쪽 끝. 라벨이 없는 셀은 값만 오른쪽에 남는다. */
+    margin-right: auto;
+    text-align: left;
+    font-size: 0.6875rem;
+    color: var(--color-ink-faint);
+  }
+
+  /* data-label 이 빈 셀(체크박스·수정삭제 버튼)은 라벨을 만들지 않는다. */
+  .tx-table td[data-label='']::before {
+    content: none;
+  }
+
+  /* 라벨 없는 셀 중 첫 칸(체크박스)만 왼쪽 정렬. 수정/삭제 버튼은 오른쪽에 둔다. */
+  .tx-table td[data-label='']:first-child {
+    justify-content: flex-start;
+  }
+}
