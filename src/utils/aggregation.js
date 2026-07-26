@@ -23,6 +23,23 @@ function installmentsDueForMonth(month) {
   `).get(month, month).total;
 }
 
+// FND-07(감사): cashflow.js가 기간(일/주/월/년)마다 쿼리를 따로 날려(최대 30회)
+// N+1을 만들었다. transactions.js가 이미 이 단일-쿼리 패턴(날짜 범위 전체를
+// 한 번에 GROUP BY로 가져온 뒤 JS에서 기간별로 합산)을 검증해 썼는데
+// cashflow.js만 이식이 누락됐다 — 두 라우트가 같은 함수를 쓰도록 공유한다.
+function rangeTotalsByDate(from, to) {
+  const rows = db.prepare(`
+    SELECT t.date AS date,
+      COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+      COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense
+    FROM transactions t
+    JOIN categories c ON t.category_id = c.id
+    WHERE t.date >= ? AND t.date <= ?
+    GROUP BY t.date
+  `).all(from, to);
+  return new Map(rows.map(r => [r.date, r]));
+}
+
 // FND-08(감사): transactions.js 대시보드의 월별 트렌드가
 // "strftime('%Y-%m', t.date) >= ? AND strftime('%Y-%m', t.date) <= ?"로
 // 필터링해 인덱스 컬럼을 함수로 감싼 탓에 풀스캔이었다. [시작월 1일, 끝월
@@ -44,4 +61,4 @@ function monthlyTotalsInRange(startMonth, endMonthInclusive) {
   return new Map(rows.map(r => [r.month, r]));
 }
 
-module.exports = { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, monthlyTotalsInRange };
+module.exports = { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange };
