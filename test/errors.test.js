@@ -37,6 +37,6 @@ describe('serverError headersSent 가드 (#105)', () => {
     const { res, calls } = mockRes(false);
     serverError(res, new Error('boom'), 'test');
     assert.deepStrictEqual(calls.status, [500]);
-    assert.deepStrictEqual(calls.json, [{ error: 'Internal server error' }]);
+    assert.deepStrictEqual(calls.json, [{ error: '처리 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.' }]);
   });
 });

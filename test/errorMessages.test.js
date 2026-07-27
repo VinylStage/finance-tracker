@@ -22,27 +22,33 @@ const SOURCES = collectJs(path.join(ROOT, 'src'))
 const HANGUL = /[가-힣]/;
 
 describe('error messages', () => {
-  test('4xx response messages are all in Korean', () => {
+  test('4xx/5xx response messages are all in Korean', () => {
+    // 처음에는 4xx 만, 그것도 한 줄로 쓰인 것만 봤다. 그래서 500(serverError)과
+    // 503(stocks.js)이 영문으로 남아 있는데도 통과했다. 두 구멍을 함께 메운다.
+    //   - 상태코드: 4xx 뿐 아니라 5xx 도 본다
+    //   - 여러 줄로 쓰인 형태도 잡는다 ([\s\S] 로 줄바꿈까지 매치)
     const found = [];   // 검사 대상 전부
     const errors = [];  // 그중 위반만
     for (const { file, text } of SOURCES) {
-      if (file === 'src/utils/errors.js') continue;
-      const regex = /status\((4\d\d)\)\.json\(\{\s*error:\s*(['"])(.*?)\2/g;
+      const regex = /status\((\d{3})\)\s*\.json\(\s*\{\s*error:\s*(['"])([\s\S]*?)\2/g;
       let match;
       while ((match = regex.exec(text)) !== null) {
-        const [, , , message] = match;
-        found.push({ file, message });
+        const [, status, , message] = match;
+        found.push({ file, status, message });
         if (!HANGUL.test(message)) {
-          errors.push({ file, message });
+          errors.push({ file, status, message });
         }
       }
     }
 
     // 정규식이 아무것도 못 잡으면 위반도 0이라 조용히 통과한다. 그걸 막는다.
-    assert.ok(found.length >= 30,
-      `4xx 메시지를 ${found.length}개만 찾았다. 정규식이 깨졌을 수 있다 (30개 이상 기대).`);
+    assert.ok(found.length >= 50,
+      `응답 메시지를 ${found.length}개만 찾았다. 정규식이 깨졌을 수 있다 (50개 이상 기대).`);
+    // 5xx 도 실제로 수집됐는지 확인한다. 하한만 보면 4xx 만으로도 채워진다.
+    assert.ok(found.some((f) => f.status.startsWith('5')),
+      '5xx 응답 메시지가 하나도 수집되지 않았다. 정규식이 4xx 만 보고 있을 수 있다.');
     assert.deepStrictEqual(errors, [],
-      `4xx 응답 메시지는 전부 한글이어야 한다. 위반: ${JSON.stringify(errors, null, 2)}`);
+      `응답 메시지는 전부 한글이어야 한다. 위반: ${JSON.stringify(errors, null, 2)}`);
   });
 
   test('machine prefixes are not left in string literals', () => {

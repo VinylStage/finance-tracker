@@ -7,7 +7,7 @@ function serverError(res, e, context) {
   console.error(`[${context || 'error'}]`, e);
   // 응답이 이미 시작된 경우(예: 스트리밍 중 오류) status()/json() 호출은 Express가 던진다.
   if (res.headersSent) return;
-  res.status(500).json({ error: 'Internal server error' });
+  res.status(500).json({ error: '처리 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.' });
 }
 
 // catch(e)에서 e가 Error가 아니거나 message가 없을 수 있어(throw 'string' 등) 안전하게 문자열로 뽑는다.

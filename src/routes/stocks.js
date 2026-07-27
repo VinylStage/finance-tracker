@@ -15,7 +15,7 @@ router.get('/:ticker', async (req, res) => {
     
     if (result.enabled === false) {
       return res.status(503).json({
-        error: 'KIS API integration not yet enabled',
+        error: '주가 조회 기능은 아직 준비 중입니다.',
       });
     }
     

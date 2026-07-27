@@ -62,7 +62,7 @@ test('FND-04+15: 감사 PoC 재현 — try/catch 없는 핸들러의 동기 예�
   assert.strictEqual(resp.status, 500);
   assert.ok(resp.headers.get('content-type').includes('application/json'), 'HTML이 아니라 JSON이어야 함');
   const body = await resp.json();
-  assert.deepStrictEqual(body, { error: 'Internal server error' });
+  assert.deepStrictEqual(body, { error: '처리 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.' });
   const bodyText = JSON.stringify(body);
   assert.ok(!bodyText.includes('/src/'), '서버 파일 경로가 노출되면 안 됨');
   assert.ok(!bodyText.includes('at '), '스택트레이스가 노출되면 안 됨');

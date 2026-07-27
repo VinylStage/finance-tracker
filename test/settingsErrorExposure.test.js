@@ -57,7 +57,7 @@ test('FND-11: 감사 PoC — GET /api/settings가 DB 오류 시 내부 메시지
   assert.strictEqual(resp.status, 500);
   assert.ok((resp.headers.get('content-type') || '').includes('application/json'));
   const body = await resp.json();
-  assert.deepStrictEqual(body, { error: 'Internal server error' });
+  assert.deepStrictEqual(body, { error: '처리 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.' });
   const bodyText = JSON.stringify(body);
   assert.ok(!bodyText.includes('no such table'), 'SQLite 원문 에러 메시지가 노출되면 안 됨');
 });
