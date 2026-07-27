@@ -29,11 +29,11 @@ function today() { return localYMD(); }
 
 function StatCard({ label, value, diff, pct, invert }) {
   const good = diff === 0 ? null : invert ? diff < 0 : diff > 0;
-  const diffColor = good === null ? 'text-slate-400' : good ? 'text-emerald-600' : 'text-rose-600';
+  const diffColor = good === null ? 'text-ink-faint' : good ? 'text-income' : 'text-expense';
   return (
-    <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-      <p className="text-slate-500 text-sm mb-1">{label}</p>
-      <p className="text-2xl font-bold text-slate-800">{fmt(value)}</p>
+    <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+      <p className="text-ink-subtle text-sm mb-1">{label}</p>
+      <p className="text-2xl font-bold text-ink">{fmt(value)}</p>
       <p className={`text-xs mt-1 ${diffColor}`}>
         전 기간 대비 {diff >= 0 ? '+' : ''}{fmt(diff)}
         {pct !== null && pct !== undefined && ` (${pct >= 0 ? '+' : ''}${pct}%)`}
@@ -44,8 +44,8 @@ function StatCard({ label, value, diff, pct, invert }) {
 
 function Section({ title, children }) {
   return (
-    <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-      <h2 className="text-sm font-semibold text-slate-700 mb-4">{title}</h2>
+    <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+      <h2 className="text-sm font-semibold text-ink-body mb-4">{title}</h2>
       {children}
     </div>
   );
@@ -86,23 +86,23 @@ export default function Comparison() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-slate-800">기간 비교</h1>
+        <h1 className="text-xl font-semibold text-ink">기간 비교</h1>
         <input
           type="date"
           aria-label="기준일"
           value={date}
           onChange={e => setDate(e.target.value)}
-          className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:border-indigo-500"
+          className="bg-surface border border-line-strong rounded-lg px-3 py-1.5 text-sm text-ink-body focus:outline-none focus:border-accent-bar"
         />
       </div>
 
-      <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-surface border border-line rounded-card p-1 w-fit">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setPeriod(t.key)}
             className={`text-sm px-4 py-1.5 rounded-lg transition-colors ${
-              period === t.key ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-50'
+              period === t.key ? 'bg-accent-soft text-accent-strong font-medium' : 'text-ink-subtle hover:bg-surface-muted'
             }`}
           >
             {t.label}
@@ -113,12 +113,12 @@ export default function Comparison() {
       {error ? (
         <LoadError error={error} onRetry={reload} />
       ) : loading || !result ? (
-        <div className="text-slate-500 text-center py-20">로딩 중...</div>
+        <div className="text-ink-subtle text-center py-20">로딩 중...</div>
       ) : (
         <>
-          <p className="text-xs text-slate-400">
-            현재 기간 <span className="text-slate-600 font-medium">{result.currentLabel}</span>
-            {' '}vs 직전 기간 <span className="text-slate-600 font-medium">{result.previousLabel}</span>
+          <p className="text-xs text-ink-faint">
+            현재 기간 <span className="text-ink-muted font-medium">{result.currentLabel}</span>
+            {' '}vs 직전 기간 <span className="text-ink-muted font-medium">{result.previousLabel}</span>
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -129,7 +129,7 @@ export default function Comparison() {
 
           <Section title="지출 추이 비교">
             {result.data.every(r => !r.currentExpense && !r.previousExpense) ? (
-              <div className="text-slate-400 text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
+              <div className="text-ink-faint text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
             ) : (
               <OverlayChart
                 data={result.data} xKey="label"
@@ -142,7 +142,7 @@ export default function Comparison() {
 
           <Section title="수입 추이 비교">
             {result.data.every(r => !r.currentIncome && !r.previousIncome) ? (
-              <div className="text-slate-400 text-sm text-center py-10">해당 기간 수입 내역이 없습니다.</div>
+              <div className="text-ink-faint text-sm text-center py-10">해당 기간 수입 내역이 없습니다.</div>
             ) : (
               <OverlayChart
                 data={result.data} xKey="label"

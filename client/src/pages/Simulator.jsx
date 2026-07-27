@@ -52,66 +52,66 @@ export default function Simulator() {
 
   const finalBalance = projection[projection.length - 1]?.balance ?? startingBalance;
 
-  const inp = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500';
+  const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-slate-800">예상잔액 시뮬레이터</h1>
+      <h1 className="text-xl font-semibold text-ink">예상잔액 시뮬레이터</h1>
 
       {loading ? (
-        <div className="text-slate-500 text-center py-10">로딩 중...</div>
+        <div className="text-ink-subtle text-center py-10">로딩 중...</div>
       ) : (
         <>
           {error && (
             // 대시보드 조회는 시작 잔액 프리필 용도일 뿐, 시뮬레이션 계산은 전적으로
             // 클라이언트 측이다. 조회 실패로 도구 전체를 막지 않고 0원 기준으로 계속 쓰게 한다.
-            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+            <div className="text-xs text-warning bg-warning-soft border border-warning-line rounded-lg px-3 py-2 flex items-center gap-2">
               <span>현재 가용현금을 불러오지 못했습니다. 0원 기준으로 계산합니다.</span>
-              <button onClick={reload} className="underline hover:text-amber-800">다시 시도</button>
+              <button onClick={reload} className="underline hover:text-warning-strong">다시 시도</button>
             </div>
           )}
-          <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+          <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-700">가정값 입력</h2>
-              <span className="text-xs text-slate-400">현재 가용현금: <span className="text-slate-700 font-medium">{fmt(startingBalance)}</span></span>
+              <h2 className="text-sm font-semibold text-ink-body">가정값 입력</h2>
+              <span className="text-xs text-ink-faint">현재 가용현금: <span className="text-ink-body font-medium">{fmt(startingBalance)}</span></span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div>
-                <label htmlFor="sim-income" className="block text-xs text-slate-500 mb-1">월 수입 (원)</label>
+                <label htmlFor="sim-income" className="block text-xs text-ink-subtle mb-1">월 수입 (원)</label>
                 <input id="sim-income" type="number" className={inp} placeholder="0" value={form.income} onChange={e => set('income', e.target.value)} />
               </div>
               <div>
-                <label htmlFor="sim-expense" className="block text-xs text-slate-500 mb-1">월 지출/고정비 (원)</label>
+                <label htmlFor="sim-expense" className="block text-xs text-ink-subtle mb-1">월 지출/고정비 (원)</label>
                 <input id="sim-expense" type="number" className={inp} placeholder="0" value={form.expense} onChange={e => set('expense', e.target.value)} />
               </div>
               <div>
-                <label htmlFor="sim-debt-payment" className="block text-xs text-slate-500 mb-1">부채상환 (원)</label>
+                <label htmlFor="sim-debt-payment" className="block text-xs text-ink-subtle mb-1">부채상환 (원)</label>
                 <input id="sim-debt-payment" type="number" className={inp} placeholder="0" value={form.debtPayment} onChange={e => set('debtPayment', e.target.value)} />
               </div>
               <div>
-                <label htmlFor="sim-savings" className="block text-xs text-slate-500 mb-1">저축 (원)</label>
+                <label htmlFor="sim-savings" className="block text-xs text-ink-subtle mb-1">저축 (원)</label>
                 <input id="sim-savings" type="number" className={inp} placeholder="0" value={form.savings} onChange={e => set('savings', e.target.value)} />
               </div>
               <div>
-                <label htmlFor="sim-months" className="block text-xs text-slate-500 mb-1">기간 (개월)</label>
+                <label htmlFor="sim-months" className="block text-xs text-ink-subtle mb-1">기간 (개월)</label>
                 <input id="sim-months" type="number" min="1" className={inp} value={form.months} onChange={e => set('months', e.target.value)} />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-              <p className="text-slate-500 text-sm mb-1">현재 가용현금</p>
-              <p className="text-2xl font-bold text-slate-800">{fmt(startingBalance)}</p>
+            <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+              <p className="text-ink-subtle text-sm mb-1">현재 가용현금</p>
+              <p className="text-2xl font-bold text-ink">{fmt(startingBalance)}</p>
             </div>
-            <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-              <p className="text-slate-500 text-sm mb-1">{form.months}개월 후 예상잔액</p>
-              <p className={`text-2xl font-bold ${finalBalance >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>{fmt(finalBalance)}</p>
+            <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+              <p className="text-ink-subtle text-sm mb-1">{form.months}개월 후 예상잔액</p>
+              <p className={`text-2xl font-bold ${finalBalance >= 0 ? 'text-accent' : 'text-expense'}`}>{fmt(finalBalance)}</p>
             </div>
           </div>
 
-          <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">잔액 추이</h2>
+          <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+            <h2 className="text-sm font-semibold text-ink-body mb-4">잔액 추이</h2>
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={projection}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -123,19 +123,19 @@ export default function Simulator() {
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+          <div className="bg-surface shadow-card rounded-card border border-line overflow-hidden overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr className="border-b border-slate-200">
-                  <th className="text-left px-4 py-3 text-slate-500 font-medium">시점</th>
-                  <th className="text-right px-4 py-3 text-slate-500 font-medium">예상잔액</th>
+              <thead className="bg-surface-muted">
+                <tr className="border-b border-line">
+                  <th className="text-left px-4 py-3 text-ink-subtle font-medium">시점</th>
+                  <th className="text-right px-4 py-3 text-ink-subtle font-medium">예상잔액</th>
                 </tr>
               </thead>
               <tbody>
                 {projection.map((r, i) => (
-                  <tr key={r.month} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-50/50'}`}>
-                    <td className="px-4 py-3 text-slate-600">{r.label}</td>
-                    <td className={`px-4 py-3 text-right font-medium tabular-nums ${r.balance >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>{fmt(r.balance)}</td>
+                  <tr key={r.month} className={`border-b border-line-soft hover:bg-surface-muted transition-colors ${i % 2 === 0 ? '' : 'bg-surface-muted/50'}`}>
+                    <td className="px-4 py-3 text-ink-muted">{r.label}</td>
+                    <td className={`px-4 py-3 text-right font-medium tabular-nums ${r.balance >= 0 ? 'text-ink' : 'text-expense'}`}>{fmt(r.balance)}</td>
                   </tr>
                 ))}
               </tbody>

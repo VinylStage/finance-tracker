@@ -6,11 +6,11 @@ export default function LoadError({ error, onRetry }) {
   const message = (error && error.message) || '데이터를 불러오지 못했습니다.';
   return (
     <div className="text-center py-10 space-y-3">
-      <p className="text-sm text-rose-600">{message}</p>
+      <p className="text-sm text-expense">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="text-sm text-indigo-600 hover:text-indigo-700 border border-slate-200 hover:bg-slate-50 rounded-lg px-4 py-2 transition-colors"
+          className="text-sm text-accent hover:text-accent-strong border border-line hover:bg-surface-muted rounded-lg px-4 py-2 transition-colors"
         >
           다시 시도
         </button>
