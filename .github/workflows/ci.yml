@@ -29,4 +29,7 @@ jobs:
         working-directory: client
       - run: npm run build
         working-directory: client
+      - name: Test client (vitest)
+        run: npm run test:coverage
+        working-directory: client
       - run: npm run test:coverage --if-present
