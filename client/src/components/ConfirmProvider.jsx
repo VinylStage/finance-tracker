@@ -76,23 +76,23 @@ function Dialog({ kind, message, tone, confirmLabel, cancelLabel, onConfirm, onC
 
   const danger = tone === 'danger';
   const confirmClass = danger
-    ? 'bg-rose-600 hover:bg-rose-700 text-white'
-    : 'bg-indigo-600 hover:bg-indigo-700 text-white';
+    ? 'bg-danger hover:bg-danger-hover text-white'
+    : 'bg-accent hover:bg-accent-hover text-white';
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 px-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-sm p-5 space-y-4">
-        <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{message}</p>
+      <div className="bg-surface rounded-card shadow-lg border border-line w-full max-w-sm p-5 space-y-4">
+        <p className="text-sm text-ink-body whitespace-pre-line leading-relaxed">{message}</p>
         <div className="flex justify-end gap-2">
           {kind === 'confirm' && (
             <button
               onClick={onCancel}
-              className="text-slate-500 hover:text-slate-800 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+              className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg border border-line hover:bg-surface-muted transition-colors"
             >
               {cancelLabel}
             </button>

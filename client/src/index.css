@@ -24,6 +24,32 @@
   --color-accent-bar: oklch(58.5% 0.233 277.117);    /* = indigo-500 */
   --color-accent-soft: oklch(96.2% 0.018 272.314);   /* = indigo-50 */
 
+  /* 같은 값이라도 「배경으로 쓰이는 색」과 「글자로 쓰이는 색」은 토큰을 나눈다(#201).
+     다크모드에서 이 둘은 정반대 방향을 요구한다 — 흰 글자가 얹히려면 어두워야 하고,
+     어두운 배경 위 글자로 읽히려면 밝아야 한다. 한 토큰으로는 동시에 만족할 수 없어서
+     라이트 모드에서 값이 같더라도 지금 분리해 둔다. */
+  --color-accent-hover: oklch(45.7% 0.24 277.023);      /* = indigo-700, 버튼 hover 배경 */
+  --color-accent-soft-hover: oklch(93% 0.034 272.788);  /* = indigo-100 */
+  --color-accent-line: oklch(87% 0.065 274.039);        /* = indigo-200 */
+  --color-accent-line-strong: oklch(78.5% 0.115 274.713); /* = indigo-300 */
+
+  --color-expense-strong: oklch(51.4% 0.222 16.935);    /* = rose-700, 글자 */
+  --color-expense-line: oklch(89.2% 0.058 10.001);      /* = rose-200 */
+  --color-expense-line-strong: oklch(81% 0.117 11.638); /* = rose-300 */
+
+  /* 삭제·위험 동작 버튼의 배경. 값은 expense 와 같지만 역할이 다르다 —
+     이쪽은 흰 글자가 얹히므로 어두워야 하고, expense 는 어두운 배경 위에서 읽혀야 해
+     밝아야 한다. 다크모드에서 한 값으로는 둘 다 만족할 수 없다(측정으로 확인). */
+  --color-danger: oklch(58.6% 0.253 17.585);            /* = rose-600, 버튼 배경 */
+  --color-danger-hover: oklch(51.4% 0.222 16.935);      /* = rose-700, 버튼 hover 배경 */
+
+  --color-warning-mid: oklch(66.6% 0.179 58.318);       /* = amber-600 */
+  --color-warning-strong: oklch(47.3% 0.137 46.201);    /* = amber-800 */
+  --color-warning-line: oklch(92.4% 0.12 95.746);       /* = amber-200 */
+
+  /* 모달·오버레이 뒷배경. 표면(surface)이 아니라 화면을 덮는 막이라 따로 둔다. */
+  --color-scrim: oklch(20.8% 0.042 265.755);            /* = slate-900 */
+
   /* 카테고리 대분류 6종 */
   --color-cat-income: oklch(59.6% 0.145 163.225);    /* 수입 = emerald-600 */
   --color-cat-fixed: oklch(58.6% 0.253 17.585);      /* 고정지출 = rose-600 */

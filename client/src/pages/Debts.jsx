@@ -16,7 +16,7 @@ function TypeBadge({ type }) {
   const isMinus = type === '마이너스통장';
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-      isMinus ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-500'
+      isMinus ? 'bg-accent-soft text-accent-strong' : 'bg-surface-sunken text-ink-subtle'
     }`}>
       {type || '일반'}
     </span>
@@ -100,23 +100,23 @@ export default function Debts() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-800">부채 현황</h1>
+        <h1 className="text-xl font-semibold text-ink">부채 현황</h1>
         <button
           onClick={() => { setEditItem(null); setShowForm(true); }}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors"
         >
           + 부채 추가
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-          <p className="text-slate-500 text-sm mb-1">총 부채</p>
-          <p className="text-2xl font-bold text-rose-600">{fmt(totalBalance)}</p>
+        <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+          <p className="text-ink-subtle text-sm mb-1">총 부채</p>
+          <p className="text-2xl font-bold text-expense">{fmt(totalBalance)}</p>
         </div>
-        <div className="bg-white shadow-sm rounded-xl p-5 border border-slate-200">
-          <p className="text-slate-500 text-sm mb-1">월이자 합계</p>
-          <p className="text-2xl font-bold text-slate-800">{fmt(totalInterest)}</p>
+        <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+          <p className="text-ink-subtle text-sm mb-1">월이자 합계</p>
+          <p className="text-2xl font-bold text-ink">{fmt(totalInterest)}</p>
         </div>
       </div>
 
@@ -137,7 +137,7 @@ export default function Debts() {
       )}
 
       {loading ? (
-        <div className="text-slate-500 text-center py-10">로딩 중...</div>
+        <div className="text-ink-subtle text-center py-10">로딩 중...</div>
       ) : error ? (
         <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
@@ -147,42 +147,42 @@ export default function Debts() {
           description="대출이나 카드 할부금을 등록하면 잔액과 월 이자를 한곳에서 볼 수 있어요. 없다면 그대로 두셔도 됩니다."
         />
       ) : (
-        <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+        <div className="bg-surface shadow-card rounded-card border border-line overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr className="border-b border-slate-200">
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">부채명</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">타입</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">잔액</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">연이율</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">월이자 (참고)</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium hidden md:table-cell">메모</th>
+            <thead className="bg-surface-muted">
+              <tr className="border-b border-line">
+                <th className="text-left px-4 py-3 text-ink-subtle font-medium">부채명</th>
+                <th className="text-left px-4 py-3 text-ink-subtle font-medium">타입</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">잔액</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">연이율</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">월이자 (참고)</th>
+                <th className="text-left px-4 py-3 text-ink-subtle font-medium hidden md:table-cell">메모</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {items.map((d, i) => (
                 <React.Fragment key={d.id}>
-                  <tr className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-50/50'}`}>
-                    <td className="px-4 py-3 text-slate-800">{d.name}</td>
+                  <tr className={`border-b border-line-soft hover:bg-surface-muted transition-colors ${i % 2 === 0 ? '' : 'bg-surface-muted/50'}`}>
+                    <td className="px-4 py-3 text-ink">{d.name}</td>
                     <td className="px-4 py-3"><TypeBadge type={d.type} /></td>
-                    <td className="px-4 py-3 text-right text-rose-600 font-medium tabular-nums">{fmt(d.balance)}</td>
-                    <td className="px-4 py-3 text-right text-slate-600 tabular-nums">{d.annual_rate}%</td>
-                    <td className="px-4 py-3 text-right text-slate-500 tabular-nums">{fmt(d.monthly_interest)}</td>
-                    <td className="px-4 py-3 text-slate-400 text-xs hidden md:table-cell">{d.memo || '—'}</td>
+                    <td className="px-4 py-3 text-right text-expense font-medium tabular-nums">{fmt(d.balance)}</td>
+                    <td className="px-4 py-3 text-right text-ink-muted tabular-nums">{d.annual_rate}%</td>
+                    <td className="px-4 py-3 text-right text-ink-subtle tabular-nums">{fmt(d.monthly_interest)}</td>
+                    <td className="px-4 py-3 text-ink-faint text-xs hidden md:table-cell">{d.memo || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 justify-end flex-wrap">
                         {d.type === '마이너스통장' && (
                           <>
                             <button
                               onClick={() => setInterestTarget(d)}
-                              className="text-slate-400 hover:text-emerald-600 transition-colors text-xs"
+                              className="text-ink-faint hover:text-income transition-colors text-xs"
                             >
                               이자 추가
                             </button>
                             <button
                               onClick={() => toggleLog(d)}
-                              className="text-slate-400 hover:text-indigo-600 transition-colors text-xs"
+                              className="text-ink-faint hover:text-accent transition-colors text-xs"
                             >
                               이력 {expandedLog === d.id ? '▲' : '▼'}
                             </button>
@@ -190,13 +190,13 @@ export default function Debts() {
                         )}
                         <button
                           onClick={() => handleEdit(d)}
-                          className="text-slate-400 hover:text-indigo-600 transition-colors text-xs"
+                          className="text-ink-faint hover:text-accent transition-colors text-xs"
                         >
                           수정
                         </button>
                         <button
                           onClick={() => handleDelete(d.id)}
-                          className="text-slate-400 hover:text-rose-600 transition-colors text-xs"
+                          className="text-ink-faint hover:text-expense transition-colors text-xs"
                         >
                           삭제
                         </button>
@@ -204,7 +204,7 @@ export default function Debts() {
                     </td>
                   </tr>
                   {expandedLog === d.id && (
-                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                    <tr className="border-b border-line-soft bg-surface-muted/70">
                       <td colSpan={7} className="px-4 py-3">
                         <InterestLog rows={logs[d.id]} />
                       </td>
@@ -221,18 +221,18 @@ export default function Debts() {
 }
 
 function InterestLog({ rows }) {
-  if (!rows) return <div className="text-slate-400 text-xs py-2">불러오는 중...</div>;
-  if (!rows.length) return <div className="text-slate-400 text-xs py-2">이자 이력이 없습니다.</div>;
+  if (!rows) return <div className="text-ink-faint text-xs py-2">불러오는 중...</div>;
+  if (!rows.length) return <div className="text-ink-faint text-xs py-2">이자 이력이 없습니다.</div>;
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-medium text-slate-500 mb-1">이자 이력</h4>
+      <h4 className="text-xs font-medium text-ink-subtle mb-1">이자 이력</h4>
       {rows.map(r => (
-        <div key={r.id} className="flex items-center justify-between text-xs text-slate-600 bg-white rounded-lg px-3 py-2 border border-slate-200">
-          <span className="text-slate-400">{r.log_date}</span>
+        <div key={r.id} className="flex items-center justify-between text-xs text-ink-muted bg-surface rounded-lg px-3 py-2 border border-line">
+          <span className="text-ink-faint">{r.log_date}</span>
           <span>금리 {r.rate_at_time}%</span>
-          <span className="text-rose-600 font-medium">+{fmt(r.interest_amount)}</span>
-          <span className="text-slate-500 tabular-nums">{fmt(r.balance_before)} → {fmt(r.balance_after)}</span>
-          <span className="text-slate-400 truncate max-w-[120px]">{r.memo || '—'}</span>
+          <span className="text-expense font-medium">+{fmt(r.interest_amount)}</span>
+          <span className="text-ink-subtle tabular-nums">{fmt(r.balance_before)} → {fmt(r.balance_after)}</span>
+          <span className="text-ink-faint truncate max-w-[120px]">{r.memo || '—'}</span>
         </div>
       ))}
     </div>
@@ -259,40 +259,40 @@ function DebtForm({ initial, onSave, onCancel }) {
     });
   };
 
-  const inp = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500';
+  const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-600">{initial ? '부채 수정' : '부채 추가'}</h2>
+    <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-muted">{initial ? '부채 수정' : '부채 추가'}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="debt-name" className="block text-xs text-slate-500 mb-1">부채명 *</label>
+          <label htmlFor="debt-name" className="block text-xs text-ink-subtle mb-1">부채명 *</label>
           <input id="debt-name" type="text" className={inp} value={form.name} onChange={e => set('name', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="debt-type" className="block text-xs text-slate-500 mb-1">타입</label>
+          <label htmlFor="debt-type" className="block text-xs text-ink-subtle mb-1">타입</label>
           <select id="debt-type" className={inp} value={form.type} onChange={e => set('type', e.target.value)}>
             {DEBT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div>
-          <label htmlFor="debt-balance" className="block text-xs text-slate-500 mb-1">잔액 (원) *</label>
+          <label htmlFor="debt-balance" className="block text-xs text-ink-subtle mb-1">잔액 (원) *</label>
           <input id="debt-balance" type="number" className={inp} value={form.balance} onChange={e => set('balance', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="debt-annual-rate" className="block text-xs text-slate-500 mb-1">연이율 (%)</label>
+          <label htmlFor="debt-annual-rate" className="block text-xs text-ink-subtle mb-1">연이율 (%)</label>
           <input id="debt-annual-rate" type="number" step="0.01" className={inp} placeholder="0" value={form.annual_rate} onChange={e => set('annual_rate', e.target.value)} />
         </div>
         <div className="sm:col-span-2">
-          <label htmlFor="debt-memo" className="block text-xs text-slate-500 mb-1">메모</label>
+          <label htmlFor="debt-memo" className="block text-xs text-ink-subtle mb-1">메모</label>
           <input id="debt-memo" type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
         </div>
       </div>
       <div className="flex gap-3 pt-1">
-        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-5 py-2 rounded-lg transition-colors">
+        <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-5 py-2 rounded-lg transition-colors">
           {initial ? '저장' : '추가'}
         </button>
-        <button type="button" onClick={onCancel} className="text-slate-500 hover:text-slate-800 text-sm px-4 py-2 rounded-lg hover:bg-slate-100 transition-colors">
+        <button type="button" onClick={onCancel} className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg hover:bg-surface-sunken transition-colors">
           취소
         </button>
       </div>
@@ -320,37 +320,37 @@ function InterestForm({ debt, onSave, onCancel }) {
     });
   };
 
-  const inp = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500';
+  const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-xl border border-indigo-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-600">
-        이자 추가 — <span className="text-indigo-700">{debt.name}</span>
+    <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-accent-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-muted">
+        이자 추가 — <span className="text-accent-strong">{debt.name}</span>
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div>
-          <label htmlFor="interest-log-date" className="block text-xs text-slate-500 mb-1">날짜 *</label>
+          <label htmlFor="interest-log-date" className="block text-xs text-ink-subtle mb-1">날짜 *</label>
           <input id="interest-log-date" type="date" className={inp} value={form.log_date} onChange={e => set('log_date', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="interest-rate" className="block text-xs text-slate-500 mb-1">현재 금리 (%) *</label>
+          <label htmlFor="interest-rate" className="block text-xs text-ink-subtle mb-1">현재 금리 (%) *</label>
           <input id="interest-rate" type="number" step="0.01" className={inp} value={form.rate} onChange={e => set('rate', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="interest-amount" className="block text-xs text-slate-500 mb-1">이자 금액 (원) *</label>
+          <label htmlFor="interest-amount" className="block text-xs text-ink-subtle mb-1">이자 금액 (원) *</label>
           <input id="interest-amount" type="number" className={inp} value={form.interest_amount} onChange={e => set('interest_amount', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="interest-memo" className="block text-xs text-slate-500 mb-1">메모</label>
+          <label htmlFor="interest-memo" className="block text-xs text-ink-subtle mb-1">메모</label>
           <input id="interest-memo" type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
         </div>
       </div>
-      <p className="text-xs text-slate-400">이자 금액은 부채 잔액에 자동으로 더해집니다.</p>
+      <p className="text-xs text-ink-faint">이자 금액은 부채 잔액에 자동으로 더해집니다.</p>
       <div className="flex gap-3 pt-1">
-        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-5 py-2 rounded-lg transition-colors">
+        <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-5 py-2 rounded-lg transition-colors">
           추가
         </button>
-        <button type="button" onClick={onCancel} className="text-slate-500 hover:text-slate-800 text-sm px-4 py-2 rounded-lg hover:bg-slate-100 transition-colors">
+        <button type="button" onClick={onCancel} className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg hover:bg-surface-sunken transition-colors">
           취소
         </button>
       </div>

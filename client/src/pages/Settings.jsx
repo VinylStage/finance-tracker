@@ -35,12 +35,12 @@ export default function Settings() {
     setRecurringRules(rules);
   }, []);
 
-  if (loading) return <div className="text-slate-500 text-center py-20">로딩 중...</div>;
+  if (loading) return <div className="text-ink-subtle text-center py-20">로딩 중...</div>;
   if (error) return <LoadError error={error} onRetry={reload} />;
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-slate-800">설정</h1>
+      <h1 className="text-xl font-semibold text-ink">설정</h1>
       <TrustPanel />
       <AppSettingsSection initial={appSettings} onSaved={reload} />
       <CategorySection categories={categories} onChanged={reload} />
@@ -56,7 +56,7 @@ export default function Settings() {
   );
 }
 
-const inp = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500';
+const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
 
 function AppSettingsSection({ initial, onSaved }) {
   const [form, setForm] = useState({
@@ -83,31 +83,31 @@ function AppSettingsSection({ initial, onSaved }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">기본 설정</h2>
+    <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-body">기본 설정</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="settings-initial-balance" className="block text-xs text-slate-500 mb-1">초기 잔액 (원)</label>
+          <label htmlFor="settings-initial-balance" className="block text-xs text-ink-subtle mb-1">초기 잔액 (원)</label>
           <input id="settings-initial-balance" type="number" className={inp} value={form.initial_balance} onChange={e => setForm(f => ({ ...f, initial_balance: e.target.value }))} />
         </div>
         <div>
-          <label htmlFor="settings-monthly-income" className="block text-xs text-slate-500 mb-1">월 수입 기준값 (원)</label>
+          <label htmlFor="settings-monthly-income" className="block text-xs text-ink-subtle mb-1">월 수입 기준값 (원)</label>
           <input id="settings-monthly-income" type="number" className={inp} value={form.monthly_income} onChange={e => setForm(f => ({ ...f, monthly_income: e.target.value }))} />
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-5 py-2 rounded-lg transition-colors">저장</button>
-        {saved && <span className="text-xs text-emerald-600">저장됨</span>}
+        <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-5 py-2 rounded-lg transition-colors">저장</button>
+        {saved && <span className="text-xs text-income">저장됨</span>}
       </div>
-      <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
+      <div className="flex items-center gap-3 border-t border-line-soft pt-4">
         <button
           type="button"
           onClick={() => { resetOnboarding(); setWelcomeReset(true); }}
-          className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors"
+          className="text-ink-muted hover:text-ink border border-line-strong text-sm px-4 py-2 rounded-lg hover:bg-surface-muted transition-colors"
         >
           시작 안내 다시 보기
         </button>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-ink-subtle">
           {welcomeReset ? '새로고침하면 시작 안내가 다시 보여요.' : '처음 실행 때 나오는 3단계 안내를 다시 볼 수 있어요.'}
         </span>
       </div>
@@ -190,62 +190,62 @@ function CategorySection({ categories, onChanged }) {
     : categories.filter(c => c.is_active);
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-700">카테고리 관리</h2>
+        <h2 className="text-sm font-semibold text-ink-body">카테고리 관리</h2>
         <div className="flex gap-2">
           <button 
             onClick={() => setShowForm(s => !s)} 
-            className="text-xs text-indigo-600 hover:text-indigo-700"
+            className="text-xs text-accent hover:text-accent-strong"
           >
             + 추가
           </button>
           <button 
             onClick={() => setShowInactive(s => !s)} 
-            className="text-xs text-slate-500 hover:text-slate-700"
+            className="text-xs text-ink-subtle hover:text-ink-body"
           >
             {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
           </button>
         </div>
       </div>
       {showForm && (
-        <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
+        <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-surface-muted rounded-lg p-3">
           <div>
-            <label htmlFor="category-major-type" className="block text-xs text-slate-500 mb-1">유형</label>
+            <label htmlFor="category-major-type" className="block text-xs text-ink-subtle mb-1">유형</label>
             <select id="category-major-type" className={inp} value={form.major_type} onChange={e => setForm(f => ({ ...f, major_type: e.target.value }))}>
               {CATEGORY_TYPES.map(t => <option key={t} value={t}>{categoryStyle(t).icon} {t}</option>)}
             </select>
           </div>
           <div>
-            <label htmlFor="category-name" className="block text-xs text-slate-500 mb-1">이름</label>
+            <label htmlFor="category-name" className="block text-xs text-ink-subtle mb-1">이름</label>
             <input id="category-name" type="text" className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="category-monthly-budget" className="block text-xs text-slate-500 mb-1">월 예산</label>
+            <label htmlFor="category-monthly-budget" className="block text-xs text-ink-subtle mb-1">월 예산</label>
             <input id="category-monthly-budget" type="number" className={inp} placeholder="0" value={form.monthly_budget} onChange={e => setForm(f => ({ ...f, monthly_budget: e.target.value }))} />
           </div>
-          <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">추가</button>
+          <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors">추가</button>
         </form>
       )}
       <div className="max-h-72 overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 sticky top-0">
-            <tr className="border-b border-slate-200">
-              <th className="text-left px-3 py-2 text-slate-500 font-medium">유형</th>
-              <th className="text-left px-3 py-2 text-slate-500 font-medium">이름</th>
-              <th className="text-right px-3 py-2 text-slate-500 font-medium">월 예산</th>
+          <thead className="bg-surface-muted sticky top-0">
+            <tr className="border-b border-line">
+              <th className="text-left px-3 py-2 text-ink-subtle font-medium">유형</th>
+              <th className="text-left px-3 py-2 text-ink-subtle font-medium">이름</th>
+              <th className="text-right px-3 py-2 text-ink-subtle font-medium">월 예산</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {filteredCategories.map(c => (
-              <tr key={c.id} className={`border-b border-slate-100 ${!c.is_active ? 'opacity-50' : ''}`}>
+              <tr key={c.id} className={`border-b border-line-soft ${!c.is_active ? 'opacity-50' : ''}`}>
                 {editing === c.id ? (
                   <>
                     <td className="px-3 py-2">
                       <select
                         aria-label={`${c.name} 유형 수정`}
-                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                        className="w-full bg-surface border border-line-strong rounded px-2 py-1 text-xs"
                         value={editForm.major_type}
                         onChange={e => setEditForm(f => ({ ...f, major_type: e.target.value }))}
                       >
@@ -256,7 +256,7 @@ function CategorySection({ categories, onChanged }) {
                       <input
                         type="text"
                         aria-label={`${c.name} 이름 수정`}
-                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                        className="w-full bg-surface border border-line-strong rounded px-2 py-1 text-xs"
                         value={editForm.name}
                         onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                       />
@@ -265,14 +265,14 @@ function CategorySection({ categories, onChanged }) {
                       <input
                         type="number"
                         aria-label={`${c.name} 월 예산 수정`}
-                        className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs"
+                        className="w-24 bg-surface border border-line-strong rounded px-2 py-1 text-right text-xs"
                         value={editForm.monthly_budget}
                         onChange={e => setEditForm(f => ({ ...f, monthly_budget: e.target.value }))}
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button onClick={() => handleEditSave(c)} className="text-xs text-indigo-600 hover:text-indigo-700 mr-2">저장</button>
-                      <button onClick={handleEditCancel} className="text-xs text-slate-400 hover:text-slate-600">취소</button>
+                      <button onClick={() => handleEditSave(c)} className="text-xs text-accent hover:text-accent-strong mr-2">저장</button>
+                      <button onClick={handleEditCancel} className="text-xs text-ink-faint hover:text-ink-muted">취소</button>
                     </td>
                   </>
                 ) : (
@@ -280,21 +280,21 @@ function CategorySection({ categories, onChanged }) {
                     <td className="px-3 py-2 text-xs">
                       <CategoryBadge majorType={c.major_type} name={c.major_type} />
                     </td>
-                    <td className="px-3 py-2 text-slate-800">{c.name}</td>
+                    <td className="px-3 py-2 text-ink">{c.name}</td>
                     <td className="px-3 py-2 text-right">
                       <input
                         type="number" defaultValue={c.monthly_budget}
                         aria-label={`${c.name} 월 예산`}
                         onBlur={e => handleBudgetChange(c, e.target.value)}
-                        className="w-24 bg-white border border-slate-300 rounded px-2 py-1 text-right text-xs"
+                        className="w-24 bg-surface border border-line-strong rounded px-2 py-1 text-right text-xs"
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button onClick={() => handleEditStart(c)} className="text-indigo-600 hover:text-indigo-700 text-xs mr-2">수정</button>
+                      <button onClick={() => handleEditStart(c)} className="text-accent hover:text-accent-strong text-xs mr-2">수정</button>
                       {c.is_active ? (
-                        <button onClick={() => handleDeactivate(c.id)} className="text-slate-400 hover:text-rose-600 text-xs">비활성화</button>
+                        <button onClick={() => handleDeactivate(c.id)} className="text-ink-faint hover:text-expense text-xs">비활성화</button>
                       ) : (
-                        <button onClick={() => handleReActivate(c.id)} className="text-slate-400 hover:text-emerald-600 text-xs">재활성화</button>
+                        <button onClick={() => handleReActivate(c.id)} className="text-ink-faint hover:text-income text-xs">재활성화</button>
                       )}
                     </td>
                   </>
@@ -374,88 +374,88 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
   const filteredRules = showInactive ? rules : rules.filter(r => r.is_active);
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-700">반복 거래 관리</h2>
+        <h2 className="text-sm font-semibold text-ink-body">반복 거래 관리</h2>
         <div className="flex gap-2">
-          <button onClick={showForm ? () => setShowForm(false) : startAdd} className="text-xs text-indigo-600 hover:text-indigo-700">
+          <button onClick={showForm ? () => setShowForm(false) : startAdd} className="text-xs text-accent hover:text-accent-strong">
             {showForm ? '취소' : '+ 추가'}
           </button>
-          <button onClick={() => setShowInactive(s => !s)} className="text-xs text-slate-500 hover:text-slate-700">
+          <button onClick={() => setShowInactive(s => !s)} className="text-xs text-ink-subtle hover:text-ink-body">
             {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
           </button>
         </div>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-ink-subtle">
         매달 금액이 완전히 고정된 지출(구독료 등)만 등록하세요. 통신비처럼 매달 금액이 달라지는 항목은 계속 직접 입력해야 합니다.
         등록해도 자동으로 거래가 생기지 않고, 대시보드의 "이번 달 반복 거래 확인"에서 매달 확인 후 생성합니다.
       </p>
       {showForm && (
-        <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
+        <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end bg-surface-muted rounded-lg p-3">
           <div>
-            <label htmlFor="rule-category" className="block text-xs text-slate-500 mb-1">카테고리</label>
+            <label htmlFor="rule-category" className="block text-xs text-ink-subtle mb-1">카테고리</label>
             <select id="rule-category" className={inp} value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} required>
               <option value="">선택...</option>
               {categories.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label htmlFor="rule-merchant" className="block text-xs text-slate-500 mb-1">가맹점/이름</label>
+            <label htmlFor="rule-merchant" className="block text-xs text-ink-subtle mb-1">가맹점/이름</label>
             <input id="rule-merchant" type="text" className={inp} value={form.merchant} onChange={e => setForm(f => ({ ...f, merchant: e.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="rule-amount" className="block text-xs text-slate-500 mb-1">금액</label>
+            <label htmlFor="rule-amount" className="block text-xs text-ink-subtle mb-1">금액</label>
             <input id="rule-amount" type="number" className={inp} placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="rule-day-of-month" className="block text-xs text-slate-500 mb-1">매월 며칠</label>
+            <label htmlFor="rule-day-of-month" className="block text-xs text-ink-subtle mb-1">매월 며칠</label>
             <input id="rule-day-of-month" type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="rule-payment-method" className="block text-xs text-slate-500 mb-1">결제수단</label>
+            <label htmlFor="rule-payment-method" className="block text-xs text-ink-subtle mb-1">결제수단</label>
             <select id="rule-payment-method" className={inp} value={form.payment_method_id} onChange={e => setForm(f => ({ ...f, payment_method_id: e.target.value }))}>
               <option value="">선택...</option>
               {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div>
-            <label htmlFor="rule-payment-style" className="block text-xs text-slate-500 mb-1">결제방식</label>
+            <label htmlFor="rule-payment-style" className="block text-xs text-ink-subtle mb-1">결제방식</label>
             <select id="rule-payment-style" className={inp} value={form.payment_style} onChange={e => setForm(f => ({ ...f, payment_style: e.target.value }))}>
               <option value="일시불">일시불</option>
               <option value="해당없음">해당없음</option>
             </select>
           </div>
-          <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+          <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors">
             {editingId ? '저장' : '추가'}
           </button>
         </form>
       )}
       <div className="max-h-72 overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 sticky top-0">
-            <tr className="border-b border-slate-200">
-              <th className="text-left px-3 py-2 text-slate-500 font-medium">가맹점</th>
-              <th className="text-left px-3 py-2 text-slate-500 font-medium">카테고리</th>
-              <th className="text-right px-3 py-2 text-slate-500 font-medium">금액</th>
-              <th className="text-right px-3 py-2 text-slate-500 font-medium">매월</th>
+          <thead className="bg-surface-muted sticky top-0">
+            <tr className="border-b border-line">
+              <th className="text-left px-3 py-2 text-ink-subtle font-medium">가맹점</th>
+              <th className="text-left px-3 py-2 text-ink-subtle font-medium">카테고리</th>
+              <th className="text-right px-3 py-2 text-ink-subtle font-medium">금액</th>
+              <th className="text-right px-3 py-2 text-ink-subtle font-medium">매월</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {filteredRules.length === 0 ? (
-              <tr><td colSpan={5} className="text-center text-slate-400 text-xs py-6">등록된 반복 규칙이 없습니다.</td></tr>
+              <tr><td colSpan={5} className="text-center text-ink-faint text-xs py-6">등록된 반복 규칙이 없습니다.</td></tr>
             ) : filteredRules.map(r => (
-              <tr key={r.id} className={`border-b border-slate-100 ${!r.is_active ? 'opacity-50' : ''}`}>
-                <td className="px-3 py-2 text-slate-800">{r.merchant}</td>
-                <td className="px-3 py-2 text-slate-500 text-xs">{r.category_name}</td>
+              <tr key={r.id} className={`border-b border-line-soft ${!r.is_active ? 'opacity-50' : ''}`}>
+                <td className="px-3 py-2 text-ink">{r.merchant}</td>
+                <td className="px-3 py-2 text-ink-subtle text-xs">{r.category_name}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmt(r.amount)}</td>
-                <td className="px-3 py-2 text-right text-xs text-slate-500">{r.day_of_month}일</td>
+                <td className="px-3 py-2 text-right text-xs text-ink-subtle">{r.day_of_month}일</td>
                 <td className="px-3 py-2 text-right">
-                  <button onClick={() => startEdit(r)} className="text-indigo-600 hover:text-indigo-700 text-xs mr-2">수정</button>
+                  <button onClick={() => startEdit(r)} className="text-accent hover:text-accent-strong text-xs mr-2">수정</button>
                   {r.is_active ? (
-                    <button onClick={() => handleDeactivate(r.id)} className="text-slate-400 hover:text-rose-600 text-xs">비활성화</button>
+                    <button onClick={() => handleDeactivate(r.id)} className="text-ink-faint hover:text-expense text-xs">비활성화</button>
                   ) : (
-                    <button onClick={() => handleReActivate(r)} className="text-slate-400 hover:text-emerald-600 text-xs">재활성화</button>
+                    <button onClick={() => handleReActivate(r)} className="text-ink-faint hover:text-income text-xs">재활성화</button>
                   )}
                 </td>
               </tr>
@@ -533,71 +533,71 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
     : paymentMethods.filter(p => p.is_active);
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-700">결제수단 관리</h2>
+        <h2 className="text-sm font-semibold text-ink-body">결제수단 관리</h2>
         <div className="flex gap-2">
           <button 
             onClick={() => setShowForm(s => !s)} 
-            className="text-xs text-indigo-600 hover:text-indigo-700"
+            className="text-xs text-accent hover:text-accent-strong"
           >
             + 추가
           </button>
           <button 
             onClick={() => setShowInactive(s => !s)} 
-            className="text-xs text-slate-500 hover:text-slate-700"
+            className="text-xs text-ink-subtle hover:text-ink-body"
           >
             {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
           </button>
         </div>
       </div>
       {showForm && (
-        <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-slate-50 rounded-lg p-3">
+        <form onSubmit={handleAdd} className="flex flex-wrap gap-2 items-end bg-surface-muted rounded-lg p-3">
           <div>
-            <label htmlFor="pm-name" className="block text-xs text-slate-500 mb-1">이름</label>
+            <label htmlFor="pm-name" className="block text-xs text-ink-subtle mb-1">이름</label>
             <input id="pm-name" type="text" className={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="pm-type" className="block text-xs text-slate-500 mb-1">유형</label>
+            <label htmlFor="pm-type" className="block text-xs text-ink-subtle mb-1">유형</label>
             <select id="pm-type" className={inp} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
               {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">추가</button>
+          <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors">추가</button>
         </form>
       )}
       <div className="flex flex-wrap gap-2">
         {filteredPaymentMethods.map(p => (
-          <span key={p.id} className={`flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full pl-3 pr-1 py-1 text-xs ${!p.is_active ? 'opacity-50' : ''}`}>
+          <span key={p.id} className={`flex items-center gap-2 bg-surface-muted border border-line rounded-full pl-3 pr-1 py-1 text-xs ${!p.is_active ? 'opacity-50' : ''}`}>
             {editing === p.id ? (
               <>
                 <input
                   type="text"
                   aria-label={`${p.name} 이름 수정`}
-                  className="bg-white border border-slate-300 rounded px-2 py-1 text-xs w-16"
+                  className="bg-surface border border-line-strong rounded px-2 py-1 text-xs w-16"
                   value={editForm.name}
                   onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                 />
                 <select
                   aria-label={`${p.name} 유형 수정`}
-                  className="bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                  className="bg-surface border border-line-strong rounded px-2 py-1 text-xs"
                   value={editForm.type}
                   onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}
                 >
                   {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <button onClick={() => handleEditSave(p)} className="text-xs text-indigo-600 hover:text-indigo-700 mr-1">저장</button>
-                <button onClick={handleEditCancel} className="text-xs text-slate-400 hover:text-slate-600">취소</button>
+                <button onClick={() => handleEditSave(p)} className="text-xs text-accent hover:text-accent-strong mr-1">저장</button>
+                <button onClick={handleEditCancel} className="text-xs text-ink-faint hover:text-ink-muted">취소</button>
               </>
             ) : (
               <>
-                {p.name} <span className="text-slate-400">({p.type})</span>
+                {p.name} <span className="text-ink-faint">({p.type})</span>
                 <div className="flex gap-1">
-                  <button onClick={() => handleEditStart(p)} className="text-xs text-indigo-600 hover:text-indigo-700 px-1.5 py-0.5 rounded-full hover:bg-indigo-50">✏</button>
+                  <button onClick={() => handleEditStart(p)} className="text-xs text-accent hover:text-accent-strong px-1.5 py-0.5 rounded-full hover:bg-accent-soft">✏</button>
                   {p.is_active ? (
-                    <button onClick={() => handleDeactivate(p.id)} className="text-slate-400 hover:text-rose-600 px-1.5 py-0.5 rounded-full hover:bg-rose-50">✕</button>
+                    <button onClick={() => handleDeactivate(p.id)} className="text-ink-faint hover:text-expense px-1.5 py-0.5 rounded-full hover:bg-expense-soft">✕</button>
                   ) : (
-                    <button onClick={() => handleReActivate(p.id)} className="text-slate-400 hover:text-emerald-600 px-1.5 py-0.5 rounded-full hover:bg-emerald-50">🔄</button>
+                    <button onClick={() => handleReActivate(p.id)} className="text-ink-faint hover:text-income px-1.5 py-0.5 rounded-full hover:bg-income-soft">🔄</button>
                   )}
                 </div>
               </>
@@ -625,20 +625,20 @@ function ExportSection() {
   };
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">데이터 내보내기</h2>
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-body">데이터 내보내기</h2>
       <LastExportNote kind="transactions" now={exportedAt || Date.now()} />
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label htmlFor="export-from" className="block text-xs text-slate-500 mb-1">시작일 (CSV, 선택)</label>
+          <label htmlFor="export-from" className="block text-xs text-ink-subtle mb-1">시작일 (CSV, 선택)</label>
           <input id="export-from" type="date" className={inp} value={from} onChange={e => setFrom(e.target.value)} />
         </div>
         <div>
-          <label htmlFor="export-to" className="block text-xs text-slate-500 mb-1">종료일 (CSV, 선택)</label>
+          <label htmlFor="export-to" className="block text-xs text-ink-subtle mb-1">종료일 (CSV, 선택)</label>
           <input id="export-to" type="date" className={inp} value={to} onChange={e => setTo(e.target.value)} />
         </div>
-        <button onClick={() => handleExport('csv')} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">CSV 다운로드 (거래내역)</button>
-        <button onClick={() => handleExport('json')} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">JSON 다운로드 (전체 백업)</button>
+        <button onClick={() => handleExport('csv')} className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors">CSV 다운로드 (거래내역)</button>
+        <button onClick={() => handleExport('json')} className="text-ink-muted hover:text-ink border border-line-strong text-sm px-4 py-2 rounded-lg hover:bg-surface-muted transition-colors">JSON 다운로드 (전체 백업)</button>
       </div>
     </div>
   );
@@ -675,17 +675,17 @@ function SettingsBackupSection() {
   };
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">설정 백업 / 복원</h2>
-      <p className="text-xs text-slate-500">카테고리, 결제수단, 앱 설정값만 별도로 백업·복원합니다. 거래내역은 포함되지 않습니다.</p>
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-body">설정 백업 / 복원</h2>
+      <p className="text-xs text-ink-subtle">카테고리, 결제수단, 앱 설정값만 별도로 백업·복원합니다. 거래내역은 포함되지 않습니다.</p>
       <LastExportNote kind="settings" now={exportedAt || Date.now()} />
       <div className="flex flex-wrap gap-3 items-center">
-        <button onClick={handleExport} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">설정 내보내기 (JSON)</button>
-        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+        <button onClick={handleExport} className="text-ink-muted hover:text-ink border border-line-strong text-sm px-4 py-2 rounded-lg hover:bg-surface-muted transition-colors">설정 내보내기 (JSON)</button>
+        <label className="cursor-pointer bg-accent-soft hover:bg-accent-soft-hover border border-accent-line text-accent-strong text-sm px-4 py-2 rounded-lg transition-colors">
           설정 가져오기
           <input type="file" accept=".json" className="hidden" onChange={handleImport} />
         </label>
-        {msg && <span className="text-xs text-slate-500">{msg}</span>}
+        {msg && <span className="text-xs text-ink-subtle">{msg}</span>}
       </div>
     </div>
   );
@@ -761,53 +761,53 @@ function TransactionsBackupSection() {
   };
   
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">거래내역 백업 / 복원</h2>
-      <p className="text-xs text-slate-500">거래내역을 이 앱 전용 JSON 형식으로 내보내거나, 내보낸 파일을 다시 불러와 추가하거나 전체 복원할 수 있습니다.</p>
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-body">거래내역 백업 / 복원</h2>
+      <p className="text-xs text-ink-subtle">거래내역을 이 앱 전용 JSON 형식으로 내보내거나, 내보낸 파일을 다시 불러와 추가하거나 전체 복원할 수 있습니다.</p>
       <LastExportNote kind="data" now={exportedAt || Date.now()} />
       <div className="flex flex-wrap gap-3 items-center">
-        <button onClick={handleExport} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">거래내역 내보내기 (JSON)</button>
-        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+        <button onClick={handleExport} className="text-ink-muted hover:text-ink border border-line-strong text-sm px-4 py-2 rounded-lg hover:bg-surface-muted transition-colors">거래내역 내보내기 (JSON)</button>
+        <label className="cursor-pointer bg-accent-soft hover:bg-accent-soft-hover border border-accent-line text-accent-strong text-sm px-4 py-2 rounded-lg transition-colors">
           거래내역 불러오기
           <input type="file" accept=".json" className="hidden" onChange={handleImport} />
         </label>
-        {message && <span className="text-xs text-slate-500">{message}</span>}
+        {message && <span className="text-xs text-ink-subtle">{message}</span>}
       </div>
       
       {preview && (
         <div className="mt-4">
-          <h3 className="text-sm font-semibold text-slate-700 mb-2">미리보기</h3>
+          <h3 className="text-sm font-semibold text-ink-body mb-2">미리보기</h3>
           <div className="mb-2">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50">
-                  <th className="border border-slate-200 px-2 py-1 text-left">날짜</th>
-                  <th className="border border-slate-200 px-2 py-1 text-left">가맹점</th>
-                  <th className="border border-slate-200 px-2 py-1 text-right">금액</th>
+                <tr className="bg-surface-muted">
+                  <th className="border border-line px-2 py-1 text-left">날짜</th>
+                  <th className="border border-line px-2 py-1 text-left">가맹점</th>
+                  <th className="border border-line px-2 py-1 text-right">금액</th>
                 </tr>
               </thead>
               <tbody>
                 {preview.data.map((tx, i) => (
-                  <tr key={i} className="border-b border-slate-100">
-                    <td className="border border-slate-200 px-2 py-1">{tx.date}</td>
-                    <td className="border border-slate-200 px-2 py-1">{tx.merchant || '-'}</td>
-                    <td className="border border-slate-200 px-2 py-1 text-right">{tx.amount ? tx.amount.toLocaleString('ko-KR') : '-'}</td>
+                  <tr key={i} className="border-b border-line-soft">
+                    <td className="border border-line px-2 py-1">{tx.date}</td>
+                    <td className="border border-line px-2 py-1">{tx.merchant || '-'}</td>
+                    <td className="border border-line px-2 py-1 text-right">{tx.amount ? tx.amount.toLocaleString('ko-KR') : '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-slate-500 mb-3">총 {preview.total}건</p>
+          <p className="text-xs text-ink-subtle mb-3">총 {preview.total}건</p>
           <div className="flex flex-wrap gap-2">
             <button 
               onClick={() => handleImportAction('append')}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+              className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors"
             >
               새 데이터 추가
             </button>
             <button 
               onClick={() => handleImportAction('overwrite')} 
-              className="bg-rose-600 hover:bg-rose-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+              className="bg-danger hover:bg-danger-hover text-white text-sm px-4 py-2 rounded-lg transition-colors"
             >
               덮어쓰기
             </button>
@@ -870,27 +870,27 @@ function CardImportSection() {
   const previewTotal = preview?.totals?.count || 0;
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">카드사 엑셀 임포트</h2>
-      <p className="text-xs text-slate-500">카드사 홈페이지에서 내려받은 이용내역 파일을 업로드하면 거래내역으로 자동 등록됩니다. 여러 파일을 한 번에 선택할 수 있습니다. (농협·롯데·삼성·하나·현대)</p>
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-body">카드사 엑셀 임포트</h2>
+      <p className="text-xs text-ink-subtle">카드사 홈페이지에서 내려받은 이용내역 파일을 업로드하면 거래내역으로 자동 등록됩니다. 여러 파일을 한 번에 선택할 수 있습니다. (농협·롯데·삼성·하나·현대)</p>
       <div className="flex flex-wrap gap-3 items-center">
-        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+        <label className="cursor-pointer bg-accent-soft hover:bg-accent-soft-hover border border-accent-line text-accent-strong text-sm px-4 py-2 rounded-lg transition-colors">
           파일 선택 (여러 개 가능)
           <input type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={handleFiles} disabled={loading} />
         </label>
-        {loading && <span className="text-xs text-slate-400">처리 중…</span>}
-        {message && <span className="text-xs text-slate-500">{message}</span>}
+        {loading && <span className="text-xs text-ink-faint">처리 중…</span>}
+        {message && <span className="text-xs text-ink-subtle">{message}</span>}
       </div>
       {preview && (
         <div className="mt-2 space-y-3">
-          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-1.5">
-            <div className="font-medium text-slate-700">
+          <div className="text-xs bg-surface-muted border border-line rounded-lg px-4 py-3 space-y-1.5">
+            <div className="font-medium text-ink-body">
               파일 {preview.totals.files}개 · 성공 {preview.totals.succeeded} / 실패 {preview.totals.failed}
             </div>
             {preview.results.map((r, i) => (
               <div key={i} className="flex items-start gap-2">
-                <span className={r.ok ? 'text-emerald-600' : 'text-rose-600'}>{r.ok ? '✓' : '✕'}</span>
-                <span className="text-slate-600 break-all">
+                <span className={r.ok ? 'text-income' : 'text-expense'}>{r.ok ? '✓' : '✕'}</span>
+                <span className="text-ink-muted break-all">
                   <span className="font-medium">{r.filename}</span>
                   {r.ok
                     ? ` — ${r.cardCompanyLabel} · 신규 ${(r.count || 0).toLocaleString('ko-KR')}건 · 중복 ${(r.skipped || 0).toLocaleString('ko-KR')}건`
@@ -900,10 +900,10 @@ function CardImportSection() {
             ))}
           </div>
           <div className="flex gap-2">
-            <button onClick={handleImport} disabled={loading || previewTotal === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+            <button onClick={handleImport} disabled={loading || previewTotal === 0} className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
               신규 {previewTotal.toLocaleString('ko-KR')}건 임포트
             </button>
-            <button onClick={() => { setPreview(null); setFiles([]); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+            <button onClick={() => { setPreview(null); setFiles([]); }} className="text-ink-subtle hover:text-ink-body text-sm px-4 py-2 rounded-lg border border-line hover:bg-surface-muted transition-colors">
               취소
             </button>
           </div>
@@ -970,33 +970,33 @@ function CsvImportSection() {
   };
 
   return (
-    <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">신한카드 CSV 임포트</h2>
-      <p className="text-xs text-slate-500">
+    <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-body">신한카드 CSV 임포트</h2>
+      <p className="text-xs text-ink-subtle">
         신한카드는 엑셀 내보내기를 지원하지 않아 CSV 파일로 업로드합니다. 실제 내보내기 파일로 컬럼 구성이 검증되지 않았으니, 미리보기에서 건수를 확인한 뒤 임포트하세요.
       </p>
       <div className="flex flex-wrap gap-3 items-center">
-        <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
+        <label className="cursor-pointer bg-accent-soft hover:bg-accent-soft-hover border border-accent-line text-accent-strong text-sm px-4 py-2 rounded-lg transition-colors">
           파일 선택
           <input type="file" accept=".csv" className="hidden" onChange={handleFile} disabled={loading} />
         </label>
-        {loading && <span className="text-xs text-slate-400">처리 중…</span>}
-        {message && <span className="text-xs text-slate-500">{message}</span>}
+        {loading && <span className="text-xs text-ink-faint">처리 중…</span>}
+        {message && <span className="text-xs text-ink-subtle">{message}</span>}
       </div>
       {preview && (
         <div className="mt-2 space-y-3">
-          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 space-y-1">
-            <div className="font-medium text-slate-700 break-all">{fileName}</div>
-            <div className="text-slate-600">
+          <div className="text-xs bg-surface-muted border border-line rounded-lg px-4 py-3 space-y-1">
+            <div className="font-medium text-ink-body break-all">{fileName}</div>
+            <div className="text-ink-muted">
               신규 {(preview.count || 0).toLocaleString('ko-KR')}건 · 중복 {(preview.skipped || 0).toLocaleString('ko-KR')}건
               {preview.invalid ? ` · 형식 오류(제외) ${preview.invalid}건` : ''}
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleImport} disabled={loading || (preview.count || 0) === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+            <button onClick={handleImport} disabled={loading || (preview.count || 0) === 0} className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
               신규 {(preview.count || 0).toLocaleString('ko-KR')}건 임포트
             </button>
-            <button onClick={() => { setPreview(null); setCsvText(null); setFileName(''); }} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+            <button onClick={() => { setPreview(null); setCsvText(null); setFileName(''); }} className="text-ink-subtle hover:text-ink-body text-sm px-4 py-2 rounded-lg border border-line hover:bg-surface-muted transition-colors">
               취소
             </button>
           </div>
@@ -1037,16 +1037,16 @@ function DangerZoneSection() {
   };
 
   return (
-    <div className="bg-rose-50 shadow-sm rounded-xl border border-rose-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-rose-700">위험 구역</h2>
-      <p className="text-xs text-rose-600">
+    <div className="bg-expense-soft shadow-card rounded-card border border-expense-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-expense-strong">위험 구역</h2>
+      <p className="text-xs text-expense">
         전체 거래내역을 삭제합니다. 이 작업은 되돌릴 수 없으며, 삭제 전 위의 "거래내역 백업"으로 미리 내보내는 것을 권장합니다.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
           aria-label={`확인을 위해 "${DANGER_CONFIRM_TEXT}" 입력`}
-          className="bg-white border border-rose-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-rose-500"
+          className="bg-surface border border-expense-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-expense-bar"
           placeholder={`확인을 위해 "${DANGER_CONFIRM_TEXT}" 입력`}
           value={confirmText}
           onChange={e => setConfirmText(e.target.value)}
@@ -1054,11 +1054,11 @@ function DangerZoneSection() {
         <button
           onClick={handleDeleteAll}
           disabled={confirmText !== DANGER_CONFIRM_TEXT || deleting}
-          className="bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          className="bg-danger hover:bg-danger-hover disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm px-4 py-2 rounded-lg transition-colors"
         >
           {deleting ? '삭제 중...' : '전체 거래내역 삭제'}
         </button>
-        {message && <span className="text-xs text-rose-700">{message}</span>}
+        {message && <span className="text-xs text-expense-strong">{message}</span>}
       </div>
     </div>
   );
