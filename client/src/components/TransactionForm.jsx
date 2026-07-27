@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { localYMD } from '../lib/date';
+import { localYMD, localYearMonth } from '../lib/date';
 import { categoryStyle } from '../lib/categoryStyle';
+import { remainingBudget, toSpentMap } from '../lib/quickEntry';
 
 // 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
 // 프런트(ESM/Vite)와 빌드 도구가 분리되어 있어 값을 공유하지 못하므로 수동 동기화 필요(#90).
@@ -36,11 +37,20 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
   const [suggesting, setSuggesting] = useState(false);
   const [confidence, setConfidence] = useState(null);
   const [recentMerchants, setRecentMerchants] = useState([]);
+  const [spentMap, setSpentMap] = useState({});
 
   useEffect(() => {
     api.get('/api/transactions/suggest/merchants?limit=10')
       .then(d => setRecentMerchants(d.data || []))
       .catch(() => {}); // 최근 가맹점 제안은 보조 기능이라 실패해도 무시
+  }, []);
+
+  // 잔여예산 표시용. 이번달 1일부터 오늘까지의 카테고리별 지출을 한 번만 받아둔다.
+  useEffect(() => {
+    const ym = localYearMonth();
+    api.get(`/api/transactions/summary/category-breakdown?from=${ym}-01&to=${localYMD()}`)
+      .then(d => setSpentMap(toSpentMap(d.data)))
+      .catch(() => {}); // 잔여예산도 보조 정보라 실패해도 입력을 막지 않는다
   }, []);
 
   const majorTypes = [...new Set(categories.map(c => c.major_type))];
@@ -50,6 +60,26 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
   const handleMerchantChange = (v) => {
     set('merchant', v);
     setConfidence(null);
+  };
+
+  // 최근 가맹점 칩 원탭. 반복 입력에서 타이핑을 없애는 게 목적이므로
+  // 가맹점명만 넣고 끝내지 않고 카테고리 자동제안까지 이어서 태운다.
+  const handleMerchantChip = async (name) => {
+    set('merchant', name);
+    setConfidence(null);
+    if (form.category_id) return;
+    setSuggesting(true);
+    try {
+      const { category_id, confidence: conf } = await api.get(
+        `/api/transactions/suggest/category?merchant=${encodeURIComponent(name)}`
+      );
+      setConfidence(conf);
+      if (category_id) set('category_id', String(category_id));
+    } catch {
+      // 자동 제안 실패는 입력 흐름을 막지 않는다
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   const handleMerchantBlur = async () => {
@@ -78,13 +108,14 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
     });
   };
 
+  const selectedCategory = categories.find(c => String(c.id) === String(form.category_id));
+  const budgetHint = remainingBudget(selectedCategory, spentMap);
+  const fmtWon = (n) => Number(n || 0).toLocaleString('ko-KR') + '원';
+
   const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
 
   return (
-    <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-ink-body">
-        {initial ? '거래 수정' : '새 거래 추가'}
-      </h2>
+    <form onSubmit={handleSubmit} className="space-y-4">
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -119,6 +150,17 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
               </optgroup>
             ))}
           </select>
+          {budgetHint.show && (
+            <p className="mt-1.5 text-[11px] tabular-nums">
+              {budgetHint.level === 'over' ? (
+                <span className="text-expense">이번달 예산 {fmtWon(budgetHint.over)} 초과</span>
+              ) : budgetHint.level === 'caution' ? (
+                <span className="text-warning">이번달 {fmtWon(budgetHint.remaining)} 남음 (얼마 안 남음)</span>
+              ) : (
+                <span className="text-ink-subtle">이번달 {fmtWon(budgetHint.remaining)} 남음</span>
+              )}
+            </p>
+          )}
         </div>
 
         <div>
@@ -153,6 +195,21 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           <datalist id="recent-merchants">
             {recentMerchants.map(m => <option key={m} value={m} />)}
           </datalist>
+          {recentMerchants.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {recentMerchants.slice(0, 5).map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => handleMerchantChip(name)}
+                  disabled={suggesting}
+                  className="rounded-full border border-line bg-surface-muted px-2 py-0.5 text-[11px] text-ink-muted hover:border-accent-bar hover:text-accent-strong disabled:opacity-50"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

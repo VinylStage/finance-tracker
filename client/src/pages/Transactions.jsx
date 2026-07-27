@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import TransactionList from '../components/TransactionList';
 import TransactionForm from '../components/TransactionForm';
+import Modal from '../components/Modal';
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
@@ -39,6 +40,7 @@ export default function Transactions() {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [selectedYear, setSelectedYear] = useState(null);
   const [expandedMonths, setExpandedMonths] = useState(new Set());
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -140,6 +142,7 @@ export default function Transactions() {
   }, [reload]);
 
   const handleSave = async (formData) => {
+    setSaving(true);
     try {
       if (editItem) await api.put(`/api/transactions/${editItem.id}`, formData);
       else await api.post('/api/transactions', formData);
@@ -148,6 +151,9 @@ export default function Transactions() {
       refreshAfterMutation();
     } catch (err) {
       await alert(err.message);
+    } finally {
+      // 실패해도 반드시 풀어야 한다. 안 그러면 모달이 영영 닫히지 않는다.
+      setSaving(false);
     }
   };
 
@@ -295,13 +301,19 @@ export default function Transactions() {
       </div>
 
       {showForm && (
-        <TransactionForm
-          initial={editItem}
-          categories={categories}
-          paymentMethods={paymentMethods}
-          onSave={handleSave}
-          onCancel={() => { setShowForm(false); setEditItem(null); }}
-        />
+        <Modal
+          title={editItem ? '거래 수정' : '새 거래 추가'}
+          busy={saving}
+          onClose={() => { setShowForm(false); setEditItem(null); }}
+        >
+          <TransactionForm
+            initial={editItem}
+            categories={categories}
+            paymentMethods={paymentMethods}
+            onSave={handleSave}
+            onCancel={() => { setShowForm(false); setEditItem(null); }}
+          />
+        </Modal>
       )}
 
       {loading ? (
