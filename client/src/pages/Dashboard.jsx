@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
+import { budgetStatus, budgetLabel, BUDGET_TONE } from '../lib/budget';
 
 const PALETTE = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
 const PERIODS = ['일', '주', '월', '연'];
@@ -352,21 +353,24 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {data.budgets.map(b => {
-                const pct = Math.min(100, Math.round((b.spent / b.monthly_budget) * 100));
-                const over = b.spent > b.monthly_budget;
+                const s = budgetStatus(b.spent, b.monthly_budget);
+                const tone = BUDGET_TONE[s.level];
                 return (
                   <div key={b.name}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-ink-subtle">{b.name}</span>
-                      <span className={over ? 'text-expense' : 'text-ink-muted'}>
-                        {fmt(b.spent)} / {fmt(b.monthly_budget)}
+                      <span className={`font-medium ${tone.text}`}>
+                        {budgetLabel(s, fmt)}
                       </span>
                     </div>
                     <div className="h-1.5 bg-surface-sunken rounded-full">
                       <div
-                        className={`h-1.5 rounded-full ${over ? 'bg-expense-bar' : 'bg-accent-bar'}`}
-                        style={{ width: `${pct}%` }}
+                        className={`h-1.5 rounded-full transition-all ${tone.bar}`}
+                        style={{ width: `${s.barPct}%` }}
                       />
+                    </div>
+                    <div className="mt-1 text-[10px] text-ink-faint tabular-nums">
+                      {fmt(b.spent)} / {fmt(b.monthly_budget)}
                     </div>
                   </div>
                 );
