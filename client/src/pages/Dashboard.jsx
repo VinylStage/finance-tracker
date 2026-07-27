@@ -59,6 +59,8 @@ function CategoryComparison() {
 
   return (
     <Section
+      collapsible
+      id="category-compare"
       title="카테고리별 지출 비교"
       caption={
         <div className="flex flex-wrap items-center gap-3">
@@ -205,15 +207,69 @@ function RecurringDueSection({ onConfirmed }) {
   );
 }
 
-function Section({ title, children, caption }) {
-  return (
-    <div className="bg-surface shadow-card rounded-card p-5 border border-line">
-      <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-sm font-semibold text-ink-body">{title}</h2>
-        {caption && <span className="text-xs text-ink-faint">{caption}</span>}
+const SECTION_STATE_KEY = 'dash.section.';
+
+// sessionStorage 접근이 막힌 환경(사파리 프라이빗 모드 등)에서도 화면은 떠야 한다.
+// 접힘 상태는 편의 기능이라 저장 실패로 렌더를 막을 이유가 없다.
+function readSectionOpen(id, fallback) {
+  try {
+    const v = window.sessionStorage.getItem(SECTION_STATE_KEY + id);
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+}
+
+// collapsible 이 아니면 기존 카드와 동일하게 렌더한다. 접힘 모드일 때만 <details> 를 쓴다.
+// <details> 를 고른 이유: 키보드 조작과 스크린리더 상태 노출(expanded/collapsed)을
+// 브라우저가 이미 구현해 두고 있어 직접 배선할 필요가 없다.
+// 닫혀 있어도 children 은 DOM 에 마운트되므로 각 섹션의 데이터 로딩 훅은 그대로 돈다.
+function Section({ title, children, caption, collapsible = false, id, defaultOpen = false }) {
+  const [open, setOpen] = useState(() => (collapsible ? readSectionOpen(id, defaultOpen) : true));
+
+  if (!collapsible) {
+    return (
+      <div className="bg-surface shadow-card rounded-card p-5 border border-line">
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-sm font-semibold text-ink-body">{title}</h2>
+          {caption && <span className="text-xs text-ink-faint">{caption}</span>}
+        </div>
+        {children}
       </div>
-      {children}
-    </div>
+    );
+  }
+
+  const handleToggle = (e) => {
+    const next = e.currentTarget.open;
+    setOpen(next);
+    try {
+      window.sessionStorage.setItem(SECTION_STATE_KEY + id, next ? '1' : '0');
+    } catch {
+      // 저장 실패는 무시한다.
+    }
+  };
+
+  return (
+    <details
+      open={open}
+      onToggle={handleToggle}
+      className="bg-surface shadow-card rounded-card border border-line"
+    >
+      <summary className="flex items-baseline justify-between gap-2 px-5 py-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <span className="flex items-baseline gap-2">
+          <span aria-hidden="true" className="text-ink-faint text-[10px]">{open ? '▼' : '▶'}</span>
+          <h2 className="text-sm font-semibold text-ink-body">{title}</h2>
+        </span>
+        {/* caption 에 기간 선택 버튼 같은 대화형 요소가 들어온다. 클릭이 summary 까지
+            올라가면 섹션이 접혔다 펴졌다 하므로 여기서 전파를 끊는다. */}
+        {caption && (
+          <span className="text-xs text-ink-faint" onClick={(e) => e.stopPropagation()}>
+            {caption}
+          </span>
+        )}
+      </summary>
+      <div className="px-5 pb-5">{children}</div>
+    </details>
   );
 }
 
@@ -352,6 +408,8 @@ export default function Dashboard() {
 
       {/* 흐름 분석 */}
       <Section
+        collapsible
+        id="flow"
         title="흐름 분석"
         caption={
           <div className="flex gap-1">
@@ -431,8 +489,8 @@ export default function Dashboard() {
       </Section>
 
       {/* 자산 흐름 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Section title="순자산 추이" caption="누적 수지 기준">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <Section collapsible id="networth" title="순자산 추이" caption="누적 수지 기준">
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={netWorthTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -444,7 +502,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </Section>
 
-        <Section title="부채 잔액 추이" caption="현재 총 부채 기준">
+        <Section collapsible id="debt-trend" title="부채 잔액 추이" caption="현재 총 부채 기준">
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={debtTrend}>
               <defs>
@@ -463,9 +521,10 @@ export default function Dashboard() {
         </Section>
       </div>
 
-      {/* Top 지출 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Section title="이번달 Top 5 가맹점">
+      {/* Top 지출 — 접힘 섹션이 섞이므로 items-start 로 각 카드가 자기 높이만 차지하게 한다.
+          기본값(stretch)이면 펼친 카드 높이에 맞춰 접힌 카드가 빈 박스로 늘어난다. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <Section collapsible id="top-merchants" title="이번달 Top 5 가맹점">
           {topMerchants.length === 0 ? (
             <div className="text-ink-faint text-sm text-center py-6">이번 달 거래 내역이 없습니다.</div>
           ) : (
@@ -483,7 +542,7 @@ export default function Dashboard() {
           )}
         </Section>
 
-        <Section title="이번달 Top 5 카테고리">
+        <Section collapsible id="top-categories" title="이번달 Top 5 카테고리">
           {topCategories.length === 0 ? (
             <div className="text-ink-faint text-sm text-center py-6">이번 달 지출 내역이 없습니다.</div>
           ) : (
