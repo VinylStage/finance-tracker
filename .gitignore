@@ -11,7 +11,8 @@ docs/01_*
 docs/02_*
 docs/03_*
 .claude/
-public/
+# 빌드 산출물. 앵커(`/`)가 없으면 client/public(vite publicDir)까지 잡힌다.
+/public/
 coverage/
 
 # confirm-chain 승인 체크포인트 (로컬 전용)
