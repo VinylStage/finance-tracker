@@ -4,8 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Finance Tracker</title>
+    <script>
+      // 다크모드 첫 프레임 깜빡임 방지(#201).
+      // React 마운트 후에 적용하면 다크 사용자에게 흰 화면이 한 번 번쩍인다.
+      // 여기서 키 이름('ft.theme')이 client/src/lib/theme.js 와 중복되는데,
+      // 이 스크립트는 모듈 로딩 전에 실행돼야 해서 import 를 쓸 수 없다.
+      // 키를 바꾸면 양쪽을 함께 고쳐야 한다.
+      try {
+        if (localStorage.getItem('ft.theme') === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (e) {
+        // 저장소 접근이 막힌 환경에서는 기본값(라이트)으로 둔다.
+      }
+    </script>
   </head>
-  <body class="bg-gray-900 text-gray-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

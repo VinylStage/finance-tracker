@@ -8,6 +8,7 @@ import { categoryStyle } from '../lib/categoryStyle';
 import { TrustPanel, LastExportNote } from '../components/TrustPanel';
 import { recordExport } from '../lib/backupStatus';
 import { resetOnboarding } from '../lib/onboarding';
+import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -65,7 +66,17 @@ function AppSettingsSection({ initial, onSaved }) {
   });
   const [saved, setSaved] = useState(false);
   const [welcomeReset, setWelcomeReset] = useState(false);
+  const [theme, setTheme] = useState(() => readTheme());
   const { alert } = useConfirm();
+
+  // 저장·적용을 한 번에 한다. 미리보기 없이 즉시 반영하는 편이,
+  // 껐다 켰다 하며 비교하려는 사용자에게 반응이 빠르다.
+  const handleThemeToggle = () => {
+    const next = toggleTheme(theme);
+    setTheme(next);
+    saveTheme(next);
+    applyTheme(next);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -98,6 +109,19 @@ function AppSettingsSection({ initial, onSaved }) {
       <div className="flex items-center gap-3">
         <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-5 py-2 rounded-lg transition-colors">저장</button>
         {saved && <span className="text-xs text-income">저장됨</span>}
+      </div>
+      <div className="flex items-center gap-3 border-t border-line-soft pt-4">
+        <button
+          type="button"
+          onClick={handleThemeToggle}
+          aria-pressed={theme === 'dark'}
+          className="text-ink-muted hover:text-ink border border-line-strong text-sm px-4 py-2 rounded-lg hover:bg-surface-muted transition-colors"
+        >
+          {theme === 'dark' ? '라이트 모드로' : '다크 모드로'}
+        </button>
+        <span className="text-xs text-ink-subtle">
+          {theme === 'dark' ? '어두운 화면을 쓰고 있어요.' : '기본은 라이트 모드예요. 밤에 눈이 부시면 바꿔 보세요.'}
+        </span>
       </div>
       <div className="flex items-center gap-3 border-t border-line-soft pt-4">
         <button
