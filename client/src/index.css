@@ -153,3 +153,87 @@ body {
     justify-content: flex-start;
   }
 }
+
+/* 다크모드 팔레트(#201). 옵트인이며 기본값은 라이트다 —
+   금융 앱은 익숙한 인터페이스로 신뢰를 유지하는 쪽이 낫다는 리서치를 따랐다.
+
+   컴포넌트는 하나도 고치지 않는다. 토큰이 var() 를 참조하므로 여기서 변수만
+   덮어쓰면 전 화면이 함께 바뀐다(#190 과 그 후속 마이그레이션이 만든 구조).
+
+   모든 값은 WCAG 대비비를 실제로 계산해서 골랐다. 추측한 값은 하나도 없다.
+   기준은 카드 배경(#1c1c1e) 위 4.5:1 이며, 주석의 숫자가 측정값이다.
+
+   순수 검정(#000)을 쓰지 않는다. 어두운 회색이 눈부심과 잔상이 덜하다. */
+:root[data-theme='dark'] {
+  /* 표면: 페이지가 가장 어둡고 카드가 한 단계 밝다 */
+  --color-surface: #1c1c1e;
+  --color-surface-muted: #121212;
+  --color-surface-sunken: #2a2a2c;
+
+  --color-line-soft: #262628;
+  --color-line: #333336;
+  --color-line-strong: #45454a;
+
+  /* 글자: ink 14.53 / body 11.48 / muted 7.85 / subtle 6.05 / faint 4.93 */
+  --color-ink: #ededed;
+  --color-ink-body: #d4d4d4;
+  --color-ink-muted: #b0b0b0;
+  --color-ink-subtle: #9a9a9a;
+  --color-ink-faint: #8a8a8a;
+  --color-ink-ghost: #5a5a5a;
+
+  /* 수입·지출: 채도를 낮춰 눈부심을 줄이면서 대비는 유지한다 (8.85 / 6.32) */
+  --color-income: #34d399;
+  --color-income-strong: #6ee7b7;
+  --color-income-soft: #04291d;
+
+  --color-expense: #fb7185;
+  --color-expense-strong: #fda4af;
+  --color-expense-bar: #f43f5e;
+  --color-expense-soft: #3b1119;
+  --color-expense-line: #4c1d24;
+  --color-expense-line-strong: #6b2733;
+
+  /* 삭제 버튼 배경. 흰 글자가 얹히므로 글자용 expense 와 반대로 어두워야 한다
+     (흰 글자 6.29 / hover 8.02). 이 분리가 없으면 버튼 글자가 안 읽힌다. */
+  --color-danger: #be123c;
+  --color-danger-hover: #9f1239;
+
+  --color-warning: #fbbf24;
+  --color-warning-mid: #f59e0b;
+  --color-warning-strong: #fcd34d;
+  --color-warning-bar: #f59e0b;
+  --color-warning-soft: #3a2a05;
+  --color-warning-line: #4a3410;
+
+  /* accent 는 글자와 버튼 배경에 함께 쓰인다. 흰 글자가 읽히면서(5.08)
+     어두운 배경 위 큰 글자로도 읽히는(3.35) 좁은 구간을 계산으로 찾았다. */
+  --color-accent: #615ae8;
+  --color-accent-hover: #4f46e5;
+  --color-accent-strong: #a5b4fc;
+  --color-accent-bar: #6366f1;
+  --color-accent-soft: #1e1b4b;
+  --color-accent-soft-hover: #2a2463;
+  --color-accent-line: #3730a3;
+  --color-accent-line-strong: #4338ca;
+
+  /* 카테고리 6종: 6.15 ~ 11.11, 서로 구분되는 색상환 위치를 유지한다 */
+  --color-cat-income: #34d399;
+  --color-cat-fixed: #fb7185;
+  --color-cat-needs: #fb923c;
+  --color-cat-debt: #f87171;
+  --color-cat-wants: #facc15;
+  --color-cat-savings: #60a5fa;
+
+  /* 모달 뒷배경. 어두운 화면에서는 더 어두워야 덮인 느낌이 난다 */
+  --color-scrim: #000000;
+
+  /* 어두운 배경에서 그림자는 거의 안 보인다. 대신 경계선에 의존한다. */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+}
+
+/* 브라우저 기본 UI(스크롤바·폼 컨트롤·date picker)도 함께 어두워지게 한다.
+   이걸 빼면 입력창의 달력 아이콘 같은 요소만 밝게 남아 튄다. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
