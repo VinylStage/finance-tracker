@@ -5,6 +5,8 @@ import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import CategoryBadge from '../components/CategoryBadge';
 import { categoryStyle } from '../lib/categoryStyle';
+import { TrustPanel, LastExportNote } from '../components/TrustPanel';
+import { recordExport } from '../lib/backupStatus';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -38,6 +40,7 @@ export default function Settings() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-slate-800">설정</h1>
+      <TrustPanel />
       <AppSettingsSection initial={appSettings} onSaved={reload} />
       <CategorySection categories={categories} onChanged={reload} />
       <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
@@ -595,18 +598,22 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
 function ExportSection() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [exportedAt, setExportedAt] = useState(0);
 
   const handleExport = (format) => {
     const params = new URLSearchParams();
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     const query = params.toString();
+    recordExport('transactions', new Date().toISOString());
+    setExportedAt(Date.now());
     window.location.href = `/api/export/${format}${query ? `?${query}` : ''}`;
   };
 
   return (
     <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
       <h2 className="text-sm font-semibold text-slate-700">데이터 내보내기</h2>
+      <LastExportNote kind="transactions" now={exportedAt || Date.now()} />
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label htmlFor="export-from" className="block text-xs text-slate-500 mb-1">시작일 (CSV, 선택)</label>
@@ -625,9 +632,12 @@ function ExportSection() {
 
 function SettingsBackupSection() {
   const [msg, setMsg] = useState('');
+  const [exportedAt, setExportedAt] = useState(0);
   const { confirm, alert } = useConfirm();
 
   const handleExport = () => {
+    recordExport('settings', new Date().toISOString());
+    setExportedAt(Date.now());
     window.location.href = '/api/export/settings';
   };
 
@@ -654,6 +664,7 @@ function SettingsBackupSection() {
     <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
       <h2 className="text-sm font-semibold text-slate-700">설정 백업 / 복원</h2>
       <p className="text-xs text-slate-500">카테고리, 결제수단, 앱 설정값만 별도로 백업·복원합니다. 거래내역은 포함되지 않습니다.</p>
+      <LastExportNote kind="settings" now={exportedAt || Date.now()} />
       <div className="flex flex-wrap gap-3 items-center">
         <button onClick={handleExport} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">설정 내보내기 (JSON)</button>
         <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
@@ -669,9 +680,12 @@ function SettingsBackupSection() {
 function TransactionsBackupSection() {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState('');
+  const [exportedAt, setExportedAt] = useState(0);
   const { confirm } = useConfirm();
 
   const handleExport = () => {
+    recordExport('data', new Date().toISOString());
+    setExportedAt(Date.now());
     window.location.href = '/api/data/export';
   };
   
@@ -736,6 +750,7 @@ function TransactionsBackupSection() {
     <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
       <h2 className="text-sm font-semibold text-slate-700">거래내역 백업 / 복원</h2>
       <p className="text-xs text-slate-500">거래내역을 이 앱 전용 JSON 형식으로 내보내거나, 내보낸 파일을 다시 불러와 추가하거나 전체 복원할 수 있습니다.</p>
+      <LastExportNote kind="data" now={exportedAt || Date.now()} />
       <div className="flex flex-wrap gap-3 items-center">
         <button onClick={handleExport} className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors">거래내역 내보내기 (JSON)</button>
         <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-sm px-4 py-2 rounded-lg transition-colors">
