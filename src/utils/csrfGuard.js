@@ -18,14 +18,14 @@ function csrfGuard(req, res, next) {
   const secFetchSite = req.get('Sec-Fetch-Site');
   if (secFetchSite) {
     if (secFetchSite === 'same-origin' || secFetchSite === 'none') return next();
-    return res.status(403).json({ error: 'Cross-site request blocked' });
+    return res.status(403).json({ error: '다른 사이트에서 온 요청은 처리하지 않습니다.' });
   }
 
   const origin = req.get('Origin');
   if (origin) {
     const selfOrigin = `${req.protocol}://${req.get('host')}`;
     if (origin === selfOrigin) return next();
-    return res.status(403).json({ error: 'Cross-origin request blocked' });
+    return res.status(403).json({ error: '다른 주소에서 온 요청은 처리하지 않습니다.' });
   }
 
   return next();

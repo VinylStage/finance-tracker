@@ -69,7 +69,7 @@ router.post('/', (req, res) => {
       fee_per_month = 0, payment_method_id, start_billing_month,
     } = req.body;
     if (!purchase_date || !merchant || !total_amount || !months || !monthly_amount || !start_billing_month) {
-      return res.status(400).json({ error: 'purchase_date, merchant, total_amount, months, monthly_amount, start_billing_month required' });
+      return res.status(400).json({ error: '구입일, 가맹점, 총액, 개월수, 월 납입액, 첫 청구월은 필수입니다.' });
     }
     if (months < 2) {
       return res.status(400).json({ error: 'months must be >= 2 (2개월 미만은 일시불로 처리)' });
@@ -88,7 +88,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM installments WHERE id=?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: '찾는 할부 내역이 없습니다. 이미 삭제됐을 수 있어요.' });
     const merged = { ...existing, ...req.body };
     db.prepare(`
       UPDATE installments SET purchase_date=?, merchant=?, total_amount=?, months=?, monthly_amount=?,

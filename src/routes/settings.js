@@ -32,10 +32,10 @@ router.put('/', (req, res) => {
   try {
     const { initial_balance, monthly_income } = req.body;
     if (initial_balance !== undefined && initial_balance !== '' && asNumber(initial_balance) === null) {
-      return res.status(400).json({ error: 'initial_balance must be a number' });
+      return res.status(400).json({ error: '초기 잔액은 숫자로 입력해 주세요.' });
     }
     if (monthly_income !== undefined && monthly_income !== '' && asNumber(monthly_income) === null) {
-      return res.status(400).json({ error: 'monthly_income must be a number' });
+      return res.status(400).json({ error: '월 수입 기준값은 숫자로 입력해 주세요.' });
     }
     const upsert = db.prepare(`
       INSERT INTO app_settings (key, value) VALUES (?, ?)

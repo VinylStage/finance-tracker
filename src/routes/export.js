@@ -69,7 +69,7 @@ function getFullBackup(from, to) {
 
 function sendCsv(res, from, to) {
   if (isInvalidDateParam(from) || isInvalidDateParam(to)) {
-    return res.status(400).json({ error: 'from/to must be in YYYY-MM-DD format' });
+    return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다. 2026-07-27 처럼 입력해 주세요.' });
   }
   const transactions = getTransactionsForRange(from, to);
   const csv = toCsv(transactions, ['id', 'date', 'major_type', 'category', 'amount', 'payment_method', 'payment_style', 'merchant', 'memo']);
@@ -80,7 +80,7 @@ function sendCsv(res, from, to) {
 
 function sendJson(res, from, to) {
   if (isInvalidDateParam(from) || isInvalidDateParam(to)) {
-    return res.status(400).json({ error: 'from/to must be in YYYY-MM-DD format' });
+    return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다. 2026-07-27 처럼 입력해 주세요.' });
   }
   const data = getFullBackup(from, to);
   res.setHeader('Content-Disposition', `attachment; filename="finance-tracker-export_${from || 'all'}_${to || 'all'}.json"`);
@@ -188,11 +188,11 @@ router.post('/settings/restore', (req, res) => {
   try {
     const { confirm, ...payload } = req.body || {};
     if (confirm !== 'OVERWRITE_SETTINGS') {
-      return res.status(400).json({ error: 'confirm: "OVERWRITE_SETTINGS" required' });
+      return res.status(400).json({ error: '설정 덮어쓰기는 추가 확인이 필요합니다. 화면의 안내를 따라 다시 시도해 주세요.' });
     }
-    if (!payload || typeof payload !== 'object') return res.status(400).json({ error: 'invalid payload' });
+    if (!payload || typeof payload !== 'object') return res.status(400).json({ error: '파일 형식이 올바르지 않습니다. 이 앱에서 내보낸 파일인지 확인해 주세요.' });
     if (!payload.categories && !payload.payment_methods && !payload.app_settings) {
-      return res.status(400).json({ error: 'payload must contain at least one of categories, payment_methods, app_settings' });
+      return res.status(400).json({ error: '복원할 내용이 없습니다. 카테고리·결제수단·설정 중 하나 이상이 담긴 파일이어야 합니다.' });
     }
     restoreSettings(payload);
     res.json({ ok: true });

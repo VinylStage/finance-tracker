@@ -50,14 +50,14 @@ test('FND-10: 감사 PoC — 존재하지 않는 /api 경로는 200+HTML이 아�
   assert.strictEqual(resp.status, 404);
   assert.ok((resp.headers.get('content-type') || '').includes('application/json'));
   const body = await resp.json();
-  assert.strictEqual(body.error, 'Not found');
+  assert.strictEqual(body.error, '요청한 주소를 찾을 수 없습니다.');
 });
 
 test('FND-10: 존재하는 라우트의 존재하지 않는 하위 경로도 404 JSON', async () => {
   const resp = await fetch(`${BASE}/api/transactions/summary/nope`);
   assert.strictEqual(resp.status, 404);
   const body = await resp.json();
-  assert.strictEqual(body.error, 'Not found');
+  assert.strictEqual(body.error, '요청한 주소를 찾을 수 없습니다.');
 });
 
 test('FND-10: POST 등 다른 메서드로도 /api/* 404가 동일하게 적용됨', async () => {
