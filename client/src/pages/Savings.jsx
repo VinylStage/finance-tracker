@@ -4,12 +4,14 @@ import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import SavingsGoalBar from '../components/SavingsGoalBar';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
 }
 
 export default function Savings() {
+  const today = localYMD();
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -94,6 +96,7 @@ export default function Savings() {
                 <th className="text-right px-4 py-3 text-slate-500 font-medium">월 납입액</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium hidden sm:table-cell">시작일</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium hidden sm:table-cell">만기일</th>
+                <th className="text-left px-4 py-3 text-slate-500 font-medium">목표 진행</th>
                 <th className="text-right px-4 py-3 text-slate-500 font-medium">예상 수령액</th>
                 <th className="text-center px-4 py-3 text-slate-500 font-medium">상태</th>
                 <th className="px-4 py-3"></th>
@@ -106,6 +109,9 @@ export default function Savings() {
                   <td className="px-4 py-3 text-right text-slate-600 tabular-nums">{fmt(s.monthly_contribution)}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs hidden sm:table-cell">{s.start_date}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs hidden sm:table-cell">{s.maturity_date || '—'}</td>
+                  <td className="px-4 py-3">
+                    <SavingsGoalBar product={s} today={today} />
+                  </td>
                   <td className="px-4 py-3 text-right text-indigo-600 font-medium tabular-nums">{s.expected_payout ? fmt(s.expected_payout) : '—'}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`text-xs font-medium ${s.status === '진행중' ? 'text-indigo-600' : 'text-slate-400'}`}>{s.status}</span>
