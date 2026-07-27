@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYMD } = require('../utils/date');
+const { numericBody } = require('../utils/validate');
 
 function monthsBetween(startDate, endDate) {
   const s = new Date(startDate);
@@ -27,7 +28,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/savings
-router.post('/', (req, res) => {
+router.post('/', numericBody(['monthly_contribution', 'expected_payout', 'category_id']), (req, res) => {
   try {
     const { name, monthly_contribution, start_date, maturity_date, expected_payout, category_id } = req.body;
     if (!name || !monthly_contribution || !start_date) {
