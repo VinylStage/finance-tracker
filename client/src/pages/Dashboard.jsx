@@ -9,8 +9,9 @@ import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
 import { budgetStatus, budgetLabel, BUDGET_TONE } from '../lib/budget';
+import { PALETTE } from '../lib/categoryChart';
+import CategorySpendSection from '../components/CategorySpendSection';
 
-const PALETTE = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
 const PERIODS = ['일', '주', '월', '연'];
 
 function fmt(n) {
@@ -287,6 +288,8 @@ export default function Dashboard() {
   if (!data) return <div className="text-expense text-center py-20">데이터를 불러올 수 없습니다.</div>;
 
   const { rows: flowRows, xKey: flowXKey, tick: flowTick } = periodConfig(period, data);
+  // 하단 「이번달 Top 5 카테고리」 섹션이 쓴다. 파이차트 캡핑(#194)은
+  // CategorySpendSection 이 자체적으로 처리하므로 이 변수와 무관하다.
   const topCategories = (data.categoryBreakdown || []).slice(0, 5);
   const topMerchants = data.topMerchants || [];
 
@@ -310,42 +313,7 @@ export default function Dashboard() {
 
       {/* 지출 분석 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Section title="카테고리별 지출">
-          {topCategories.length === 0 ? (
-            <div className="text-ink-faint text-sm text-center py-10">이번 달 지출 내역이 없습니다.</div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="55%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={data.categoryBreakdown}
-                    dataKey="total"
-                    nameKey="category"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={2}
-                  >
-                    {data.categoryBreakdown.map((_, i) => (
-                      <Cell key={i} fill={PALETTE[i % PALETTE.length]} stroke="none" />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v) => fmt(v)} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-1.5 text-xs">
-                {data.categoryBreakdown.slice(0, 8).map((c, i) => (
-                  <div key={c.category} className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-ink-muted truncate">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />
-                      {c.category}
-                    </span>
-                    <span className="text-ink font-medium tabular-nums">{fmt(c.total)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Section>
+        <CategorySpendSection rows={data.categoryBreakdown} />
 
         <Section title="예산 대비 실적">
           {(!data.budgets || data.budgets.length === 0) ? (
