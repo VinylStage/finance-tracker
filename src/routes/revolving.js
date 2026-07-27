@@ -48,7 +48,7 @@ router.post('/', (req, res) => {
   try {
     const { month, payment_method_id, paid_amount } = req.body;
     if (!month || !payment_method_id || paid_amount === undefined) {
-      return res.status(400).json({ error: 'month, payment_method_id, paid_amount required' });
+      return res.status(400).json({ error: '해당 월, 결제수단, 결제 금액은 필수입니다.' });
     }
     const numErr = validateRevolvingNumericFields(req.body);
     if (numErr) return res.status(400).json({ error: numErr });
@@ -76,7 +76,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM revolving_history WHERE id=?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: '찾는 리볼빙 내역이 없습니다. 이미 삭제됐을 수 있어요.' });
     const numErr = validateRevolvingNumericFields(req.body);
     if (numErr) return res.status(400).json({ error: numErr });
 

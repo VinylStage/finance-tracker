@@ -51,5 +51,5 @@ test('FND-18: KIS_ENABLED=false — 정상 경로(예외 아님)로 503 "미활�
   const resp = await fetch(`${BASE}/api/stocks/AAPL`);
   assert.strictEqual(resp.status, 503);
   const body = await resp.json();
-  assert.deepStrictEqual(body, { error: 'KIS API integration not yet enabled' });
+  assert.deepStrictEqual(body, { error: '주가 조회 기능은 아직 준비 중입니다.' });
 });

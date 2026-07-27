@@ -42,7 +42,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOS
 // 경로가 404 JSON이 아니라 200 + index.html을 반환했다. client/src/lib/api.js는
 // res.ok만 보고 성공으로 간주하므로 HTML을 그대로 성공 응답처럼 처리했다.
 // 등록된 API 라우트를 전부 통과했는데도 /api로 시작하면 여기서 확실히 404를 낸다.
-app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+app.use('/api', (_req, res) => res.status(404).json({ error: '요청한 주소를 찾을 수 없습니다.' }));
 
 // Serve React build (Phase 1+)
 const PUBLIC = path.join(__dirname, '../public');

@@ -112,5 +112,5 @@ test('POST /api/csv-import - 하나/삼성/현대는 엑셀 경로로 통일되�
   });
   assert.strictEqual(resp.status, 400);
   const body = await resp.json();
-  assert.match(body.error, /Unsupported card company/);
+  assert.match(body.error, /신한카드만 지원합니다/);
 });

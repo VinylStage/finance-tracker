@@ -249,14 +249,14 @@ router.get('/period-comparison', (req, res) => {
   try {
     const { period = 'monthly', date } = req.query;
     const anchor = date ? new Date(date) : new Date();
-    if (isNaN(anchor.getTime())) return res.status(400).json({ error: 'invalid date' });
+    if (isNaN(anchor.getTime())) return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다. 2026-07-27 처럼 입력해 주세요.' });
 
     let result;
     if (period === 'daily') result = periodComparisonDaily(anchor);
     else if (period === 'weekly') result = periodComparisonWeekly(anchor);
     else if (period === 'yearly') result = periodComparisonYearly(anchor);
     else if (period === 'monthly') result = periodComparisonMonthly(anchor);
-    else return res.status(400).json({ error: 'period must be one of daily|weekly|monthly|yearly' });
+    else return res.status(400).json({ error: '조회 단위를 일·주·월·연 중에서 선택해 주세요.' });
 
     const curTotals = totalsForRange(...result.currentRange);
     const prevTotals = totalsForRange(...result.previousRange);
@@ -285,12 +285,12 @@ router.delete('/', (req, res) => {
     }
     if (Array.isArray(ids) && ids.length > 0) {
       const validIds = ids.map(Number).filter(Number.isInteger);
-      if (!validIds.length) return res.status(400).json({ error: 'ids must contain valid integers' });
+      if (!validIds.length) return res.status(400).json({ error: '선택한 거래를 확인할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.' });
       const placeholders = validIds.map(() => '?').join(',');
       const deleted = db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
       return res.json({ ok: true, deleted });
     }
-    return res.status(400).json({ error: 'ids (non-empty array) or all=true required' });
+    return res.status(400).json({ error: '삭제할 거래를 선택해 주세요.' });
   } catch (e) {
     serverError(res, e, 'transactions');
   }
@@ -319,7 +319,7 @@ router.get('/years', (req, res) => {
 router.get('/summary/by-month', (req, res) => {
   try {
     const { year } = req.query;
-    if (!year || !/^\d{4}$/.test(year)) return res.status(400).json({ error: 'year (YYYY) required' });
+    if (!year || !/^\d{4}$/.test(year)) return res.status(400).json({ error: '조회할 연도를 선택해 주세요.' });
     const { where, params } = buildTransactionFilters({
       ...req.query, from: `${year}-01-01`, to: `${year}-12-31`,
     });
@@ -349,7 +349,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN payment_methods p ON t.payment_method_id = p.id
     WHERE t.id = ?
   `).get(req.params.id);
-  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (!row) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
   res.json(row);
 });
 
@@ -400,7 +400,7 @@ router.put('/:id', (req, res) => {
       WHERE id=?
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
            payment_style || '일시불', merchant || null, memo || null, req.params.id);
-    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'transactions');
@@ -411,7 +411,7 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     const result = db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
-    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'transactions');
@@ -545,7 +545,7 @@ router.get('/summary/dashboard', (req, res) => {
 router.get('/summary/category-breakdown', (req, res) => {
   try {
     const { from, to } = req.query;
-    if (!from || !to) return res.status(400).json({ error: 'from, to required' });
+    if (!from || !to) return res.status(400).json({ error: '조회할 기간을 선택해 주세요.' });
     const data = db.prepare(`
       SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total
       FROM categories c

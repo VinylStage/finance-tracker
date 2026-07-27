@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { serverError, errMsg } = require('../utils/errors');
+const { serverError, errMsg, isUserInputError } = require('../utils/errors');
 const { parseCardCsv } = require('../services/csvImport');
 
 // CSV 경로는 엑셀 내보내기가 없는 카드사만 남긴다(#88) — 라벨은 카드사 판별용, 결제수단 조회에도 재사용.
@@ -58,7 +58,10 @@ function importCsvTransactions(cardCompany, csvText, isPreview) {
         `).run(row.date, category_id, row.amount, payment_method_id, row.merchant, row.memo || null);
         imported++;
       } catch (err) {
-        errors.push(`${row.date} ${row.merchant}: ${errMsg(err)}`);
+        // 예외 원문(SQLite 제약 위반 문구 등)은 사용자에게 의미가 없고 내부 구조를
+        // 드러낸다. 원문은 서버 로그에만 남기고 화면에는 어느 행이 실패했는지만 알린다.
+        console.error('[csvImport row]', err);
+        errors.push(`${row.date} ${row.merchant}: 저장하지 못했습니다.`);
       }
     }
   })();
@@ -74,16 +77,15 @@ router.post('/', async (req, res) => {
     const { cardCompany, csvText } = req.body;
 
     if (!cardCompany || !csvText) {
-      return res.status(400).json({ error: 'cardCompany and csvText are required' });
+      return res.status(400).json({ error: '카드사와 CSV 내용을 모두 입력해 주세요.' });
     }
 
     const isPreview = req.query.preview === 'true';
     const result = importCsvTransactions(cardCompany, csvText, isPreview);
     res.json(result);
   } catch (error) {
-    const message = errMsg(error);
-    if (/^Unsupported card company|^Required columns|^Invalid CSV data/.test(message)) {
-      return res.status(400).json({ error: message });
+    if (isUserInputError(error)) {
+      return res.status(400).json({ error: errMsg(error) });
     }
     serverError(res, error, 'csvImport');
   }
