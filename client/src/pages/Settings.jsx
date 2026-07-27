@@ -7,6 +7,7 @@ import CategoryBadge from '../components/CategoryBadge';
 import { categoryStyle } from '../lib/categoryStyle';
 import { TrustPanel, LastExportNote } from '../components/TrustPanel';
 import { recordExport } from '../lib/backupStatus';
+import { resetOnboarding } from '../lib/onboarding';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -63,6 +64,7 @@ function AppSettingsSection({ initial, onSaved }) {
     monthly_income: String(initial.monthly_income || 0),
   });
   const [saved, setSaved] = useState(false);
+  const [welcomeReset, setWelcomeReset] = useState(false);
   const { alert } = useConfirm();
 
   const handleSubmit = async (e) => {
@@ -96,6 +98,18 @@ function AppSettingsSection({ initial, onSaved }) {
       <div className="flex items-center gap-3">
         <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-5 py-2 rounded-lg transition-colors">저장</button>
         {saved && <span className="text-xs text-emerald-600">저장됨</span>}
+      </div>
+      <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
+        <button
+          type="button"
+          onClick={() => { resetOnboarding(); setWelcomeReset(true); }}
+          className="text-slate-600 hover:text-slate-800 border border-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors"
+        >
+          시작 안내 다시 보기
+        </button>
+        <span className="text-xs text-slate-500">
+          {welcomeReset ? '새로고침하면 시작 안내가 다시 보여요.' : '처음 실행 때 나오는 3단계 안내를 다시 볼 수 있어요.'}
+        </span>
       </div>
     </form>
   );

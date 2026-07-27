@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import { Link, Redirect, Route, Switch, useLocation } from 'wouter';
 import { NAV_GROUPS, groupForPath } from './lib/nav';
 import BottomTabBar from './components/BottomTabBar';
+import WelcomeGate from './components/WelcomeGate';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Transactions = lazy(() => import('./pages/Transactions'));
@@ -98,6 +99,7 @@ export default function App() {
       </main>
 
       <BottomTabBar />
+      <WelcomeGate />
     </div>
   );
 }

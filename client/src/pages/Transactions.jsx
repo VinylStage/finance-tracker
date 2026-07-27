@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import EmptyState from '../components/EmptyState';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -308,7 +309,11 @@ export default function Transactions() {
       ) : error ? (
         <LoadError error={error} onRetry={reload} />
       ) : years.length === 0 ? (
-        <div className="text-slate-500 text-center py-10">거래 내역이 없습니다.</div>
+        <EmptyState
+          icon="🧾"
+          title="아직 거래가 없어요"
+          description="첫 거래를 추가하면 이번 달에 얼마를 쓸 수 있는지 대시보드가 알려드려요. 카드사 이용내역 파일을 올려 한 번에 등록할 수도 있습니다."
+        />
       ) : (
         <>
           <div className="flex gap-1 border-b border-slate-200">

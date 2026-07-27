@@ -4,6 +4,7 @@ import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import EmptyState from '../components/EmptyState';
 import SavingsGoalBar from '../components/SavingsGoalBar';
 
 function fmt(n) {
@@ -86,7 +87,11 @@ export default function Savings() {
       ) : error ? (
         <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
-        <div className="text-slate-400 text-center py-10">등록된 상품이 없습니다.</div>
+        <EmptyState
+          icon="🐷"
+          title="아직 저축 상품이 없어요"
+          description="적금이나 저축성보험을 등록하면 만기까지 얼마가 남았는지, 목표의 몇 %를 채웠는지 보여드려요."
+        />
       ) : (
         <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
