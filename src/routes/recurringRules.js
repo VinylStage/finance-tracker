@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { asInt, missingFields } = require('../utils/validate');
+const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES } = require('../constants');
 
@@ -94,7 +94,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/recurring-rules/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', numericBody(['is_active']), (req, res) => {
   try {
     const err = validateRuleBody(req.body);
     if (err) return res.status(400).json({ error: err });

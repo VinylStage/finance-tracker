@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { numericBody } = require('../utils/validate');
 
 router.get('/', (req, res) => {
   const includeInactive = req.query.include_inactive;
@@ -29,7 +30,7 @@ router.post('/', (req, res) => {
   }
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', numericBody(['is_active']), (req, res) => {
   const { name, type, is_active } = req.body;
   db.prepare('UPDATE payment_methods SET name=?, type=?, is_active=? WHERE id=?')
     .run(name, type, is_active ?? 1, req.params.id);

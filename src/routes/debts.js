@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
-const { asInt } = require('../utils/validate');
+const { asInt, numericBody } = require('../utils/validate');
 
 // GET /api/debts
 router.get('/', (req, res) => {
@@ -22,7 +22,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/debts
-router.post('/', (req, res) => {
+router.post('/', numericBody(['balance', 'annual_rate']), (req, res) => {
   try {
     const { name, balance, annual_rate = 0, type = '일반', memo } = req.body;
     if (!name || balance === undefined) {
@@ -65,7 +65,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // POST /api/debts/:id/interest — 이자 추가 (잔액 자동 반영)
-router.post('/:id/interest', (req, res) => {
+router.post('/:id/interest', numericBody(['rate', 'interest_amount']), (req, res) => {
   try {
     const debt = db.prepare('SELECT * FROM debts WHERE id=?').get(req.params.id);
     if (!debt) return res.status(404).json({ error: '찾는 부채가 없습니다. 이미 삭제됐을 수 있어요.' });
