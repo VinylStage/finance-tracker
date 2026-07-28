@@ -9,6 +9,7 @@ import { TrustPanel, LastExportNote } from '../components/TrustPanel';
 import { recordExport } from '../lib/backupStatus';
 import { resetOnboarding } from '../lib/onboarding';
 import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
+import Icon from '../components/Icon';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -314,11 +315,17 @@ function CategorySection({ categories, onChanged }) {
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button onClick={() => handleEditStart(c)} className="text-brand-text hover:text-brand-text text-xs mr-2">수정</button>
+                      <button onClick={() => handleEditStart(c)} className="text-brand-text hover:text-brand-text text-xs mr-2" aria-label="편집">
+                        <Icon name="edit" size={14} />
+                      </button>
                       {c.is_active ? (
-                        <button onClick={() => handleDeactivate(c.id)} className="text-caption hover:text-loss-text text-xs">비활성화</button>
+                        <button onClick={() => handleDeactivate(c.id)} className="text-caption hover:text-loss-text text-xs" aria-label="비활성화">
+                          <Icon name="close" size={14} />
+                        </button>
                       ) : (
-                        <button onClick={() => handleReActivate(c.id)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
+                        <button onClick={() => handleReActivate(c.id)} className="text-caption hover:text-brand-text text-xs" aria-label="재활성화">
+                          <Icon name="refresh" size={14} />
+                        </button>
                       )}
                     </td>
                   </>
@@ -617,11 +624,17 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
               <>
                 {p.name} <span className="text-caption">({p.type})</span>
                 <div className="flex gap-1">
-                  <button onClick={() => handleEditStart(p)} className="text-xs text-brand-text hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint">✏</button>
+                  <button onClick={() => handleEditStart(p)} className="text-xs text-brand-text hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="편집">
+                    <Icon name="edit" size={14} />
+                  </button>
                   {p.is_active ? (
-                    <button onClick={() => handleDeactivate(p.id)} className="text-caption hover:text-loss-text px-1.5 py-0.5 rounded-full hover:bg-loss-tint">✕</button>
+                    <button onClick={() => handleDeactivate(p.id)} className="text-caption hover:text-loss-text px-1.5 py-0.5 rounded-full hover:bg-loss-tint" aria-label="비활성화">
+                      <Icon name="close" size={14} />
+                    </button>
                   ) : (
-                    <button onClick={() => handleReActivate(p.id)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint">🔄</button>
+                    <button onClick={() => handleReActivate(p.id)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="재활성화">
+                      <Icon name="refresh" size={14} />
+                    </button>
                   )}
                 </div>
               </>
@@ -913,7 +926,9 @@ function CardImportSection() {
             </div>
             {preview.results.map((r, i) => (
               <div key={i} className="flex items-start gap-2">
-                <span className={r.ok ? 'text-goal-text' : 'text-loss-text'}>{r.ok ? '✓' : '✕'}</span>
+                <span className={r.ok ? 'text-goal-text' : 'text-loss-text'}>
+                  {r.ok ? <Icon name="check_circle" filled size={14} /> : <Icon name="close" size={14} />}
+                </span>
                 <span className="text-body break-all">
                   <span className="font-medium">{r.filename}</span>
                   {r.ok
