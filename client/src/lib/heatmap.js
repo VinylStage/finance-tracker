@@ -23,11 +23,6 @@ export function heatLevel(dayAmount, basis) {
   const amount = Number(dayAmount) || 0;
   const base = Number(basis) || 0;
 
-  // 지출이 없는 날은 색을 칠하지 않는다 — 테두리만 남는다. 이 분기가 없으면
-  // 0원이 `amount <= base * 0.5` 에 걸려 1단계로 칠해지고, "안 쓴 날" 과
-  // "조금 쓴 날" 이 같은 셀로 보인다.
-  if (amount <= 0) return 0;
-
   // 기준선을 정의할 수 없으면 색을 칠하지 않는다.
   if (base <= 0) return 0;
 
@@ -59,10 +54,7 @@ export function heatLabel(dayAmount, basis) {
   const amount = Number(dayAmount) || 0;
   const base = Number(basis) || 0;
 
-  // 라벨의 0단계 판정을 heatLevel 에 위임한다. 여기서 조건을 따로 쓰면 두 함수가
-  // 갈라져 색과 문구가 어긋난다 — 기준선이 없을 때 셀은 테두리만 남는데 라벨은
-  // `기준의 Infinity배` 를 읽는 식이 된다.
-  if (heatLevel(amount, base) === 0) return '지출 없음';
+  if (amount <= 0) return '지출 없음';
 
   // 배수는 소수점 한 자리까지 표기한다.
   const ratio = amount / base;
