@@ -315,17 +315,11 @@ function CategorySection({ categories, onChanged }) {
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button onClick={() => handleEditStart(c)} className="text-brand-text hover:text-brand-text text-xs mr-2" aria-label="편집">
-                        <Icon name="edit" size={14} />
-                      </button>
+                      <button onClick={() => handleEditStart(c)} className="text-brand-text hover:text-brand-text text-xs mr-2">수정</button>
                       {c.is_active ? (
-                        <button onClick={() => handleDeactivate(c.id)} className="text-caption hover:text-loss-text text-xs" aria-label="비활성화">
-                          <Icon name="close" size={14} />
-                        </button>
+                        <button onClick={() => handleDeactivate(c.id)} className="text-caption hover:text-loss-text text-xs">비활성화</button>
                       ) : (
-                        <button onClick={() => handleReActivate(c.id)} className="text-caption hover:text-brand-text text-xs" aria-label="재활성화">
-                          <Icon name="refresh" size={14} />
-                        </button>
+                        <button onClick={() => handleReActivate(c.id)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
                       )}
                     </td>
                   </>
