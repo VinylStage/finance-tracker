@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   ResponsiveContainer, Tooltip,
-  AreaChart, Area, LineChart, Line, BarChart, Bar,
+  AreaChart, Area, LineChart, Line, BarChart, Bar, ComposedChart,
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { api } from '../lib/api';
@@ -477,25 +477,16 @@ export default function Dashboard() {
             </span>
           </div>
         )}
+        {/* 수입과 지출은 답하는 질문이 다르다. 같은 형태로 겹쳐 그리면 서로 가린다. */}
         <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={flowRows}>
-            <defs>
-              <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-brand-fill)" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="var(--color-brand-fill)" stopOpacity={0.02} />
-              </linearGradient>
-              <linearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-loss-fill)" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="var(--color-loss-fill)" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
+          <ComposedChart data={flowRows}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
             <XAxis dataKey={flowXKey} tickFormatter={flowTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
             <Tooltip formatter={(v) => fmt(v)} labelFormatter={flowTick} />
-            <Area type="monotone" dataKey="income" name="수입" stroke="var(--color-brand-fill)" fill="url(#incomeGrad)" strokeWidth={2} />
-            <Area type="monotone" dataKey="expense" name="지출" stroke="var(--color-loss-fill)" fill="url(#expenseGrad)" strokeWidth={2} />
-          </AreaChart>
+            <Bar dataKey="expense" name="지출" fill="var(--color-loss-fill)" radius={[3, 3, 0, 0]} />
+            <Line type="monotone" dataKey="income" name="수입" stroke="var(--color-brand-fill)" strokeWidth={2} dot={{ r: 3 }} />
+          </ComposedChart>
         </ResponsiveContainer>
 
         <div className="mt-5">
