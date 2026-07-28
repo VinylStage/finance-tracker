@@ -17,6 +17,7 @@ import {
   overflowWidthPx,
 } from '../lib/budget';
 import CategorySpendSection from '../components/CategorySpendSection';
+import SpendHeatmap from '../components/SpendHeatmap';
 
 const PERIODS = ['일', '주', '월', '연'];
 
@@ -351,6 +352,27 @@ export default function Dashboard() {
   if (!data) return <div className="text-loss-text text-center py-20">데이터를 불러올 수 없습니다.</div>;
 
   const { rows: flowRows, xKey: flowXKey, tick: flowTick } = periodConfig(period, data);
+
+  // 히트맵은 이번 달만 그린다. thisMonth 는 'YYYY-MM' 문자열이다.
+  const [heatYear, heatMonth] = (data.thisMonth || '').split('-').map(Number);
+
+  // dailyTrend 는 최근 30일이라 이번 달 밖의 날짜도 섞여 있다. 날짜 문자열을 그대로
+  // 키로 쓰면 컴포넌트가 이번 달 것만 골라 읽는다.
+  const heatDailyTotals = Object.fromEntries(
+    (data.dailyTrend || []).map((d) => [d.date, Number(d.expense) || 0])
+  );
+
+  // 기준선은 이번 달 예산 합계에서 나온다. 예산이 없으면 컴포넌트가 일평균으로 폴백한다.
+  const heatBudgetTotal = (data.budgets || []).reduce(
+    (sum, b) => sum + (Number(b.monthly_budget) || 0),
+    0
+  );
+
+  // 폴백용 일평균. dailyTrend 가 최근 30일이므로 그 지출 합을 날짜 수로 나눈다.
+  const heatTrend = data.dailyTrend || [];
+  const heatDailyAverage = heatTrend.length
+    ? heatTrend.reduce((sum, d) => sum + (Number(d.expense) || 0), 0) / heatTrend.length
+    : 0;
   // 하단 「이번달 Top 5 카테고리」 섹션이 쓴다. 파이차트 캡핑(#194)은
   // CategorySpendSection 이 자체적으로 처리하므로 이 변수와 무관하다.
   const topCategories = (data.categoryBreakdown || []).slice(0, 5);
@@ -488,6 +510,18 @@ export default function Dashboard() {
             <Line type="monotone" dataKey="income" name="수입" stroke="var(--color-brand-fill)" strokeWidth={2} dot={{ r: 3 }} />
           </ComposedChart>
         </ResponsiveContainer>
+
+        {/* 일별 지출 강도 히트맵 */}
+        <div className="mt-5">
+          <h3 className="text-xs font-medium text-caption mb-2">일별 지출 강도</h3>
+          <SpendHeatmap
+            year={heatYear}
+            month={heatMonth}
+            dailyTotals={heatDailyTotals}
+            monthlyBudgetTotal={heatBudgetTotal}
+            recentDailyAverage={heatDailyAverage}
+          />
+        </div>
 
         <div className="mt-5">
           <h3 className="text-xs font-medium text-caption mb-2">일별 지출 (최근 30일)</h3>
