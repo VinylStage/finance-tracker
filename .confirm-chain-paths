@@ -1,0 +1,6 @@
+# confirm-chain 문서 변경 게이트 감시 경로
+# 이 경로에 걸리는 파일이 스테이징되면 process_doc 승인 없이는 커밋되지 않는다.
+# 형식: 셸 glob 패턴 (저장소 루트 기준 상대경로)
+docs/audit/*
+docs/design/*
+docs/decisions/*

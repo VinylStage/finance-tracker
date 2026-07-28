@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { numericBody } = require('../utils/validate');
 const { MAJOR_TYPES } = require('../constants');
 
 router.get('/', (req, res) => {
@@ -20,7 +21,7 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
-router.post('/', (req, res) => {
+router.post('/', numericBody(['monthly_budget']), (req, res) => {
   try {
     const { major_type, name, monthly_budget = 0 } = req.body;
     if (!MAJOR_TYPES.includes(major_type)) {
@@ -35,7 +36,7 @@ router.post('/', (req, res) => {
   }
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', numericBody(['monthly_budget', 'is_active']), (req, res) => {
   try {
     const { major_type, name, monthly_budget, is_active } = req.body;
     if (!MAJOR_TYPES.includes(major_type)) {

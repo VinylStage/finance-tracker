@@ -4,8 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Finance Tracker</title>
+    <!-- 다크모드 첫 프레임 깜빡임 방지(#201, #228).
+         CSP 가 script-src 'self' 라 인라인은 차단된다. 같은 오리진 파일로 뺐다.
+         defer/async/type=module 을 붙이면 지연 실행돼서 깜빡임 방지가 깨진다. -->
+    <script src="/theme-init.js"></script>
   </head>
-  <body class="bg-gray-900 text-gray-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

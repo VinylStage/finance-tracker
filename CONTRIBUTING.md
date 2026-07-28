@@ -66,6 +66,42 @@
 
 - 기능을 추가하거나 변경할 때, 관련 문서(`docs/API.md`, `docs/DATA_MODEL.md`, `docs/ROADMAP.md`, `CHANGELOG.md` 등)를 함께 업데이트했는지 PR 전에 확인한다.
 
+## 문서 변경 승인 게이트 (confirm-chain)
+
+`docs/audit/`, `docs/design/`, `docs/decisions/` 아래 문서는 **커밋 훅으로 승인 게이트가 걸려 있다.** 감사 보고서·설계 문서·ADR은 되돌리기 어렵고 다른 결정의 근거가 되므로, 승인 없이 조용히 들어가는 것을 막는다.
+
+감시 경로는 `.confirm-chain-paths`에 있다.
+
+### 최초 1회 설치
+
+훅 자체(`.githooks/`)는 저장소에 포함되지만, **`core.hooksPath` 설정은 로컬 설정이라 clone 후 한 번 실행해야 한다.**
+
+```bash
+<confirm-chain 경로>/install-hooks.sh .
+```
+
+`confirm-chain`은 공통 프로세스 레포(`little-jotjotsaw-base`)의 `tools/confirm-chain`에 있다. 설치 스크립트가 도구 경로를 `git config confirmchain.dir`(로컬)에 기록하므로 절대경로가 커밋되지 않는다.
+
+### 커밋이 막혔을 때
+
+훅이 승인 절차 명령을 그대로 출력한다. 요약하면:
+
+```bash
+cd <confirm-chain 경로>
+poetry run python3 confirm_chain.py process_doc '<변경 요약>' --thread <스레드> --db <저장소>/.confirm-chain.sqlite
+poetry run python3 confirm_chain.py --resume approve --thread <스레드> --db <저장소>/.confirm-chain.sqlite
+```
+
+스레드 ID는 **스테이징된 변경 내용의 해시**다. 문서를 한 글자라도 고치면 새 스레드가 되므로 이전 승인이 자동 무효화된다.
+
+### 우회
+
+`git commit --no-verify`로 건너뛸 수 있다. 다만 통과한 커밋에만 `Doc-Approval:` 트레일러가 붙으므로 우회 이력은 사후에 그대로 드러난다.
+
+```bash
+git log --format='%h %s%n  %(trailers:key=Doc-Approval)' -- docs/audit
+```
+
 ## 로컬 QA
 
 - PR을 올리기 전에 반드시 로컬에서 `npm run build`(루트에서 실행하면 클라이언트 빌드까지 수행)를 실행해서 빌드가 깨지지 않는지 확인한다.

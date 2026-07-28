@@ -1,4 +1,5 @@
 const XLSX = require('xlsx');
+const { UserInputError } = require('../utils/errors');
 
 // 셀 값을 문자열로 정규화. 없거나 null이면 null 반환.
 function cell(row, i) {
@@ -15,7 +16,7 @@ function firstInt(s) {
 function firstSheet(workbook) {
   const name = workbook.SheetNames[0];
   const sheet = name ? workbook.Sheets[name] : undefined;
-  if (!sheet) throw new Error('SHEET_NOT_FOUND: 엑셀에서 시트를 찾을 수 없습니다');
+  if (!sheet) throw new UserInputError('엑셀에서 읽을 수 있는 시트를 찾지 못했습니다. 카드사에서 내려받은 원본 파일인지 확인해 주세요.');
   return sheet;
 }
 
@@ -27,7 +28,7 @@ function detectCardCompany(filename) {
   if (normalized.includes('하나')) return 'hana';
   if (normalized.includes('현대')) return 'hyundai';
   // 파일명을 에러 메시지에 반사하지 않는다(입력 반사 방지)
-  throw new Error('UNSUPPORTED_CARD: 지원하지 않는 카드사입니다. 파일명에 카드사명(농협/롯데/삼성/하나/현대)이 포함되어야 합니다.');
+  throw new UserInputError('지원하지 않는 카드사입니다. 파일 이름에 카드사명(농협·롯데·삼성·하나·현대)이 들어가야 합니다.');
 }
 
 function parseNonghyupExcel(buffer) {
@@ -97,7 +98,7 @@ function parseLotteExcel(buffer) {
 function parseSamsungExcel(buffer) {
   const workbook = XLSX.read(buffer, {type:'buffer', raw:true});
   const worksheet = workbook.Sheets['■ 국내이용내역'];
-  if (!worksheet) throw new Error('SHEET_NOT_FOUND: 국내이용내역 시트를 찾을 수 없습니다');
+  if (!worksheet) throw new UserInputError('국내이용내역 시트를 찾지 못했습니다. 카드사에서 내려받은 원본 파일인지 확인해 주세요.');
   const data = XLSX.utils.sheet_to_json(worksheet, {header:1, raw:true, defval:null});
   
   const result = [];

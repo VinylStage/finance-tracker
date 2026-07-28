@@ -10,7 +10,7 @@
     "dev": "node --watch src/server.js",
     "build": "cd client && npm run build",
     "test": "node --test",
-    "test:coverage": "c8 --all --src src --reporter=text --reporter=html --check-coverage --lines 75 --branches 65 --functions 75 --statements 75 node --test",
+    "test:coverage": "c8 --all --src src --reporter=text --reporter=html --check-coverage --lines 80 --branches 75 --functions 85 --statements 80 node --test",
     "perf:baseline": "npm run build && node scripts/lighthouse-baseline.mjs"
   },
   "dependencies": {

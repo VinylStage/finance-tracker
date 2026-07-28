@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { asInt, missingFields } = require('../utils/validate');
+const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES } = require('../constants');
 
@@ -58,7 +58,7 @@ router.get('/', (req, res) => {
 router.get('/due', (req, res) => {
   try {
     const yearMonth = req.query.month || thisYearMonth();
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rows = db.prepare(`
       SELECT r.*, c.name AS category_name, p.name AS payment_method_name
       FROM recurring_rules r
@@ -94,7 +94,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/recurring-rules/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', numericBody(['is_active']), (req, res) => {
   try {
     const err = validateRuleBody(req.body);
     if (err) return res.status(400).json({ error: err });
@@ -106,7 +106,7 @@ router.put('/:id', (req, res) => {
     `).run(asInt(category_id), merchant, asInt(amount), asInt(day_of_month),
            payment_method_id != null ? asInt(payment_method_id) : null, payment_style,
            memo || null, is_active ?? 1, req.params.id);
-    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    if (result.changes === 0) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'recurringRules');
@@ -117,7 +117,7 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     const result = db.prepare('UPDATE recurring_rules SET is_active=0 WHERE id=?').run(req.params.id);
-    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    if (result.changes === 0) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'recurringRules');
@@ -128,9 +128,9 @@ router.delete('/:id', (req, res) => {
 router.post('/:id/confirm', (req, res) => {
   try {
     const yearMonth = req.body.month || thisYearMonth();
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rule = db.prepare('SELECT * FROM recurring_rules WHERE id=? AND is_active=1').get(req.params.id);
-    if (!rule) return res.status(404).json({ error: 'Not found' });
+    if (!rule) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
 
     const date = resolveDate(yearMonth, rule.day_of_month);
     const result = db.transaction(() => {
@@ -157,9 +157,9 @@ router.post('/:id/confirm', (req, res) => {
 router.post('/:id/skip', (req, res) => {
   try {
     const yearMonth = req.body.month || thisYearMonth();
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rule = db.prepare('SELECT id FROM recurring_rules WHERE id=? AND is_active=1').get(req.params.id);
-    if (!rule) return res.status(404).json({ error: 'Not found' });
+    if (!rule) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
 
     db.prepare(`
       INSERT INTO recurring_rule_months (rule_id, year_month, status) VALUES (?, ?, 'skipped')

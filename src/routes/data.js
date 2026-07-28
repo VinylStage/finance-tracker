@@ -113,16 +113,16 @@ router.post('/import', (req, res) => {
 
     // Validate input
     if (mode !== 'append' && mode !== 'overwrite') {
-      return res.status(400).json({ error: 'Invalid mode. Must be "append" or "overwrite"' });
+      return res.status(400).json({ error: '불러오기 방식을 선택해 주세요. 기존 내역에 추가하거나, 전체를 바꿀 수 있습니다.' });
     }
 
     if (!Array.isArray(transactions)) {
-      return res.status(400).json({ error: 'Transactions must be an array' });
+      return res.status(400).json({ error: '파일 형식이 올바르지 않습니다. 이 앱에서 내보낸 파일인지 확인해 주세요.' });
     }
 
     // overwrite는 기존 거래를 전부 삭제하는 파괴적 동작이므로 명시적 확인 토큰을 요구한다
     if (mode === 'overwrite' && confirm !== 'DELETE_ALL') {
-      return res.status(400).json({ error: 'overwrite mode requires confirm: "DELETE_ALL"' });
+      return res.status(400).json({ error: '전체 바꾸기는 추가 확인이 필요합니다. 화면의 안내를 따라 다시 시도해 주세요.' });
     }
 
     let imported = 0;

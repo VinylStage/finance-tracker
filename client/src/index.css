@@ -1,7 +1,239 @@
 @import "tailwindcss";
 
+/* 시맨틱 디자인 토큰 (#190).
+   값은 전부 Tailwind v4 기본 팔레트에서 그대로 가져온 것이라 치환 전후 렌더 결과가 같다.
+   주석의 `= xxx-600` 은 어느 유틸리티를 대체하는지를 가리킨다.
+   `@theme`(inline 아님)이므로 유틸리티가 var() 를 참조한다 — 다크모드(#201)에서
+   :root 아래 변수만 덮어쓰면 컴포넌트 수정 없이 팔레트를 교체할 수 있다. */
+@theme {
+  /* 의미 색상 — 수입/지출/경고/강조 */
+  --color-income: oklch(59.6% 0.145 163.225);        /* = emerald-600 */
+  --color-income-strong: oklch(50.8% 0.118 165.612); /* = emerald-700 */
+  --color-income-soft: oklch(97.9% 0.021 166.113);   /* = emerald-50 */
+
+  --color-expense: oklch(58.6% 0.253 17.585);        /* = rose-600 */
+  --color-expense-bar: oklch(64.5% 0.246 16.439);    /* = rose-500 */
+  --color-expense-soft: oklch(96.9% 0.015 12.422);   /* = rose-50 */
+
+  --color-warning: oklch(55.5% 0.163 48.998);        /* = amber-700 */
+  --color-warning-bar: oklch(76.9% 0.188 70.08);     /* = amber-500 */
+  --color-warning-soft: oklch(98.7% 0.022 95.277);   /* = amber-50 */
+
+  --color-accent: oklch(51.1% 0.262 276.966);        /* = indigo-600 */
+  --color-accent-strong: oklch(45.7% 0.24 277.023);  /* = indigo-700 */
+  --color-accent-bar: oklch(58.5% 0.233 277.117);    /* = indigo-500 */
+  --color-accent-soft: oklch(96.2% 0.018 272.314);   /* = indigo-50 */
+
+  /* 같은 값이라도 「배경으로 쓰이는 색」과 「글자로 쓰이는 색」은 토큰을 나눈다(#201).
+     다크모드에서 이 둘은 정반대 방향을 요구한다 — 흰 글자가 얹히려면 어두워야 하고,
+     어두운 배경 위 글자로 읽히려면 밝아야 한다. 한 토큰으로는 동시에 만족할 수 없어서
+     라이트 모드에서 값이 같더라도 지금 분리해 둔다. */
+  --color-accent-hover: oklch(45.7% 0.24 277.023);      /* = indigo-700, 버튼 hover 배경 */
+  --color-accent-soft-hover: oklch(93% 0.034 272.788);  /* = indigo-100 */
+  --color-accent-line: oklch(87% 0.065 274.039);        /* = indigo-200 */
+  --color-accent-line-strong: oklch(78.5% 0.115 274.713); /* = indigo-300 */
+
+  --color-expense-strong: oklch(51.4% 0.222 16.935);    /* = rose-700, 글자 */
+  --color-expense-line: oklch(89.2% 0.058 10.001);      /* = rose-200 */
+  --color-expense-line-strong: oklch(81% 0.117 11.638); /* = rose-300 */
+
+  /* 삭제·위험 동작 버튼의 배경. 값은 expense 와 같지만 역할이 다르다 —
+     이쪽은 흰 글자가 얹히므로 어두워야 하고, expense 는 어두운 배경 위에서 읽혀야 해
+     밝아야 한다. 다크모드에서 한 값으로는 둘 다 만족할 수 없다(측정으로 확인). */
+  --color-danger: oklch(58.6% 0.253 17.585);            /* = rose-600, 버튼 배경 */
+  --color-danger-hover: oklch(51.4% 0.222 16.935);      /* = rose-700, 버튼 hover 배경 */
+
+  --color-warning-mid: oklch(66.6% 0.179 58.318);       /* = amber-600 */
+  --color-warning-strong: oklch(47.3% 0.137 46.201);    /* = amber-800 */
+  --color-warning-line: oklch(92.4% 0.12 95.746);       /* = amber-200 */
+
+  /* 모달·오버레이 뒷배경. 표면(surface)이 아니라 화면을 덮는 막이라 따로 둔다. */
+  --color-scrim: oklch(20.8% 0.042 265.755);            /* = slate-900 */
+
+  /* 카테고리 대분류 6종 */
+  --color-cat-income: oklch(59.6% 0.145 163.225);    /* 수입 = emerald-600 */
+  --color-cat-fixed: oklch(58.6% 0.253 17.585);      /* 고정지출 = rose-600 */
+  --color-cat-needs: oklch(64.6% 0.222 41.116);      /* 변동필수 = orange-600 */
+  --color-cat-debt: oklch(57.7% 0.245 27.325);       /* 부채상환 = red-600 */
+  --color-cat-wants: oklch(68.1% 0.162 75.834);      /* 선택지출 = yellow-600 */
+  --color-cat-savings: oklch(54.6% 0.245 262.881);   /* 저축 = blue-600 */
+
+  /* 표면·경계 */
+  --color-surface: #ffffff;
+  --color-surface-muted: oklch(98.4% 0.003 247.858);  /* = slate-50 */
+  --color-surface-sunken: oklch(96.8% 0.007 247.896); /* = slate-100 */
+  --color-line-soft: oklch(96.8% 0.007 247.896);      /* = slate-100 */
+  --color-line: oklch(92.9% 0.013 255.508);           /* = slate-200 */
+  --color-line-strong: oklch(86.9% 0.022 252.894);    /* = slate-300, 입력 필드 테두리 */
+
+  /* 텍스트 — ink 가 가장 진하고 ghost 로 갈수록 옅어진다.
+     line-* 과 값이 겹치는 단계가 있어도 역할이 달라 토큰을 분리해 둔다
+     (다크모드에서 테두리와 글자는 서로 다른 밝기로 가야 한다). */
+  --color-ink: oklch(27.9% 0.041 260.031);        /* = slate-800 */
+  --color-ink-body: oklch(37.2% 0.044 257.287);   /* = slate-700 */
+  --color-ink-muted: oklch(44.6% 0.043 257.281);  /* = slate-600 */
+  --color-ink-subtle: oklch(55.4% 0.046 257.417); /* = slate-500 */
+  --color-ink-faint: oklch(70.4% 0.04 256.788);   /* = slate-400 */
+  --color-ink-ghost: oklch(86.9% 0.022 252.894);  /* = slate-300, 빈 값 표시용 */
+
+  /* 형태 */
+  --radius-card: 0.75rem; /* = rounded-xl */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); /* = shadow-sm */
+}
+
 body {
-  background-color: #f8fafc;
-  color: #1e293b;
+  background-color: var(--color-surface-muted);
+  color: var(--color-ink);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* 거래 테이블 모바일 카드뷰(#192).
+   기존에는 md 미만에서 가맹점·결제수단 컬럼을 hidden 으로 아예 지워 정보가 손실됐다.
+   여기서는 컬럼을 지우는 대신 <tr> 을 블록으로 재배열해 카드처럼 보이게 하고,
+   원래 컬럼 헤더를 data-label 로 각 셀 앞에 노출한다. 정보는 전부 남는다.
+
+   주의: CSS display 를 바꾸면 브라우저가 표의 암묵 role 을 벗겨내 스크린리더가
+   더 이상 표로 인식하지 못한다. 그래서 마크업 쪽에서 role="table"/"rowgroup"/
+   "row"/"columnheader"/"cell" 을 명시해 의미를 되살려 둔다(TransactionList.jsx).
+   thead 도 display:none 이 아니라 시각적으로만 숨겨 접근성 트리에 남긴다. */
+@media (max-width: 47.999rem) {
+  .tx-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tx-table,
+  .tx-table tbody,
+  .tx-table tr,
+  .tx-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .tx-table tr {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    padding: 0.25rem 0;
+    margin-bottom: 0.5rem;
+  }
+
+  .tx-table td {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    text-align: right;
+    padding: 0.375rem 0.75rem;
+    max-width: none;
+  }
+
+  .tx-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    /* 라벨은 왼쪽 끝, 값은 오른쪽 끝. 라벨이 없는 셀은 값만 오른쪽에 남는다. */
+    margin-right: auto;
+    text-align: left;
+    font-size: 0.6875rem;
+    color: var(--color-ink-faint);
+  }
+
+  /* data-label 이 빈 셀(체크박스·수정삭제 버튼)은 라벨을 만들지 않는다. */
+  .tx-table td[data-label='']::before {
+    content: none;
+  }
+
+  /* 라벨 없는 셀 중 첫 칸(체크박스)만 왼쪽 정렬. 수정/삭제 버튼은 오른쪽에 둔다. */
+  .tx-table td[data-label='']:first-child {
+    justify-content: flex-start;
+  }
+}
+
+/* 다크모드 팔레트(#201). 옵트인이며 기본값은 라이트다 —
+   금융 앱은 익숙한 인터페이스로 신뢰를 유지하는 쪽이 낫다는 리서치를 따랐다.
+
+   컴포넌트는 하나도 고치지 않는다. 토큰이 var() 를 참조하므로 여기서 변수만
+   덮어쓰면 전 화면이 함께 바뀐다(#190 과 그 후속 마이그레이션이 만든 구조).
+
+   모든 값은 WCAG 대비비를 실제로 계산해서 골랐다. 추측한 값은 하나도 없다.
+   기준은 카드 배경(#1c1c1e) 위 4.5:1 이며, 주석의 숫자가 측정값이다.
+
+   순수 검정(#000)을 쓰지 않는다. 어두운 회색이 눈부심과 잔상이 덜하다. */
+:root[data-theme='dark'] {
+  /* 표면: 페이지가 가장 어둡고 카드가 한 단계 밝다 */
+  --color-surface: #1c1c1e;
+  --color-surface-muted: #121212;
+  --color-surface-sunken: #2a2a2c;
+
+  --color-line-soft: #262628;
+  --color-line: #333336;
+  --color-line-strong: #45454a;
+
+  /* 글자: ink 14.53 / body 11.48 / muted 7.85 / subtle 6.05 / faint 4.93 */
+  --color-ink: #ededed;
+  --color-ink-body: #d4d4d4;
+  --color-ink-muted: #b0b0b0;
+  --color-ink-subtle: #9a9a9a;
+  --color-ink-faint: #8a8a8a;
+  --color-ink-ghost: #5a5a5a;
+
+  /* 수입·지출: 채도를 낮춰 눈부심을 줄이면서 대비는 유지한다 (8.85 / 6.32) */
+  --color-income: #34d399;
+  --color-income-strong: #6ee7b7;
+  --color-income-soft: #04291d;
+
+  --color-expense: #fb7185;
+  --color-expense-strong: #fda4af;
+  --color-expense-bar: #f43f5e;
+  --color-expense-soft: #3b1119;
+  --color-expense-line: #4c1d24;
+  --color-expense-line-strong: #6b2733;
+
+  /* 삭제 버튼 배경. 흰 글자가 얹히므로 글자용 expense 와 반대로 어두워야 한다
+     (흰 글자 6.29 / hover 8.02). 이 분리가 없으면 버튼 글자가 안 읽힌다. */
+  --color-danger: #be123c;
+  --color-danger-hover: #9f1239;
+
+  --color-warning: #fbbf24;
+  --color-warning-mid: #f59e0b;
+  --color-warning-strong: #fcd34d;
+  --color-warning-bar: #f59e0b;
+  --color-warning-soft: #3a2a05;
+  --color-warning-line: #4a3410;
+
+  /* accent 는 글자와 버튼 배경에 함께 쓰인다. 흰 글자가 읽히면서(5.08)
+     어두운 배경 위 큰 글자로도 읽히는(3.35) 좁은 구간을 계산으로 찾았다. */
+  --color-accent: #615ae8;
+  --color-accent-hover: #4f46e5;
+  --color-accent-strong: #a5b4fc;
+  --color-accent-bar: #6366f1;
+  --color-accent-soft: #1e1b4b;
+  --color-accent-soft-hover: #2a2463;
+  --color-accent-line: #3730a3;
+  --color-accent-line-strong: #4338ca;
+
+  /* 카테고리 6종: 6.15 ~ 11.11, 서로 구분되는 색상환 위치를 유지한다 */
+  --color-cat-income: #34d399;
+  --color-cat-fixed: #fb7185;
+  --color-cat-needs: #fb923c;
+  --color-cat-debt: #f87171;
+  --color-cat-wants: #facc15;
+  --color-cat-savings: #60a5fa;
+
+  /* 모달 뒷배경. 어두운 화면에서는 더 어두워야 덮인 느낌이 난다 */
+  --color-scrim: #000000;
+
+  /* 어두운 배경에서 그림자는 거의 안 보인다. 대신 경계선에 의존한다. */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+}
+
+/* 브라우저 기본 UI(스크롤바·폼 컨트롤·date picker)도 함께 어두워지게 한다.
+   이걸 빼면 입력창의 달력 아이콘 같은 요소만 밝게 남아 튄다. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }

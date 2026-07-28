@@ -1,13 +1,6 @@
 import React, { useRef } from 'react';
-
-const TYPE_COLOR = {
-  '수입': 'text-emerald-600',
-  '고정지출': 'text-rose-600',
-  '변동필수': 'text-orange-600',
-  '부채상환': 'text-red-600',
-  '선택지출': 'text-yellow-600',
-  '저축': 'text-blue-600',
-};
+import CategoryBadge from './CategoryBadge';
+import { AMOUNT_MARK } from '../lib/categoryStyle';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -15,7 +8,7 @@ function fmt(n) {
 
 export default function TransactionList({ items, onEdit, onDelete, bare = false, selectedIds, onToggleSelect, onToggleSelectAll }) {
   if (!items.length) {
-    return <div className="text-slate-500 text-center py-10 text-sm">거래 내역이 없습니다.</div>;
+    return <div className="text-ink-subtle text-center py-10 text-sm">거래 내역이 없습니다.</div>;
   }
 
   const selectable = !!(selectedIds && onToggleSelect);
@@ -37,12 +30,12 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
   };
 
   return (
-    <div className={bare ? 'overflow-hidden' : 'bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden'}>
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50">
-          <tr className="border-b border-slate-200">
+    <div className={bare ? 'overflow-hidden' : 'bg-surface shadow-card rounded-card border border-line overflow-hidden'}>
+      <table className="w-full text-sm tx-table" role="table">
+        <thead className="bg-surface-muted" role="rowgroup">
+          <tr className="border-b border-line" role="row">
             {selectable && (
-              <th className="px-4 py-3 w-8">
+              <th className="px-4 py-3 w-8" role="columnheader" scope="col">
                 <input
                   type="checkbox"
                   aria-label="전체 선택"
@@ -52,24 +45,25 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                 />
               </th>
             )}
-            <th className="text-left px-4 py-3 text-slate-500 font-medium">날짜</th>
-            <th className="text-left px-4 py-3 text-slate-500 font-medium">카테고리</th>
-            <th className="text-left px-4 py-3 text-slate-500 font-medium hidden md:table-cell">가맹점</th>
-            <th className="text-right px-4 py-3 text-slate-500 font-medium">금액</th>
-            <th className="text-left px-4 py-3 text-slate-500 font-medium hidden sm:table-cell">결제수단</th>
-            <th className="px-4 py-3"></th>
+            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">날짜</th>
+            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">카테고리</th>
+            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">가맹점</th>
+            <th className="text-right px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">금액</th>
+            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">결제수단</th>
+            <th className="px-4 py-3" role="columnheader" scope="col"><span className="sr-only">작업</span></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {items.map((tx, i) => (
             <tr
               key={tx.id}
-              className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
-                i % 2 === 0 ? '' : 'bg-slate-50/50'
-              } ${selectable && selectedIds.has(tx.id) ? 'bg-indigo-50/60' : ''}`}
+              role="row"
+              className={`border-b border-line-soft hover:bg-surface-muted transition-colors ${
+                i % 2 === 0 ? '' : 'bg-surface-muted/50'
+              } ${selectable && selectedIds.has(tx.id) ? 'bg-accent-soft/60' : ''}`}
             >
               {selectable && (
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" role="cell" data-label="">
                   <input
                     type="checkbox"
                     aria-label={`${tx.date} ${tx.merchant || tx.category_name} 거래 선택`}
@@ -79,34 +73,39 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                   />
                 </td>
               )}
-              <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{tx.date}</td>
-              <td className="px-4 py-3">
-                <span className={`text-xs font-medium ${TYPE_COLOR[tx.major_type] || 'text-slate-600'}`}>
-                  {tx.category_name}
-                </span>
+              <td className="px-4 py-3 text-ink-subtle whitespace-nowrap" role="cell" data-label="날짜">{tx.date}</td>
+              <td className="px-4 py-3" role="cell" data-label="카테고리">
+                <CategoryBadge
+                  majorType={tx.major_type}
+                  name={tx.category_name}
+                  className="text-xs font-medium max-w-[10rem]"
+                />
               </td>
-              <td className="px-4 py-3 text-slate-600 hidden md:table-cell max-w-xs truncate">
-                {tx.merchant || <span className="text-slate-300">—</span>}
+              <td className="px-4 py-3 text-ink-muted max-w-xs truncate" role="cell" data-label="가맹점">
+                {tx.merchant || <span className="text-ink-ghost">—</span>}
               </td>
               <td className={`px-4 py-3 text-right font-medium tabular-nums ${
-                tx.major_type === '수입' ? 'text-emerald-600' : 'text-slate-800'
-              }`}>
-                {tx.major_type === '수입' ? '+' : '-'}{fmt(tx.amount)}
+                tx.major_type === '수입' ? 'text-income' : 'text-ink'
+              }`} role="cell" data-label="금액">
+                <span aria-hidden="true" className="mr-0.5 text-[10px] align-middle">
+                  {tx.major_type === '수입' ? AMOUNT_MARK.income.arrow : AMOUNT_MARK.expense.arrow}
+                </span>
+                {tx.major_type === '수입' ? AMOUNT_MARK.income.sign : AMOUNT_MARK.expense.sign}{fmt(tx.amount)}
               </td>
-              <td className="px-4 py-3 text-slate-400 text-xs hidden sm:table-cell">
+              <td className="px-4 py-3 text-ink-faint text-xs" role="cell" data-label="결제수단">
                 {tx.payment_method_name || '—'}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3" role="cell" data-label="">
                 <div className="flex gap-2 justify-end">
                   <button
                     onClick={() => onEdit(tx)}
-                    className="text-slate-400 hover:text-indigo-600 transition-colors text-xs"
+                    className="text-ink-faint hover:text-accent transition-colors text-xs"
                   >
                     수정
                   </button>
                   <button
                     onClick={() => onDelete(tx.id)}
-                    className="text-slate-400 hover:text-rose-600 transition-colors text-xs"
+                    className="text-ink-faint hover:text-expense transition-colors text-xs"
                   >
                     삭제
                   </button>

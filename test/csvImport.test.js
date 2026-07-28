@@ -18,7 +18,7 @@ describe('csvImport (신한 전용, #88)', () => {
 
   test('필수 컬럼 누락시 에러', () => {
     const badCsv = '날짜,가맹점,금액\n2026-01-15,쿠팡,1000';
-    assert.throws(() => parseCardCsv('shinhan', badCsv), /Required columns/);
+    assert.throws(() => parseCardCsv('shinhan', badCsv), /필요한 열을 찾지 못했습니다/);
   });
 
   test('잘못된 날짜/금액은 error 플래그로 표시', () => {
@@ -31,11 +31,11 @@ describe('csvImport (신한 전용, #88)', () => {
   // 실수로 다시 추가되거나 되돌려지면 이 테스트가 감지한다.
   test('하나/삼성/현대는 CSV 경로에서 지원하지 않음 (엑셀 경로로 통일, #88)', () => {
     for (const company of ['hana', 'samsung', 'hyundai']) {
-      assert.throws(() => parseCardCsv(company, SHINHAN_CSV), /Unsupported card company/, `${company}는 CSV 경로에서 거부돼야 함`);
+      assert.throws(() => parseCardCsv(company, SHINHAN_CSV), /신한카드만 지원합니다/, `${company}는 CSV 경로에서 거부돼야 함`);
     }
   });
 
   test('미지원 카드사는 에러', () => {
-    assert.throws(() => parseCardCsv('kookmin', SHINHAN_CSV), /Unsupported card company/);
+    assert.throws(() => parseCardCsv('kookmin', SHINHAN_CSV), /신한카드만 지원합니다/);
   });
 });

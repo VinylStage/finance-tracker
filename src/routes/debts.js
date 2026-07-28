@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
-const { asInt } = require('../utils/validate');
+const { asInt, numericBody } = require('../utils/validate');
 
 // GET /api/debts
 router.get('/', (req, res) => {
@@ -22,11 +22,11 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/debts
-router.post('/', (req, res) => {
+router.post('/', numericBody(['balance', 'annual_rate']), (req, res) => {
   try {
     const { name, balance, annual_rate = 0, type = '일반', memo } = req.body;
     if (!name || balance === undefined) {
-      return res.status(400).json({ error: 'name, balance required' });
+      return res.status(400).json({ error: '부채 이름과 잔액은 필수입니다.' });
     }
     const result = db.prepare(`
       INSERT INTO debts (name, balance, annual_rate, type, memo)
@@ -42,7 +42,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM debts WHERE id=?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: '찾는 부채가 없습니다. 이미 삭제됐을 수 있어요.' });
     const merged = { ...existing, ...req.body };
     db.prepare(`
       UPDATE debts SET name=?, balance=?, annual_rate=?, type=?, memo=?, updated_at=CURRENT_TIMESTAMP
@@ -65,19 +65,19 @@ router.delete('/:id', (req, res) => {
 });
 
 // POST /api/debts/:id/interest — 이자 추가 (잔액 자동 반영)
-router.post('/:id/interest', (req, res) => {
+router.post('/:id/interest', numericBody(['rate', 'interest_amount']), (req, res) => {
   try {
     const debt = db.prepare('SELECT * FROM debts WHERE id=?').get(req.params.id);
-    if (!debt) return res.status(404).json({ error: 'Not found' });
+    if (!debt) return res.status(404).json({ error: '찾는 부채가 없습니다. 이미 삭제됐을 수 있어요.' });
 
     const { rate, interest_amount, log_date, memo } = req.body;
     if (rate === undefined || interest_amount === undefined || !log_date) {
-      return res.status(400).json({ error: 'rate, interest_amount, log_date required' });
+      return res.status(400).json({ error: '이자율, 이자 금액, 기록일은 필수입니다.' });
     }
     // FND-06(감사): interest_amount가 문자열이면 balance_after 산술이 문자열
     // 연결로 동작해 부채 잔액이 오염될 수 있었다. INTEGER 컬럼이라 asInt로 강제한다.
     const interestAmount = asInt(interest_amount);
-    if (interestAmount === null) return res.status(400).json({ error: 'interest_amount must be an integer' });
+    if (interestAmount === null) return res.status(400).json({ error: '이자 금액은 정수로 입력해 주세요.' });
 
     const balance_before = debt.balance;
     const balance_after = balance_before + interestAmount;

@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYMD } = require('../utils/date');
+const { numericBody } = require('../utils/validate');
 
 function monthsBetween(startDate, endDate) {
   const s = new Date(startDate);
@@ -27,11 +28,11 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/savings
-router.post('/', (req, res) => {
+router.post('/', numericBody(['monthly_contribution', 'expected_payout', 'category_id']), (req, res) => {
   try {
     const { name, monthly_contribution, start_date, maturity_date, expected_payout, category_id } = req.body;
     if (!name || !monthly_contribution || !start_date) {
-      return res.status(400).json({ error: 'name, monthly_contribution, start_date required' });
+      return res.status(400).json({ error: '상품명, 월 납입액, 시작일은 필수입니다.' });
     }
     const result = db.prepare(`
       INSERT INTO savings_products (name, monthly_contribution, start_date, maturity_date, expected_payout, category_id, status)
@@ -47,7 +48,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM savings_products WHERE id=?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing) return res.status(404).json({ error: '찾는 저축 상품이 없습니다. 이미 삭제됐을 수 있어요.' });
     const merged = { ...existing, ...req.body };
     db.prepare(`
       UPDATE savings_products SET name=?, monthly_contribution=?, start_date=?, maturity_date=?,
@@ -73,7 +74,7 @@ router.delete('/:id', (req, res) => {
 router.post('/:id/mature', (req, res) => {
   try {
     const product = db.prepare('SELECT * FROM savings_products WHERE id=?').get(req.params.id);
-    if (!product) return res.status(404).json({ error: 'Not found' });
+    if (!product) return res.status(404).json({ error: '찾는 저축 상품이 없습니다. 이미 삭제됐을 수 있어요.' });
     if (product.status === '완료') return res.status(400).json({ error: '이미 만기 처리된 상품입니다.' });
 
     const settleDate = req.body.settle_date || product.maturity_date || localYMD();

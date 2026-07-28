@@ -1,5 +1,7 @@
 'use strict';
 
+const { UserInputError } = require('../utils/errors');
+
 /**
  * 간단한 CSV 파서 - 쉼표로 분리, 따옴표 처리
  * @param {string} csvText
@@ -145,12 +147,12 @@ const CARD_CSV_SPECS = {
 function parseWithSpec(csvText, spec) {
   const rows = parseCsv(csvText);
   if (rows.length < 1) {
-    throw new Error('Invalid CSV data');
+    throw new UserInputError('CSV 내용을 읽을 수 없습니다. 파일이 비어 있는지 확인해 주세요.');
   }
 
   const headers = rows[0].map(h => h.trim());
   if (!headers.includes(spec.date) || !headers.includes(spec.merchant) || !headers.includes(spec.amount)) {
-    throw new Error(`Required columns (${spec.date}, ${spec.merchant}, ${spec.amount}) not found in ${spec.label} CSV`);
+    throw new UserInputError(`필요한 열을 찾지 못했습니다. ${spec.date}, ${spec.merchant}, ${spec.amount} 열이 있는 CSV인지 확인해 주세요.`);
   }
 
   const dateIndex = headers.indexOf(spec.date);
@@ -186,7 +188,7 @@ function parseWithSpec(csvText, spec) {
 function parseCardCsv(cardCompany, csvText) {
   const spec = CARD_CSV_SPECS[cardCompany];
   if (!spec) {
-    throw new Error(`Unsupported card company: ${cardCompany}`);
+    throw new UserInputError('CSV 불러오기는 아직 신한카드만 지원합니다. 다른 카드사는 엑셀 파일로 불러와 주세요.');
   }
   return parseWithSpec(csvText, spec);
 }

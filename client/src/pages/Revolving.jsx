@@ -53,10 +53,10 @@ export default function Revolving() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-800">리볼빙 원장</h1>
+        <h1 className="text-xl font-semibold text-ink">리볼빙 원장</h1>
         <button
           onClick={() => setShowForm(s => !s)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors"
         >
           + 이번달 기록
         </button>
@@ -74,36 +74,36 @@ export default function Revolving() {
       <div className="flex items-center justify-between">
         <select
           aria-label="카드 필터"
-          className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-800"
+          className="bg-surface border border-line rounded-lg px-3 py-1.5 text-sm text-ink"
           value={cardFilter}
           onChange={e => setCardFilter(e.target.value)}
         >
           <option value="">전체 카드</option>
           {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <p className="text-sm text-slate-500">
-          현재 이월잔액: <span className="text-slate-800 font-semibold">{fmt(currentBalance)}</span>
+        <p className="text-sm text-ink-subtle">
+          현재 이월잔액: <span className="text-ink font-semibold">{fmt(currentBalance)}</span>
         </p>
       </div>
 
       {loading ? (
-        <div className="text-slate-500 text-center py-10">로딩 중...</div>
+        <div className="text-ink-subtle text-center py-10">로딩 중...</div>
       ) : loadError ? (
         <LoadError error={loadError} onRetry={reload} />
       ) : items.length === 0 ? (
-        <div className="text-slate-400 text-center py-10">리볼빙 기록이 없습니다.</div>
+        <div className="text-ink-faint text-center py-10">리볼빙 기록이 없습니다.</div>
       ) : (
-        <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+        <div className="bg-surface shadow-card rounded-card border border-line overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr className="border-b border-slate-200">
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">월</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium hidden sm:table-cell">카드</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">이월잔액</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">신규사용</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">납부액</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">이자</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">차월이월</th>
+            <thead className="bg-surface-muted">
+              <tr className="border-b border-line">
+                <th className="text-left px-4 py-3 text-ink-subtle font-medium">월</th>
+                <th className="text-left px-4 py-3 text-ink-subtle font-medium hidden sm:table-cell">카드</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">이월잔액</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">신규사용</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">납부액</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">이자</th>
+                <th className="text-right px-4 py-3 text-ink-subtle font-medium">차월이월</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -111,20 +111,20 @@ export default function Revolving() {
               {items.map((r, i) => (
                 <tr
                   key={r.id}
-                  className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-50/50'}`}
+                  className={`border-b border-line-soft hover:bg-surface-muted transition-colors ${i % 2 === 0 ? '' : 'bg-surface-muted/50'}`}
                 >
-                  <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{r.month}</td>
-                  <td className="px-4 py-3 text-slate-400 text-xs hidden sm:table-cell">{r.payment_method_name || '—'}</td>
-                  <td className="px-4 py-3 text-right text-slate-600 tabular-nums">{fmt(r.carried_balance)}</td>
-                  <td className="px-4 py-3 text-right text-slate-600 tabular-nums">{fmt(r.new_charge)}</td>
-                  <td className="px-4 py-3 text-right text-slate-800 tabular-nums">{fmt(r.paid_amount)}</td>
-                  <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmt(r.interest)}</td>
-                  <td className="px-4 py-3 text-right text-indigo-600 font-medium tabular-nums">{fmt(r.next_carried_balance)}</td>
+                  <td className="px-4 py-3 text-ink whitespace-nowrap">{r.month}</td>
+                  <td className="px-4 py-3 text-ink-faint text-xs hidden sm:table-cell">{r.payment_method_name || '—'}</td>
+                  <td className="px-4 py-3 text-right text-ink-muted tabular-nums">{fmt(r.carried_balance)}</td>
+                  <td className="px-4 py-3 text-right text-ink-muted tabular-nums">{fmt(r.new_charge)}</td>
+                  <td className="px-4 py-3 text-right text-ink tabular-nums">{fmt(r.paid_amount)}</td>
+                  <td className="px-4 py-3 text-right text-expense tabular-nums">{fmt(r.interest)}</td>
+                  <td className="px-4 py-3 text-right text-accent font-medium tabular-nums">{fmt(r.next_carried_balance)}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end">
                       <button
                         onClick={() => handleDelete(r.id)}
-                        className="text-slate-400 hover:text-rose-600 transition-colors text-xs"
+                        className="text-ink-faint hover:text-expense transition-colors text-xs"
                       >
                         삭제
                       </button>
@@ -165,46 +165,46 @@ function RevolvingForm({ paymentMethods, error, onSave, onCancel }) {
     });
   };
 
-  const inp = 'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500';
+  const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-xl border border-slate-200 p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-600">리볼빙 월 기록</h2>
-      {error && <p className="text-rose-600 text-xs">{error}</p>}
+    <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-ink-muted">리볼빙 월 기록</h2>
+      {error && <p className="text-expense text-xs">{error}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label htmlFor="rev-month" className="block text-xs text-slate-500 mb-1">월 *</label>
+          <label htmlFor="rev-month" className="block text-xs text-ink-subtle mb-1">월 *</label>
           <input id="rev-month" type="month" className={inp} value={form.month} onChange={e => set('month', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="rev-payment-method" className="block text-xs text-slate-500 mb-1">카드 *</label>
+          <label htmlFor="rev-payment-method" className="block text-xs text-ink-subtle mb-1">카드 *</label>
           <select id="rev-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)} required>
             <option value="">선택...</option>
             {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div>
-          <label htmlFor="rev-carried-balance" className="block text-xs text-slate-500 mb-1">이월잔액 (원)</label>
+          <label htmlFor="rev-carried-balance" className="block text-xs text-ink-subtle mb-1">이월잔액 (원)</label>
           <input id="rev-carried-balance" type="number" className={inp} placeholder="0" value={form.carried_balance} onChange={e => set('carried_balance', e.target.value)} />
         </div>
         <div>
-          <label htmlFor="rev-new-charge" className="block text-xs text-slate-500 mb-1">신규사용액 (원)</label>
+          <label htmlFor="rev-new-charge" className="block text-xs text-ink-subtle mb-1">신규사용액 (원)</label>
           <input id="rev-new-charge" type="number" className={inp} placeholder="0" value={form.new_charge} onChange={e => set('new_charge', e.target.value)} />
         </div>
         <div>
-          <label htmlFor="rev-paid-amount" className="block text-xs text-slate-500 mb-1">납부액 (원) *</label>
+          <label htmlFor="rev-paid-amount" className="block text-xs text-ink-subtle mb-1">납부액 (원) *</label>
           <input id="rev-paid-amount" type="number" className={inp} placeholder="0" value={form.paid_amount} onChange={e => set('paid_amount', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="rev-interest" className="block text-xs text-slate-500 mb-1">이자 (원)</label>
+          <label htmlFor="rev-interest" className="block text-xs text-ink-subtle mb-1">이자 (원)</label>
           <input id="rev-interest" type="number" className={inp} placeholder="0" value={form.interest} onChange={e => set('interest', e.target.value)} />
         </div>
       </div>
       <div className="flex gap-3 pt-1">
-        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-5 py-2 rounded-lg transition-colors">
+        <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-5 py-2 rounded-lg transition-colors">
           저장
         </button>
-        <button type="button" onClick={onCancel} className="text-slate-500 hover:text-slate-800 text-sm px-4 py-2 rounded-lg hover:bg-slate-100 transition-colors">
+        <button type="button" onClick={onCancel} className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg hover:bg-surface-sunken transition-colors">
           취소
         </button>
       </div>

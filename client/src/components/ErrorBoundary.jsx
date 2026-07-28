@@ -19,12 +19,12 @@ export default class ErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="min-h-screen flex items-center justify-center bg-surface-muted">
           <div className="text-center py-10 space-y-3 max-w-sm">
-            <p className="text-sm text-rose-600">문제가 발생해 화면을 표시할 수 없습니다.</p>
+            <p className="text-sm text-expense">문제가 발생해 화면을 표시할 수 없습니다.</p>
             <button
               onClick={() => window.location.reload()}
-              className="text-sm text-indigo-600 hover:text-indigo-700 border border-slate-200 hover:bg-slate-50 rounded-lg px-4 py-2 transition-colors"
+              className="text-sm text-accent hover:text-accent-strong border border-line hover:bg-surface-muted rounded-lg px-4 py-2 transition-colors"
             >
               새로고침
             </button>

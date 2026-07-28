@@ -5,7 +5,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const db = require('../db/init');
-const { serverError, errMsg } = require('../utils/errors');
+const { serverError, errMsg, UserInputError, isUserInputError } = require('../utils/errors');
 const { parseCardExcel, detectCardCompany } = require('../services/cardExcelImport');
 
 // FND-09(감사): 파일 개수(30개)만 제한하고 크기·형식 제한이 없어 memoryStorage에
@@ -17,7 +17,7 @@ const upload = multer({
   fileFilter(req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ext !== '.xlsx' && ext !== '.xls') {
-      return cb(new Error('UNSUPPORTED_FILE_TYPE: .xlsx 또는 .xls 파일만 업로드할 수 있습니다.'));
+      return cb(new UserInputError('.xlsx 또는 .xls 파일만 업로드할 수 있습니다.'));
     }
     cb(null, true);
   },
@@ -37,8 +37,8 @@ const CARD_COMPANY_LABELS = {
 // 관심사라 자연스럽게 나뉘는 지점을 따라 함수를 쪼갠다.
 
 // 엑셀 파일을 파싱하고 취소된 거래를 걸러낸다. 파싱 실패(XLSX.read 거부,
-// 시트 부재 등)는 사용자 입력 문제이므로 400으로 분류되게 구조화된 접두사로
-// 변환한다. SHEET_NOT_FOUND는 이미 구조화돼 있으므로 그대로 전달한다.
+// 시트 부재 등)는 사용자 입력 문제이므로 UserInputError 로 변환해 400으로
+// 분류되게 한다. 서비스가 이미 UserInputError 를 던졌으면 그대로 전달한다.
 function parseAndFilterTransactions(originalname, fileBuffer) {
   // multer/busboy decode multipart filenames as latin1 by default, which mangles
   // non-ASCII (Korean) filenames — re-decode the raw bytes as utf8.
@@ -48,8 +48,8 @@ function parseAndFilterTransactions(originalname, fileBuffer) {
   try {
     transactions = parseCardExcel(detectedCardCompany, fileBuffer);
   } catch (e) {
-    if (/^SHEET_NOT_FOUND:/.test(errMsg(e))) throw e;
-    throw new Error('PARSE_FAILED: 엑셀 파일을 해석할 수 없습니다. 파일이 손상됐거나 지원하지 않는 형식입니다.');
+    if (isUserInputError(e)) throw e;
+    throw new UserInputError('엑셀 파일을 해석할 수 없습니다. 파일이 손상됐거나 지원하지 않는 형식입니다.');
   }
   return { detectedCardCompany, filteredTransactions: transactions.filter(t => !t.cancelled) };
 }
@@ -126,7 +126,10 @@ function performImport(filteredTransactions, detectedCardCompany) {
         );
         imported++;
       } catch (err) {
-        errors.push(`${row.date} ${row.merchant}: ${errMsg(err)}`);
+        // 예외 원문(SQLite 제약 위반 문구 등)은 사용자에게 의미가 없고 내부 구조를
+        // 드러낸다. 원문은 서버 로그에만 남기고 화면에는 어느 행이 실패했는지만 알린다.
+        console.error('[cardImport row]', err);
+        errors.push(`${row.date} ${row.merchant}: 저장하지 못했습니다.`);
       }
     }
   })(); // Immediately invoke the transaction
@@ -156,15 +159,13 @@ function uploadOrReject(multerMiddleware) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ error: '파일 크기가 너무 큽니다 (파일당 최대 10MB)' });
       }
-      return res.status(400).json({ error: errMsg(err).replace(/^UNSUPPORTED_FILE_TYPE:\s*/, '') || '파일을 업로드할 수 없습니다.' });
+      return res.status(400).json({ error: isUserInputError(err) ? errMsg(err) : '파일을 업로드할 수 없습니다.' });
     });
   };
 }
 
-// 파싱/입력 오류(사용자 문제)는 400 대상, 그 외는 서버 오류로 구분한다.
-function isUserInputError(message) {
-  return /^(UNSUPPORTED_CARD|SHEET_NOT_FOUND|PARSE_FAILED):/.test(message);
-}
+// 판정은 utils/errors.js 의 isUserInputError 를 쓴다. 메시지 접두어로 판정하던
+// 방식은 접두어가 사용자 화면에 노출되고, 메시지를 고치면 조용히 깨졌다(#231).
 
 // 파일 하나를 처리하고 결과 객체를 반환한다. 실패해도 throw하지 않고 ok:false 로 담는다.
 // (멀티파일에서 한 파일 실패가 나머지를 중단시키지 않도록)
@@ -174,8 +175,9 @@ function processOne(file, isPreview) {
     const result = processTransactions(file.originalname, file.buffer, isPreview);
     return { filename, ok: true, ...result };
   } catch (e) {
-    const message = errMsg(e);
-    return { filename, ok: false, error: isUserInputError(message) ? message : 'Internal error' };
+    if (isUserInputError(e)) return { filename, ok: false, error: errMsg(e) };
+    console.error('[cardImport file]', e);
+    return { filename, ok: false, error: '처리 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.' };
   }
 }
 
@@ -196,7 +198,7 @@ router.post('/', uploadOrReject(upload.array('files', 30)), async (req, res) => 
   try {
     const files = req.files;
     if (!files || files.length === 0) {
-      return res.status(400).json({ error: 'files is required' });
+      return res.status(400).json({ error: '업로드할 파일을 선택해 주세요.' });
     }
 
     const isPreview = req.query.preview === 'true';
@@ -212,14 +214,14 @@ router.post('/', uploadOrReject(upload.array('files', 30)), async (req, res) => 
 // 단일 파일 하위호환 라우트 (기존 'file' 필드로 호출하는 클라이언트 대응)
 router.post('/single', uploadOrReject(upload.single('file')), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'file is required' });
+    if (!req.file) return res.status(400).json({ error: '업로드할 파일을 선택해 주세요.' });
     const isPreview = req.query.preview === 'true';
     const result = processTransactions(req.file.originalname, req.file.buffer, isPreview);
     res.json(result);
   } catch (e) {
     // 잘못된 입력(미지원 카드사, 시트 부재, 파일 해석 실패)은 400. DB 등 그 외 오류는 500(내부 메시지 숨김+로깅).
-    const message = errMsg(e);
-    if (isUserInputError(message)) return res.status(400).json({ error: message });
+    // 판정은 오류 객체의 타입으로 한다 — 문자열을 넘기면 언제나 false 라 조용히 500 이 된다.
+    if (isUserInputError(e)) return res.status(400).json({ error: errMsg(e) });
     serverError(res, e, 'cardImport');
   }
 });
