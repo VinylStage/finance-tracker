@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./fonts.css";
 
 /* 시각 디자인 리뉴얼 토큰.
    라이트 2a(흰 배경 + 단일 블루) / 다크 4a(차가운 뉴트럴).
