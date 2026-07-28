@@ -147,11 +147,9 @@ Partial 10건의 성격은 두 갈래로 나뉜다.
    데이터 CRUD가 인증 없이 네트워크에 노출된다. 이를 막는 것은 콘솔 경고 한 줄이
    전부다(`src/server.js:74-76`). Poka-yoke(애초에 불가능한 구조) 관점에서
    "문서로만 존재하는 제약"이다.
-2. **부작용 있는 GET이 CSRF 방어를 우회한다.** `GET /api/installments`가 요청마다
-   `UPDATE installments SET status='완료'`를 실행한다
-   (`src/routes/installments.js:22-30`, 호출 `:35`). `csrfGuard`는 POST/PUT/DELETE/PATCH만
-   검사하므로(`src/utils/csrfGuard.js:13,16`) 이 쓰기 경로는 무검증이다.
-   **실측: `Sec-Fetch-Site: cross-site` GET 1회로 `status`가 `진행중`→`완료`로 변경됨**(PoC R2-01).
+2. **부작용 있는 GET이 CSRF 방어를 우회한다.** 상태를 바꾸는 쓰기 경로 하나가
+   `csrfGuard`의 검사 대상 메서드 밖에 있어 출처 검증을 받지 않는다(§4.2).
+   재현 절차와 정확한 코드 위치는 미시정 상태라 비공개로 관리한다 — 이슈 [#205](https://github.com/VinylStage/finance-tracker/issues/205).
 3. **가장 파괴적인 라우트에만 확인 토큰이 없다.** `DELETE /api/transactions {all:true}`가
    전체 거래를 삭제하는데 토큰이 없다(`src/routes/transactions.js:282-285`).
    같은 코드베이스의 `POST /api/data/import`(overwrite)는 `confirm:"DELETE_ALL"`을,
@@ -624,20 +622,21 @@ SCAN  카드임포트 중복: approval_number=?
 ### 4.2 [High] 부작용 있는 GET이 CSRF 방어를 우회한다 `[재현됨]`
 
 - **축/항목**: A1, B6
-- **위치**: `src/routes/installments.js:22-30` `completeExpiredInstallments()`, 호출 `:35`
-- **증상**: `GET /api/installments`가 매 요청마다 `UPDATE installments SET status='완료' …`를
-  실행한다. `csrfGuard`는 POST/PUT/DELETE/PATCH만 검사하므로
-  (`src/utils/csrfGuard.js:13,16`) 이 쓰기 경로에는 어떤 출처 검증도 적용되지 않는다.
-- **실측**: `Sec-Fetch-Site: cross-site` 헤더를 붙인 GET 1회로
-  `status`가 `'진행중'` → `'완료'`로 변경됨.
-- **영향**: 악성 페이지의 `<img src="http://127.0.0.1:3000/api/installments">` 한 줄로
-  로컬 앱의 DB 상태를 바꿀 수 있다. 변경 내용이 결정론적(기간 만료 할부만 완료 처리)이라
+- **증상**: 상태를 바꾸는 쓰기 경로 하나가 `csrfGuard`의 검사 대상 메서드 밖에 있어
+  어떤 출처 검증도 적용되지 않는다.
+- **영향**: 외부 페이지가 로컬 앱의 DB 상태를 바꿀 수 있다. 변경 내용이 결정론적이라
   데이터 파괴는 아니지만, **HTTP 안전 메서드(safe method) 계약 위반**이며
   CSRF 방어의 전제를 무너뜨린다.
-- **분류**: 근본 시정조치(corrective action) — 상태 전이를 GET에서 분리해
-  명시적 엔드포인트(`POST /api/installments/reconcile`)나 조회 시점 **계산**(저장 없이)으로 옮긴다.
+- **분류**: 근본 시정조치(corrective action) — 상태 전이를 안전 메서드에서 분리해
+  명시적 엔드포인트나 조회 시점 **계산**(저장 없이)으로 옮긴다.
 - **비고**: 이 코드는 `#121`(할부 자동완료) 대응으로 도입됐다. 리메디에이션이
   새로운 유형의 문제를 만든 사례다.
+
+> **재현 상세 비공개.** 이 결함은 아직 시정되지 않았다(이슈
+> [#205](https://github.com/VinylStage/finance-tracker/issues/205) 로 트래킹 중).
+> 이 저장소는 public 이므로 정확한 코드 위치·재현 절차·페이로드는 여기에 두지 않고
+> 비공개 저장소 `VinylStage/finance-tracker-audit-private` 의
+> `findings/M2-get-csrf-installments.md` 에서 관리한다. 시정 완료 시 여기로 되돌린다.
 
 ### 4.3 [High] FND-06 시정이 절반만 적용 — 부채 잔액 타입 오염이 여전히 재현된다 `[재현됨]`
 
@@ -796,7 +795,7 @@ SCAN  카드임포트 중복: approval_number=?
 |---|---|---|
 | **B6-4** | **입력검증을 라우트별 애드혹에서 스키마 선언 방식으로 전환.** 현재 `asInt()`를 "생각날 때 개별 필드에" 적용하는 방식이 §4.3(부채)·§4.7(할부)·§4.8(다수)의 공통 원인이다. 라우트별 필드 스키마를 선언하고 공통 미들웨어가 강제하면, "어느 필드에 검증을 빠뜨렸는가"라는 질문 자체가 사라진다 | TPS Poka-yoke — 애초에 결함이 불가능한 구조 |
 | **B6-5** | **`changes === 0 → 404` 규칙을 전 라우트에 통일** | §4.5, 정책 일관성 |
-| **A1-2** | **부작용 있는 GET 제거** — `completeExpiredInstallments()`를 조회 시점 계산(저장 없음)이나 명시적 POST 엔드포인트로 이관 | §4.2, HTTP 안전 메서드 계약 |
+| **A1-2** | **부작용 있는 GET 제거** — 해당 상태 전이를 조회 시점 계산(저장 없음)이나 명시적 POST 엔드포인트로 이관 | §4.2, HTTP 안전 메서드 계약 |
 | **A4-1** | **`HOST`가 루프백이 아니면 기동 거부(또는 명시적 opt-in 요구).** A1·A4의 Partial 사유를 동시에 해소한다 | §3.1, Poka-yoke |
 | **B1-1** | **클라이언트 테스트 인프라 도입**(Vitest + Testing Library). ※ 신규 의존성 추가이므로 **사전 승인 필요** | §4.4 |
 | **B3-1** | **정적분석 도구(ESLint + 복잡도 규칙)를 CI 게이트로 편입.** 프레임워크 Part 3 운영규칙 3("사람이 재확인하지 않아도 되는 항목은 자동화로 이관", TPS Jidoka)의 직접 적용 대상이다 | §4.11 R2-L3 |
@@ -985,7 +984,7 @@ npm run perf:baseline
 
 | ID | 항목 | 결과 |
 |---|---|---|
-| R2-01 | GET /api/installments 의 DB 쓰기 | **CONFIRMED** — cross-site GET 1회로 `진행중`→`완료` |
+| R2-01 | 안전 메서드 경로의 DB 쓰기 (§4.2) | **CONFIRMED** — 상세 비공개([#205](https://github.com/VinylStage/finance-tracker/issues/205)) |
 | R2-02 | POST /api/debts 금액 미검증 | **CONFIRMED** — `total_balance="0abc1000"` (string) |
 | R2-03 | POST /api/installments 금액 미검증 | **CONFIRMED** — HTTP 201, `months:"Y"` 저장 |
 | R2-04 | savings/:id/mature settle_date 미검증 | HTTP 500 |
