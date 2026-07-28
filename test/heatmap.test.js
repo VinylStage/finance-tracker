@@ -98,4 +98,19 @@ describe('heatLabel', () => {
     assert.strictEqual(heatLabel(15000, 10000), '기준의 1.5배');
     assert.strictEqual(heatLabel(25000, 10000), '기준의 2.5배');
   });
+
+  test('기준선이 없으면 배수를 말하지 않는다', () => {
+    // 0 으로 나눠 `기준의 Infinity배` 가 나오던 자리. 라벨의 0단계 판정을
+    // heatLevel 에 위임해 색과 문구가 갈라지지 않게 했다.
+    assert.strictEqual(heatLabel(5000, 0), '지출 없음');
+    assert.strictEqual(heatLabel(5000, -1), '지출 없음');
+  });
+
+  test('셀이 무채색이면 라벨도 지출 없음이다', () => {
+    // 색(heatClass)과 문구(heatLabel)가 같은 판정을 공유하는지 확인한다.
+    for (const [amount, basis] of [[0, 10000], [0, 0], [5000, 0], [-100, 10000]]) {
+      assert.strictEqual(heatClass(amount, basis), HEAT_CLASS[0]);
+      assert.strictEqual(heatLabel(amount, basis), '지출 없음');
+    }
+  });
 });
