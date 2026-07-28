@@ -60,7 +60,7 @@ export default function App() {
               : 'text-caption hover:text-ink hover:bg-surface-page'
           }`}
         >
-          ?
+          <Icon name="help" size={18} />
         </Link>
       </nav>
 
