@@ -7,6 +7,7 @@ import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
+import Icon from '../components/Icon';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -322,7 +323,7 @@ export default function Transactions() {
         <LoadError error={error} onRetry={reload} />
       ) : years.length === 0 ? (
         <EmptyState
-          icon="🧾"
+          icon={<Icon name="receipt_long" size={32} />}
           title="아직 거래가 없어요"
           description="첫 거래를 추가하면 이번 달에 얼마를 쓸 수 있는지 대시보드가 알려드려요. 카드사 이용내역 파일을 올려 한 번에 등록할 수도 있습니다."
         />

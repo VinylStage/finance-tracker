@@ -5,6 +5,7 @@ import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
+import Icon from '../components/Icon';
 
 const DEBT_TYPES = ['일반', '마이너스통장', '학자금', '전세자금'];
 
@@ -142,7 +143,7 @@ export default function Debts() {
         <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
         <EmptyState
-          icon="🏦"
+          icon={<Icon name="account_balance" size={32} />}
           title="아직 등록된 부채가 없어요"
           description="대출이나 카드 할부금을 등록하면 잔액과 월 이자를 한곳에서 볼 수 있어요. 없다면 그대로 두셔도 됩니다."
         />

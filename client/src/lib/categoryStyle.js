@@ -6,7 +6,10 @@
 // 색상만으로 대분류를 구분하면 적록색약(남성 약 8%)이 인지할 수 없어 WCAG SC 1.4.1 을
 // 위반한다(#191). 그래서 아이콘 + 텍스트 이중 인코딩을 쓴다. 아이콘은 화면에
 // 텍스트 이름이 항상 함께 나오는 자리에서만 쓰이므로 aria-hidden 으로 감춘다 —
-// 스크린리더가 "돼지 저금통"처럼 이모지 이름을 읽어봤자 잡음이다.
+// 스크린리더가 아이콘까지 따로 읽으면 같은 정보가 두 번 나가 잡음이 된다.
+//
+// 이모지를 쓰지 않는 이유는 크기·정렬·굵기를 통제할 수 없고 OS 마다 다르게 렌더되기
+// 때문이다. 카테고리 구분이 아이콘 모양 하나에 걸리므로 실루엣이 흔들리면 안 된다.
 //
 // 카테고리에 색을 배정하지 않는다. 카테고리는 사용자가 계속 추가할 수 있어 개수가
 // 늘어나고, 색으로 구분하면 팔레트가 반드시 바닥난다. 예전에는 대분류마다 hue 를
@@ -22,16 +25,16 @@ const CATEGORY_COLOR = 'text-caption';
 // 있다. UI 상수(Settings.jsx 의 CATEGORY_TYPES)에는 6종만 있으므로 여기서 7번째로
 // 받아준다. 그 밖의 값은 FALLBACK 으로 흘린다.
 const CATEGORY_ICON = {
-  '수입': '💵',
-  '고정지출': '🏠',
-  '변동필수': '🛒',
-  '부채상환': '🏦',
-  '선택지출': '🎬',
-  '저축': '🐷',
-  '미분류': '❓',
+  '수입': 'payments',
+  '고정지출': 'home',
+  '변동필수': 'shopping_basket',
+  '부채상환': 'account_balance',
+  '선택지출': 'movie',
+  '저축': 'savings',
+  '미분류': 'category',
 };
 
-const FALLBACK_ICON = '❓';
+const FALLBACK_ICON = 'category';
 
 export const CATEGORY_STYLE = Object.fromEntries(
   Object.entries(CATEGORY_ICON).map(([type, icon]) => [type, { icon, color: CATEGORY_COLOR }])
