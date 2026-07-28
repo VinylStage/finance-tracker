@@ -2,15 +2,15 @@ import React from 'react';
 import { dailyBasis, heatClass, heatLabel } from '../lib/heatmap';
 
 export default function SpendHeatmap({ year, month, dailyTotals, monthlyBudgetTotal, recentDailyAverage }) {
+  // 해당 월의 총 일수를 구한다.
+  const daysInMonth = new Date(year, month, 0).getDate();
+  
   // 기준선을 계산한다. 예산과 일수를 사용하여 일별 예산을 구하고,
   // 예산이나 일수가 없으면 폴백값을 사용한다.
-  const basis = dailyBasis(monthlyBudgetTotal, new Date(year, month, 0).getDate(), recentDailyAverage);
+  const basis = dailyBasis(monthlyBudgetTotal, daysInMonth, recentDailyAverage);
   
   // 달력의 시작 요일(0=일요일, 1=월요일, ..., 6=토요일)을 구한다.
   const startDay = new Date(year, month - 1, 1).getDay();
-  
-  // 해당 월의 총 일수를 구한다.
-  const daysInMonth = new Date(year, month, 0).getDate();
   
   // 요일 머리글을 정의한다. WCAG 1.4.1 기준으로 텍스트로 요일을 표시한다.
   const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
@@ -59,8 +59,10 @@ export default function SpendHeatmap({ year, month, dailyTotals, monthlyBudgetTo
         {calendarDays.map((cell, index) => (
           <div
             key={index}
-            className={`aspect-square rounded-chip flex items-center justify-center text-meta tabular-nums ${
-              cell ? heatClass(cell.amount, basis) : ''
+            className={`aspect-square ${
+              cell 
+                ? 'rounded-chip flex items-center justify-center text-meta tabular-nums ' + heatClass(cell.amount, basis)
+                : ''
             }`}
             title={
               cell 
@@ -91,8 +93,8 @@ export default function SpendHeatmap({ year, month, dailyTotals, monthlyBudgetTo
         <div>
           {hasBasis ? (
             <span>
-              하루 기준 {basis.toLocaleString('ko-KR')}원 ·{' '}
-              {monthlyBudgetTotal > 0 && new Date(year, month, 0).getDate() > 0
+              하루 기준 {Math.round(basis).toLocaleString('ko-KR')}원 ·{' '}
+              {monthlyBudgetTotal > 0 && daysInMonth > 0
                 ? '월 예산 ÷ 일수'
                 : '최근 3개월 일평균'}
             </span>
