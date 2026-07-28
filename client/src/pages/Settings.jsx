@@ -10,6 +10,7 @@ import { recordExport } from '../lib/backupStatus';
 import { resetOnboarding } from '../lib/onboarding';
 import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
 import Icon from '../components/Icon';
+import AnchorNav from '../components/AnchorNav';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -43,18 +44,81 @@ export default function Settings() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-ink">설정</h1>
-      <TrustPanel />
-      <AppSettingsSection initial={appSettings} onSaved={reload} />
-      <CategorySection categories={categories} onChanged={reload} />
-      <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
-      <RecurringRuleSection rules={recurringRules} categories={categories} paymentMethods={paymentMethods} onChanged={reload} />
-      <ExportSection />
-      <SettingsBackupSection />
-      <TransactionsBackupSection />
-      <CardImportSection />
-      <CsvImportSection />
-      <DangerZoneSection />
+
+      {/* 좌측 목차는 데스크톱에서만 띄운다. 좁은 화면에서 목차가 본문 위에 쌓이면
+          정작 설정까지 닿는 스크롤이 더 길어진다. */}
+      <div className="lg:grid lg:grid-cols-[172px_minmax(0,1fr)] lg:gap-6 lg:items-start">
+        <AnchorNav
+          items={SETTINGS_SECTIONS}
+          className="hidden lg:block sticky top-4 border-l border-line pl-3"
+        />
+
+        <div className="space-y-4">
+          {/* 데이터가 어디에 저장되는지는 맨 위에 둔다. 나머지 설정을 만지기 전에
+              알아야 하는 정보다. */}
+          <Anchor id="trust">
+            <TrustPanel />
+          </Anchor>
+          <Anchor id="app">
+            <AppSettingsSection initial={appSettings} onSaved={reload} />
+          </Anchor>
+          <Anchor id="category">
+            <CategorySection categories={categories} onChanged={reload} />
+          </Anchor>
+          <Anchor id="payment">
+            <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
+          </Anchor>
+          <Anchor id="recurring">
+            <RecurringRuleSection rules={recurringRules} categories={categories} paymentMethods={paymentMethods} onChanged={reload} />
+          </Anchor>
+          <Anchor id="export">
+            <ExportSection />
+          </Anchor>
+          <Anchor id="settings-backup">
+            <SettingsBackupSection />
+          </Anchor>
+          <Anchor id="tx-backup">
+            <TransactionsBackupSection />
+          </Anchor>
+          <Anchor id="card-import">
+            <CardImportSection />
+          </Anchor>
+          <Anchor id="csv-import">
+            <CsvImportSection />
+          </Anchor>
+          {/* 위험 구역은 맨 아래다. 되돌릴 수 없는 동작이라 스크롤 끝까지 내려온
+              사람만 만나게 한다. 화면의 유일한 채색 영역이기도 하다. */}
+          <Anchor id="danger">
+            <DangerZoneSection />
+          </Anchor>
+        </div>
+      </div>
     </div>
+  );
+}
+
+// 목차 항목. 순서가 곧 화면에 쌓이는 순서다.
+export const SETTINGS_SECTIONS = [
+  { id: 'trust', label: '데이터 위치' },
+  { id: 'app', label: '기본 설정' },
+  { id: 'category', label: '카테고리 관리' },
+  { id: 'payment', label: '결제수단 관리' },
+  { id: 'recurring', label: '반복 거래 관리' },
+  { id: 'export', label: '데이터 내보내기' },
+  { id: 'settings-backup', label: '설정 백업 / 복원' },
+  { id: 'tx-backup', label: '거래내역 백업 / 복원' },
+  { id: 'card-import', label: '카드사 엑셀 임포트' },
+  { id: 'csv-import', label: '신한카드 CSV 임포트' },
+  { id: 'danger', label: '위험 구역' },
+];
+
+// scroll-mt 는 앵커로 점프했을 때 섹션 제목이 화면 맨 위에 딱 붙지 않게 띄운다.
+// 붙어 버리면 제목이 잘린 것처럼 보인다.
+function Anchor({ id, children }) {
+  return (
+    <section id={id} className="scroll-mt-6">
+      {children}
+    </section>
   );
 }
 
