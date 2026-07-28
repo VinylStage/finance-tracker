@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { trapIndex } from '../lib/quickEntry';
+import Icon from './Icon';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -82,7 +83,7 @@ export default function Modal({ title, onClose, busy = false, children }) {
             aria-label="닫기"
             className="rounded-control px-2 py-1 text-sm text-caption hover:bg-surface-page hover:text-body disabled:opacity-40"
           >
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </div>
         <div className="p-5">{children}</div>
