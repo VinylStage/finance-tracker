@@ -18,6 +18,7 @@ import {
 } from '../lib/budget';
 import CategorySpendSection from '../components/CategorySpendSection';
 import SpendHeatmap from '../components/SpendHeatmap';
+import CashFlowBars from '../components/CashFlowBars';
 
 const PERIODS = ['일', '주', '월', '연'];
 
@@ -395,6 +396,12 @@ export default function Dashboard() {
       </div>
 
       <RecurringDueSection onConfirmed={reload} />
+
+      {/* 자금 흐름 — 요약 카드 바로 다음이다. "얼마 벌고 얼마 썼나" 를 본 직후
+          "그래서 어디로 갔나" 를 답하는 순서라야 읽는 흐름이 끊기지 않는다. */}
+      <Section title="자금 흐름" caption="수입이 어디로 갔나">
+        <CashFlowBars rows={data.categoryBreakdown} income={data.income} />
+      </Section>
 
       {/* 지출 분석 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
