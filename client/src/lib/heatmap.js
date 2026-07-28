@@ -23,6 +23,9 @@ export function heatLevel(dayAmount, basis) {
   const amount = Number(dayAmount) || 0;
   const base = Number(basis) || 0;
 
+  // 지출이 없는 경우 0단계를 반환한다
+  if (amount <= 0) return 0;
+
   // 기준선을 정의할 수 없으면 색을 칠하지 않는다.
   if (base <= 0) return 0;
 
@@ -54,7 +57,8 @@ export function heatLabel(dayAmount, basis) {
   const amount = Number(dayAmount) || 0;
   const base = Number(basis) || 0;
 
-  if (amount <= 0) return '지출 없음';
+  // heatLevel 결과가 0이면 지출 없음으로 처리한다
+  if (heatLevel(amount, base) === 0) return '지출 없음';
 
   // 배수는 소수점 한 자리까지 표기한다.
   const ratio = amount / base;
