@@ -15,17 +15,17 @@ export default function BottomTabBar() {
 
   const itemClass = (on) =>
     `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] transition-colors ${
-      on ? 'text-accent-strong' : 'text-ink-faint'
+      on ? 'text-brand-text' : 'text-caption'
     }`;
 
   const sheetItemClass =
-    'flex items-center gap-2 px-3 py-2.5 rounded-md text-sm text-ink-body hover:bg-surface-muted';
+    'flex items-center gap-2 px-3 py-2.5 rounded-control text-sm text-body hover:bg-surface-page';
 
   return (
     <>
       {moreOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-ink/30"
+          className="md:hidden fixed inset-0 z-40 bg-scrim/30"
           onClick={() => setMoreOpen(false)}
           aria-hidden="true"
         />

@@ -165,16 +165,16 @@ describe('B. categoryStyle.js', () => {
     }
   });
 
-  test('categoryStyle(\'없는값\') 이 폴백(icon: \'❓\', color: \'text-ink-muted\')을 돌려준다', () => {
+  test('categoryStyle(\'없는값\') 이 폴백(icon: \'❓\', color: \'text-caption\')을 돌려준다', () => {
     const style = categoryStyle('없는값');
     assert.strictEqual(style.icon, '❓');
-    assert.strictEqual(style.color, 'text-ink-muted');
+    assert.strictEqual(style.color, 'text-caption');
   });
 
   test('categoryStyle(undefined), categoryStyle(null), categoryStyle(\'\') 도 폴백', () => {
-    assert.deepStrictEqual(categoryStyle(undefined), { icon: '❓', color: 'text-ink-muted' });
-    assert.deepStrictEqual(categoryStyle(null), { icon: '❓', color: 'text-ink-muted' });
-    assert.deepStrictEqual(categoryStyle(''), { icon: '❓', color: 'text-ink-muted' });
+    assert.deepStrictEqual(categoryStyle(undefined), { icon: '❓', color: 'text-caption' });
+    assert.deepStrictEqual(categoryStyle(null), { icon: '❓', color: 'text-caption' });
+    assert.deepStrictEqual(categoryStyle(''), { icon: '❓', color: 'text-caption' });
   });
 
   test('AMOUNT_MARK.income.arrow 가 \'▲\', AMOUNT_MARK.expense.arrow 가 \'▼\'', () => {

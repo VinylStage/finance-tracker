@@ -15,9 +15,9 @@ export default function EmptyState({ icon, title, description, action, filtered 
           {icon}
         </div>
       )}
-      <p className="text-sm font-medium text-ink-body">{title}</p>
+      <p className="text-sm font-medium text-body">{title}</p>
       {description && !filtered && (
-        <p className="mt-1.5 text-xs text-ink-subtle max-w-sm mx-auto leading-relaxed">{description}</p>
+        <p className="mt-1.5 text-xs text-caption max-w-sm mx-auto leading-relaxed">{description}</p>
       )}
       {action && !filtered && <div className="mt-4">{action}</div>}
     </div>

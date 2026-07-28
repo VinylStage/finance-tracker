@@ -29,10 +29,10 @@ function today() { return localYMD(); }
 
 function StatCard({ label, value, diff, pct, invert }) {
   const good = diff === 0 ? null : invert ? diff < 0 : diff > 0;
-  const diffColor = good === null ? 'text-ink-faint' : good ? 'text-income' : 'text-expense';
+  const diffColor = good === null ? 'text-caption' : good ? 'text-brand-text' : 'text-loss-text';
   return (
     <div className="bg-surface shadow-card rounded-card p-5 border border-line">
-      <p className="text-ink-subtle text-sm mb-1">{label}</p>
+      <p className="text-caption text-sm mb-1">{label}</p>
       <p className="text-2xl font-bold text-ink">{fmt(value)}</p>
       <p className={`text-xs mt-1 ${diffColor}`}>
         전 기간 대비 {diff >= 0 ? '+' : ''}{fmt(diff)}
@@ -45,7 +45,7 @@ function StatCard({ label, value, diff, pct, invert }) {
 function Section({ title, children }) {
   return (
     <div className="bg-surface shadow-card rounded-card p-5 border border-line">
-      <h2 className="text-sm font-semibold text-ink-body mb-4">{title}</h2>
+      <h2 className="text-sm font-semibold text-body mb-4">{title}</h2>
       {children}
     </div>
   );
@@ -61,12 +61,12 @@ function OverlayChart({ data, xKey, currentKey, previousKey, currentName, previo
             <stop offset="95%" stopColor={color} stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-        <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-        <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={40} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
+        <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
         <Tooltip formatter={(v) => fmt(v)} />
         <Area type="monotone" dataKey={currentKey} name={currentName} stroke={color} fill={`url(#${gradientId})`} strokeWidth={2} connectNulls />
-        <Line type="monotone" dataKey={previousKey} name={previousName} stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+        <Line type="monotone" dataKey={previousKey} name={previousName} stroke="var(--color-caption)" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -92,7 +92,7 @@ export default function Comparison() {
           aria-label="기준일"
           value={date}
           onChange={e => setDate(e.target.value)}
-          className="bg-surface border border-line-strong rounded-lg px-3 py-1.5 text-sm text-ink-body focus:outline-none focus:border-accent-bar"
+          className="bg-surface border border-line-strong rounded-control px-3 py-1.5 text-sm text-body focus:outline-none focus:border-brand-fill"
         />
       </div>
 
@@ -101,8 +101,8 @@ export default function Comparison() {
           <button
             key={t.key}
             onClick={() => setPeriod(t.key)}
-            className={`text-sm px-4 py-1.5 rounded-lg transition-colors ${
-              period === t.key ? 'bg-accent-soft text-accent-strong font-medium' : 'text-ink-subtle hover:bg-surface-muted'
+            className={`text-sm px-4 py-1.5 rounded-control transition-colors ${
+              period === t.key ? 'bg-brand-tint text-brand-text font-medium' : 'text-caption hover:bg-surface-page'
             }`}
           >
             {t.label}
@@ -113,12 +113,12 @@ export default function Comparison() {
       {error ? (
         <LoadError error={error} onRetry={reload} />
       ) : loading || !result ? (
-        <div className="text-ink-subtle text-center py-20">로딩 중...</div>
+        <div className="text-caption text-center py-20">로딩 중...</div>
       ) : (
         <>
-          <p className="text-xs text-ink-faint">
-            현재 기간 <span className="text-ink-muted font-medium">{result.currentLabel}</span>
-            {' '}vs 직전 기간 <span className="text-ink-muted font-medium">{result.previousLabel}</span>
+          <p className="text-xs text-caption">
+            현재 기간 <span className="text-body font-medium">{result.currentLabel}</span>
+            {' '}vs 직전 기간 <span className="text-body font-medium">{result.previousLabel}</span>
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -129,26 +129,26 @@ export default function Comparison() {
 
           <Section title="지출 추이 비교">
             {result.data.every(r => !r.currentExpense && !r.previousExpense) ? (
-              <div className="text-ink-faint text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
+              <div className="text-caption text-sm text-center py-10">해당 기간 지출 내역이 없습니다.</div>
             ) : (
               <OverlayChart
                 data={result.data} xKey="label"
                 currentKey="currentExpense" previousKey="previousExpense"
                 currentName={`${result.currentLabel} 지출`} previousName={`${result.previousLabel} 지출`}
-                color="#f43f5e" gradientId="cmpExpenseGrad"
+                color="var(--color-loss-fill)" gradientId="cmpExpenseGrad"
               />
             )}
           </Section>
 
           <Section title="수입 추이 비교">
             {result.data.every(r => !r.currentIncome && !r.previousIncome) ? (
-              <div className="text-ink-faint text-sm text-center py-10">해당 기간 수입 내역이 없습니다.</div>
+              <div className="text-caption text-sm text-center py-10">해당 기간 수입 내역이 없습니다.</div>
             ) : (
               <OverlayChart
                 data={result.data} xKey="label"
                 currentKey="currentIncome" previousKey="previousIncome"
                 currentName={`${result.currentLabel} 수입`} previousName={`${result.previousLabel} 수입`}
-                color="#10b981" gradientId="cmpIncomeGrad"
+                color="var(--color-brand-fill)" gradientId="cmpIncomeGrad"
               />
             )}
           </Section>
