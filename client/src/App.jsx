@@ -3,6 +3,7 @@ import { Link, Redirect, Route, Switch, useLocation } from 'wouter';
 import { NAV_GROUPS, groupForPath } from './lib/nav';
 import BottomTabBar from './components/BottomTabBar';
 import WelcomeGate from './components/WelcomeGate';
+import Icon from './components/Icon';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Transactions = lazy(() => import('./pages/Transactions'));
@@ -37,8 +38,9 @@ export default function App() {
     // pb-16 은 모바일 하단 탭바에 콘텐츠가 가리지 않게 하기 위한 여백이다.
     <div className="min-h-screen bg-surface-page pb-16 md:pb-0">
       <nav className="bg-surface border-b border-line px-4 py-3 flex items-center gap-4 sm:gap-6">
-        <Link href="/" className="font-bold text-brand-text text-lg whitespace-nowrap shrink-0">
-          💰 Finance Tracker
+        <Link href="/" className="font-bold text-brand-text text-lg whitespace-nowrap shrink-0 inline-flex items-center gap-1.5">
+          <Icon name="wallet" size={20} className="shrink-0" />
+          Finance Tracker
         </Link>
         <div className="hidden md:flex items-center gap-1 sm:gap-2 overflow-x-auto">
           {NAV_GROUPS.map((g) => (
