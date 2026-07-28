@@ -6,6 +6,7 @@ import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
 import SavingsGoalBar from '../components/SavingsGoalBar';
+import Icon from '../components/Icon';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -88,7 +89,7 @@ export default function Savings() {
         <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
         <EmptyState
-          icon="🐷"
+          icon={<Icon name="savings" size={32} />}
           title="아직 저축 상품이 없어요"
           description="적금이나 저축성보험을 등록하면 만기까지 얼마가 남았는지, 목표의 몇 %를 채웠는지 보여드려요."
         />
