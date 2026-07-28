@@ -76,8 +76,8 @@ function Dialog({ kind, message, tone, confirmLabel, cancelLabel, onConfirm, onC
 
   const danger = tone === 'danger';
   const confirmClass = danger
-    ? 'bg-danger hover:bg-danger-hover text-white'
-    : 'bg-accent hover:bg-accent-hover text-white';
+    ? 'btn-danger'
+    : 'btn-primary';
 
   return (
     <div
@@ -86,13 +86,13 @@ function Dialog({ kind, message, tone, confirmLabel, cancelLabel, onConfirm, onC
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-surface rounded-card shadow-lg border border-line w-full max-w-sm p-5 space-y-4">
-        <p className="text-sm text-ink-body whitespace-pre-line leading-relaxed">{message}</p>
+      <div className="bg-surface rounded-card shadow-card border border-line w-full max-w-sm p-5 space-y-4">
+        <p className="text-sm text-body whitespace-pre-line leading-relaxed">{message}</p>
         <div className="flex justify-end gap-2">
           {kind === 'confirm' && (
             <button
               onClick={onCancel}
-              className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg border border-line hover:bg-surface-muted transition-colors"
+              className="text-caption hover:text-ink text-sm px-4 py-2 rounded-control border border-line hover:bg-surface-page transition-colors"
             >
               {cancelLabel}
             </button>
@@ -100,7 +100,7 @@ function Dialog({ kind, message, tone, confirmLabel, cancelLabel, onConfirm, onC
           <button
             ref={confirmRef}
             onClick={onConfirm}
-            className={`text-sm px-4 py-2 rounded-lg transition-colors ${confirmClass}`}
+            className={`text-sm px-4 py-2 rounded-control transition-colors ${confirmClass}`}
           >
             {confirmLabel}
           </button>

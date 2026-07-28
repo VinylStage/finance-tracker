@@ -17,7 +17,7 @@ const CURRENT_YEAR = String(today.getFullYear());
 const CURRENT_MONTH = `${CURRENT_YEAR}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
 const EMPTY_FILTERS = { merchant: '', memo: '', minAmount: '', maxAmount: '', paymentMethodId: '' };
-const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
+const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
 
 // FND-02(감사): 이전엔 화면이 최대 5000건을 요청해도 서버가 500건으로 잘라
 // 검색·월별합계·연도탭이 최신 500건 범위 안에서만 맞았다. 검색·집계를 전부
@@ -207,16 +207,16 @@ export default function Transactions() {
         <div className="flex items-center gap-2">
           {selectedIds.size > 0 && (
             <>
-              <span className="text-xs text-ink-subtle">{selectedIds.size}건 선택됨</span>
+              <span className="text-xs text-caption">{selectedIds.size}건 선택됨</span>
               <button
                 onClick={handleBulkDelete}
-                className="bg-danger hover:bg-danger-hover text-white text-sm px-4 py-2 rounded-lg transition-colors"
+                className="btn-danger text-sm px-4 py-2 rounded-control transition-colors"
               >
                 선택 삭제
               </button>
               <button
                 onClick={() => setSelectedIds(new Set())}
-                className="text-ink-subtle hover:text-ink-body text-sm px-3 py-2 rounded-lg border border-line hover:bg-surface-muted transition-colors"
+                className="text-caption hover:text-body text-sm px-3 py-2 rounded-control border border-line hover:bg-surface-page transition-colors"
               >
                 선택 해제
               </button>
@@ -224,7 +224,7 @@ export default function Transactions() {
           )}
           <button
             onClick={() => { setEditItem(null); setShowForm(true); }}
-            className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors"
+            className="btn-primary text-sm px-4 py-2 rounded-control transition-colors"
           >
             + 거래 추가
           </button>
@@ -233,11 +233,11 @@ export default function Transactions() {
 
       <div className="bg-surface shadow-card rounded-card border border-line p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink-body">검색·필터</h2>
+          <h2 className="text-sm font-semibold text-body">검색·필터</h2>
           {filtersActive && (
             <button
               onClick={() => { setFilters(EMPTY_FILTERS); setCategoryFilter(new Set()); }}
-              className="text-xs text-accent hover:text-accent-strong"
+              className="text-xs text-brand-text hover:text-brand-text"
             >
               필터 초기화
             </button>
@@ -269,21 +269,21 @@ export default function Transactions() {
           </select>
         </div>
         <details>
-          <summary className="cursor-pointer text-sm text-ink-muted">
+          <summary className="cursor-pointer text-sm text-body">
             카테고리 {categoryFilter.size > 0 ? `(${categoryFilter.size}개 선택됨)` : '(전체)'}
           </summary>
           <div className="mt-2 flex flex-wrap gap-4">
             {majorTypes.map(mt => (
               <div key={mt}>
-                <div className="text-xs text-ink-faint mb-1">{mt}</div>
+                <div className="text-xs text-caption mb-1">{mt}</div>
                 <div className="flex flex-wrap gap-1 max-w-xs">
                   {categories.filter(c => c.major_type === mt).map(c => (
                     <label
                       key={c.id}
                       className={`text-xs px-2 py-1 rounded-full border cursor-pointer transition-colors ${
                         categoryFilter.has(c.id)
-                          ? 'bg-accent-soft border-accent-line-strong text-accent-strong'
-                          : 'border-line text-ink-muted hover:bg-surface-muted'
+                          ? 'bg-brand-tint border-brand-tint-strong text-brand-text'
+                          : 'border-line text-body hover:bg-surface-page'
                       }`}
                     >
                       <input
@@ -317,7 +317,7 @@ export default function Transactions() {
       )}
 
       {loading ? (
-        <div className="text-ink-subtle text-center py-10">로딩 중...</div>
+        <div className="text-caption text-center py-10">로딩 중...</div>
       ) : error ? (
         <LoadError error={error} onRetry={reload} />
       ) : years.length === 0 ? (
@@ -335,8 +335,8 @@ export default function Transactions() {
                 onClick={() => setSelectedYear(y)}
                 className={`text-sm px-4 py-2 rounded-t-md transition-colors border-b-2 -mb-px ${
                   selectedYear === y
-                    ? 'border-accent text-accent-strong font-medium'
-                    : 'border-transparent text-ink-subtle hover:text-ink'
+                    ? 'border-brand-fill text-brand-text font-medium'
+                    : 'border-transparent text-caption hover:text-ink'
                 }`}
               >
                 {y}
@@ -353,15 +353,15 @@ export default function Transactions() {
                 <div key={g.month} className="bg-surface shadow-card rounded-card border border-line overflow-hidden">
                   <button
                     onClick={() => toggleMonth(g.month)}
-                    className="w-full flex flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-surface-muted transition-colors text-left"
+                    className="w-full flex flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-surface-page transition-colors text-left"
                   >
                     <span className="text-sm font-semibold text-ink">
                       {selectedYear}년 {monthNum}월
-                      <span className="text-ink-faint ml-2 text-xs">{expanded ? '▲' : '▼'}</span>
+                      <span className="text-caption ml-2 text-xs">{expanded ? '▲' : '▼'}</span>
                     </span>
-                    <span className="text-xs text-ink-subtle">
-                      수입 <span className="text-income font-medium">{fmt(g.income)}</span>
-                      {' / '}지출 <span className="text-expense font-medium">{fmt(g.expense)}</span>
+                    <span className="text-xs text-caption">
+                      수입 <span className="text-brand-text font-medium">{fmt(g.income)}</span>
+                      {' / '}지출 <span className="text-loss-text font-medium">{fmt(g.expense)}</span>
                       {' / '}{g.count}건
                     </span>
                   </button>
@@ -379,13 +379,13 @@ export default function Transactions() {
                             onToggleSelectAll={handleToggleSelectAll}
                           />
                           {itemsData.total > itemsData.data.length && (
-                            <div className="text-xs text-warning-mid pt-2">
+                            <div className="text-xs text-caption pt-2">
                               이 달 거래 {itemsData.total}건 중 {itemsData.data.length}건까지 표시됩니다.
                             </div>
                           )}
                         </>
                       ) : (
-                        <div className="text-ink-faint text-sm text-center py-6">불러오는 중...</div>
+                        <div className="text-caption text-sm text-center py-6">불러오는 중...</div>
                       )}
                     </div>
                   )}

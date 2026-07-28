@@ -65,7 +65,7 @@ export default function Installments() {
         <h1 className="text-xl font-semibold text-ink">할부 관리</h1>
         <button
           onClick={() => setShowForm(s => !s)}
-          className="bg-accent hover:bg-accent-hover text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          className="btn-primary text-sm px-4 py-2 rounded-control transition-colors"
         >
           + 할부 등록
         </button>
@@ -85,37 +85,37 @@ export default function Installments() {
             <button
               key={s}
               onClick={() => setFilter(s)}
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
-                filter === s ? 'bg-accent text-white' : 'text-ink-subtle hover:text-ink hover:bg-surface-sunken'
+              className={`text-xs px-3 py-1.5 rounded-control transition-colors ${
+                filter === s ? 'bg-brand-tint text-brand-text font-medium' : 'text-caption hover:text-ink hover:bg-surface-sunken'
               }`}
             >
               {s}
             </button>
           ))}
         </div>
-        <p className="text-sm text-ink-subtle">
+        <p className="text-sm text-caption">
           이번달 청구 합계: <span className="text-ink font-semibold">{fmt(thisMonthTotal)}</span>
         </p>
       </div>
 
       {loading ? (
-        <div className="text-ink-subtle text-center py-10">로딩 중...</div>
+        <div className="text-caption text-center py-10">로딩 중...</div>
       ) : error ? (
         <LoadError error={error} onRetry={reload} />
       ) : items.length === 0 ? (
-        <div className="text-ink-faint text-center py-10">할부 내역이 없습니다.</div>
+        <div className="text-caption text-center py-10">할부 내역이 없습니다.</div>
       ) : (
         <div className="bg-surface shadow-card rounded-card border border-line overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-surface-muted">
+            <thead className="bg-surface-page">
               <tr className="border-b border-line">
-                <th className="text-left px-4 py-3 text-ink-subtle font-medium">가맹점</th>
-                <th className="text-right px-4 py-3 text-ink-subtle font-medium">총액</th>
-                <th className="text-right px-4 py-3 text-ink-subtle font-medium">월납부</th>
-                <th className="text-center px-4 py-3 text-ink-subtle font-medium">진행</th>
-                <th className="text-center px-4 py-3 text-ink-subtle font-medium">잔여</th>
-                <th className="text-left px-4 py-3 text-ink-subtle font-medium hidden sm:table-cell">결제수단</th>
-                <th className="text-center px-4 py-3 text-ink-subtle font-medium">상태</th>
+                <th className="text-left px-4 py-3 text-caption font-medium">가맹점</th>
+                <th className="text-right px-4 py-3 text-caption font-medium">총액</th>
+                <th className="text-right px-4 py-3 text-caption font-medium">월납부</th>
+                <th className="text-center px-4 py-3 text-caption font-medium">진행</th>
+                <th className="text-center px-4 py-3 text-caption font-medium">잔여</th>
+                <th className="text-left px-4 py-3 text-caption font-medium hidden sm:table-cell">결제수단</th>
+                <th className="text-center px-4 py-3 text-caption font-medium">상태</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -123,18 +123,18 @@ export default function Installments() {
               {items.map((it, i) => (
                 <tr
                   key={it.id}
-                  className={`border-b border-line-soft hover:bg-surface-muted transition-colors ${i % 2 === 0 ? '' : 'bg-surface-muted/50'}`}
+                  className={`border-b border-line-faint hover:bg-surface-page transition-colors ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}
                 >
                   <td className="px-4 py-3 text-ink">{it.merchant}</td>
-                  <td className="px-4 py-3 text-right text-ink-muted tabular-nums">{fmt(it.total_amount)}</td>
+                  <td className="px-4 py-3 text-right text-body tabular-nums">{fmt(it.total_amount)}</td>
                   <td className="px-4 py-3 text-right text-ink tabular-nums">{fmt(it.monthly_amount)}</td>
-                  <td className="px-4 py-3 text-center text-ink-subtle">{it.billed_months}/{it.months}</td>
-                  <td className="px-4 py-3 text-center text-ink-subtle">
+                  <td className="px-4 py-3 text-center text-caption">{it.billed_months}/{it.months}</td>
+                  <td className="px-4 py-3 text-center text-caption">
                     {it.remaining_months > 0 ? `${it.remaining_months}개월` : '-'}
                   </td>
-                  <td className="px-4 py-3 text-ink-faint text-xs hidden sm:table-cell">{it.payment_method_name || '—'}</td>
+                  <td className="px-4 py-3 text-caption text-xs hidden sm:table-cell">{it.payment_method_name || '—'}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`text-xs font-medium ${it.status === '진행중' ? 'text-accent' : 'text-ink-faint'}`}>
+                    <span className={`text-xs font-medium ${it.status === '진행중' ? 'text-brand-text' : 'text-caption'}`}>
                       {it.status}
                     </span>
                   </td>
@@ -143,14 +143,14 @@ export default function Installments() {
                       {it.status === '진행중' && (
                         <button
                           onClick={() => handleComplete(it.id)}
-                          className="text-ink-faint hover:text-income transition-colors text-xs"
+                          className="text-caption hover:text-brand-text transition-colors text-xs"
                         >
                           완료처리
                         </button>
                       )}
                       <button
                         onClick={() => handleDelete(it.id)}
-                        className="text-ink-faint hover:text-expense transition-colors text-xs"
+                        className="text-caption hover:text-loss-text transition-colors text-xs"
                       >
                         삭제
                       </button>
@@ -194,53 +194,53 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
     });
   };
 
-  const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
+  const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
 
   return (
     <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-ink-muted">할부 등록</h2>
+      <h2 className="text-sm font-semibold text-body">할부 등록</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label htmlFor="inst-purchase-date" className="block text-xs text-ink-subtle mb-1">구매일 *</label>
+          <label htmlFor="inst-purchase-date" className="block text-xs text-caption mb-1">구매일 *</label>
           <input id="inst-purchase-date" type="date" className={inp} value={form.purchase_date} onChange={e => set('purchase_date', e.target.value)} required />
         </div>
         <div className="sm:col-span-2">
-          <label htmlFor="inst-merchant" className="block text-xs text-ink-subtle mb-1">가맹점 *</label>
+          <label htmlFor="inst-merchant" className="block text-xs text-caption mb-1">가맹점 *</label>
           <input id="inst-merchant" type="text" className={inp} value={form.merchant} onChange={e => set('merchant', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="inst-total-amount" className="block text-xs text-ink-subtle mb-1">총액 (원) *</label>
+          <label htmlFor="inst-total-amount" className="block text-xs text-caption mb-1">총액 (원) *</label>
           <input id="inst-total-amount" type="number" className={inp} value={form.total_amount} onChange={e => set('total_amount', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="inst-months" className="block text-xs text-ink-subtle mb-1">개월수 *</label>
+          <label htmlFor="inst-months" className="block text-xs text-caption mb-1">개월수 *</label>
           <input id="inst-months" type="number" min="2" className={inp} value={form.months} onChange={e => set('months', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="inst-monthly-amount" className="block text-xs text-ink-subtle mb-1">월납부액 (원) *</label>
+          <label htmlFor="inst-monthly-amount" className="block text-xs text-caption mb-1">월납부액 (원) *</label>
           <input id="inst-monthly-amount" type="number" className={inp} value={form.monthly_amount} onChange={e => set('monthly_amount', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="inst-fee-per-month" className="block text-xs text-ink-subtle mb-1">월 수수료 (원)</label>
+          <label htmlFor="inst-fee-per-month" className="block text-xs text-caption mb-1">월 수수료 (원)</label>
           <input id="inst-fee-per-month" type="number" className={inp} placeholder="0" value={form.fee_per_month} onChange={e => set('fee_per_month', e.target.value)} />
         </div>
         <div>
-          <label htmlFor="inst-payment-method" className="block text-xs text-ink-subtle mb-1">카드</label>
+          <label htmlFor="inst-payment-method" className="block text-xs text-caption mb-1">카드</label>
           <select id="inst-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
             <option value="">선택...</option>
             {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div>
-          <label htmlFor="inst-start-billing-month" className="block text-xs text-ink-subtle mb-1">청구 시작월 *</label>
+          <label htmlFor="inst-start-billing-month" className="block text-xs text-caption mb-1">청구 시작월 *</label>
           <input id="inst-start-billing-month" type="month" className={inp} value={form.start_billing_month} onChange={e => set('start_billing_month', e.target.value)} required />
         </div>
       </div>
       <div className="flex gap-3 pt-1">
-        <button type="submit" className="bg-accent hover:bg-accent-hover text-white text-sm px-5 py-2 rounded-lg transition-colors">
+        <button type="submit" className="btn-primary text-sm px-5 py-2 rounded-control transition-colors">
           등록
         </button>
-        <button type="button" onClick={onCancel} className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg hover:bg-surface-sunken transition-colors">
+        <button type="button" onClick={onCancel} className="text-caption hover:text-ink text-sm px-4 py-2 rounded-control hover:bg-surface-sunken transition-colors">
           취소
         </button>
       </div>

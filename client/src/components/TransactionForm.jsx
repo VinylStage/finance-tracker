@@ -9,9 +9,9 @@ import { remainingBudget, toSpentMap } from '../lib/quickEntry';
 const PAYMENT_STYLES = ['일시불', '할부', '리볼빙', '해당없음'];
 
 const CONFIDENCE_STYLE = {
-  '완전일치': 'bg-income-soft text-income-strong',
-  '부분일치': 'bg-warning-soft text-warning',
-  '없음': 'bg-surface-sunken text-ink-subtle',
+  '완전일치': 'bg-goal-tint text-goal-text',
+  '부분일치': 'bg-pending-tint text-pending-text',
+  '없음': 'bg-surface-sunken text-caption',
 };
 
 export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel }) {
@@ -112,19 +112,19 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
   const budgetHint = remainingBudget(selectedCategory, spentMap);
   const fmtWon = (n) => Number(n || 0).toLocaleString('ko-KR') + '원';
 
-  const inp = 'w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent-bar';
+  const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="tx-date" className="block text-xs text-ink-subtle mb-1">날짜 *</label>
+          <label htmlFor="tx-date" className="block text-xs text-caption mb-1">날짜 *</label>
           <input id="tx-date" type="date" className={inp} value={form.date} onChange={e => set('date', e.target.value)} required />
         </div>
 
         <div>
-          <label htmlFor="tx-amount" className="block text-xs text-ink-subtle mb-1">금액 (원) *</label>
+          <label htmlFor="tx-amount" className="block text-xs text-caption mb-1">금액 (원) *</label>
           <input
             id="tx-amount" type="number" className={inp} placeholder="0"
             value={form.amount} onChange={e => set('amount', e.target.value)} required
@@ -132,7 +132,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label htmlFor="tx-category" className="flex items-center gap-1.5 text-xs text-ink-subtle mb-1">
+          <label htmlFor="tx-category" className="flex items-center gap-1.5 text-xs text-caption mb-1">
             카테고리 *
             {confidence && (
               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${CONFIDENCE_STYLE[confidence]}`}>
@@ -153,18 +153,18 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           {budgetHint.show && (
             <p className="mt-1.5 text-[11px] tabular-nums">
               {budgetHint.level === 'over' ? (
-                <span className="text-expense">이번달 예산 {fmtWon(budgetHint.over)} 초과</span>
+                <span className="text-loss-text">이번달 예산 {fmtWon(budgetHint.over)} 초과</span>
               ) : budgetHint.level === 'caution' ? (
-                <span className="text-warning">이번달 {fmtWon(budgetHint.remaining)} 남음 (얼마 안 남음)</span>
+                <span className="text-warn-text">이번달 {fmtWon(budgetHint.remaining)} 남음 · 주의</span>
               ) : (
-                <span className="text-ink-subtle">이번달 {fmtWon(budgetHint.remaining)} 남음</span>
+                <span className="text-caption">이번달 {fmtWon(budgetHint.remaining)} 남음</span>
               )}
             </p>
           )}
         </div>
 
         <div>
-          <label htmlFor="tx-payment-method" className="block text-xs text-ink-subtle mb-1">결제수단</label>
+          <label htmlFor="tx-payment-method" className="block text-xs text-caption mb-1">결제수단</label>
           <select id="tx-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
             <option value="">선택...</option>
             {paymentMethods.map(p => (
@@ -174,16 +174,16 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
         </div>
 
         <div>
-          <label htmlFor="tx-payment-style" className="block text-xs text-ink-subtle mb-1">결제방식</label>
+          <label htmlFor="tx-payment-style" className="block text-xs text-caption mb-1">결제방식</label>
           <select id="tx-payment-style" className={inp} value={form.payment_style} onChange={e => set('payment_style', e.target.value)}>
             {PAYMENT_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
         <div>
-          <label htmlFor="tx-merchant" className="flex items-center gap-1.5 text-xs text-ink-subtle mb-1">
+          <label htmlFor="tx-merchant" className="flex items-center gap-1.5 text-xs text-caption mb-1">
             가맹점/내용
-            {suggesting && <span className="text-accent-bar text-[10px]">제안 중...</span>}
+            {suggesting && <span className="text-brand-text text-[10px]">제안 중...</span>}
           </label>
           <input
             id="tx-merchant" type="text" className={inp} placeholder="가맹점명 (자동 카테고리 제안)"
@@ -203,7 +203,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
                   type="button"
                   onClick={() => handleMerchantChip(name)}
                   disabled={suggesting}
-                  className="rounded-full border border-line bg-surface-muted px-2 py-0.5 text-[11px] text-ink-muted hover:border-accent-bar hover:text-accent-strong disabled:opacity-50"
+                  className="rounded-full border border-line bg-surface-page px-2 py-0.5 text-[11px] text-body hover:border-brand-fill hover:text-brand-text disabled:opacity-50"
                 >
                   {name}
                 </button>
@@ -214,18 +214,18 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       </div>
 
       <div>
-        <label htmlFor="tx-memo" className="block text-xs text-ink-subtle mb-1">메모</label>
+        <label htmlFor="tx-memo" className="block text-xs text-caption mb-1">메모</label>
         <input id="tx-memo" type="text" className={inp} placeholder="메모 (선택)"
           value={form.memo} onChange={e => set('memo', e.target.value)} />
       </div>
 
       <div className="flex gap-3 pt-1">
         <button type="submit"
-          className="bg-accent hover:bg-accent-strong text-white text-sm px-5 py-2 rounded-lg transition-colors">
+          className="btn-primary text-sm px-5 py-2 rounded-control transition-colors">
           {initial ? '저장' : '추가'}
         </button>
         <button type="button" onClick={onCancel}
-          className="text-ink-subtle hover:text-ink text-sm px-4 py-2 rounded-lg hover:bg-surface-sunken transition-colors">
+          className="text-caption hover:text-ink text-sm px-4 py-2 rounded-control hover:bg-surface-sunken transition-colors">
           취소
         </button>
       </div>

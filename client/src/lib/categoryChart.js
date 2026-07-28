@@ -7,10 +7,30 @@
 // 오히려 정보가 줄어든다. 즉 '기타'는 카테고리가 6개 이상일 때만 생긴다.
 // 6개일 때 '기타'가 카테고리 1개만 담게 되는 건 의도된 동작이다(경계 일관성).
 
-export const PALETTE = [
-  '#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6',
-  '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#84cc16',
+// 카테고리에는 색을 배정하지 않는다. 카테고리는 사용자가 계속 추가할 수 있어
+// 개수가 늘어나고, 색으로 구분하면 팔레트가 반드시 바닥난다. 무지개 팔레트가
+// 한 화면에 hue 를 여섯 개 이상 뿌리던 것이 "색이 안 어울린다" 의 실제 원인이었다.
+//
+// 파이 조각은 액센트 한 색의 농도 램프로 간다. 조각이 크기순으로 정렬돼 있으므로
+// 농도가 순위를 따라가고, 색 자체는 카테고리의 정체성이 아니라 순서만 나타낸다.
+// 히트맵과 같은 램프를 공유한다 — 둘 다 "액센트 한 색의 농도" 라는 같은 규칙이다.
+//
+// 조각의 의미는 툴팁의 카테고리명과 랭킹 뷰가 전달하므로 색 단독 전달이 아니다.
+export const SLICE_RAMP = [
+  'var(--color-heat-4)',
+  'var(--color-brand-fill)',
+  'var(--color-heat-3)',
+  'var(--color-brand-tint-strong)',
+  'var(--color-brand-tint)',
 ];
+
+// '기타' 는 카테고리가 아니라 묶음이므로 램프 밖 무채색으로 뺀다.
+export const OTHERS_COLOR = 'var(--color-flow-rest)';
+
+export function sliceColor(index, isOthers) {
+  if (isOthers) return OTHERS_COLOR;
+  return SLICE_RAMP[Math.min(index, SLICE_RAMP.length - 1)];
+}
 
 export const OTHERS_LABEL = '기타';
 
