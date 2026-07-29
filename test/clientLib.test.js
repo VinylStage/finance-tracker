@@ -165,16 +165,34 @@ describe('B. categoryStyle.js', () => {
     }
   });
 
-  test('categoryStyle(\'없는값\') 이 폴백(icon: \'❓\', color: \'text-ink-muted\')을 돌려준다', () => {
+  test('categoryStyle(\'없는값\') 이 폴백(icon: \'category\', color: \'text-caption\')을 돌려준다', () => {
     const style = categoryStyle('없는값');
-    assert.strictEqual(style.icon, '❓');
-    assert.strictEqual(style.color, 'text-ink-muted');
+    assert.strictEqual(style.icon, 'category');
+    assert.strictEqual(style.color, 'text-caption');
   });
 
   test('categoryStyle(undefined), categoryStyle(null), categoryStyle(\'\') 도 폴백', () => {
-    assert.deepStrictEqual(categoryStyle(undefined), { icon: '❓', color: 'text-ink-muted' });
-    assert.deepStrictEqual(categoryStyle(null), { icon: '❓', color: 'text-ink-muted' });
-    assert.deepStrictEqual(categoryStyle(''), { icon: '❓', color: 'text-ink-muted' });
+    assert.deepStrictEqual(categoryStyle(undefined), { icon: 'category', color: 'text-caption' });
+    assert.deepStrictEqual(categoryStyle(null), { icon: 'category', color: 'text-caption' });
+    assert.deepStrictEqual(categoryStyle(''), { icon: 'category', color: 'text-caption' });
+  });
+
+  // 이모지가 아니라 아이콘 이름을 돌려주므로, 그 이름이 실제로 그릴 수 있는 것인지
+  // 확인한다. 오타가 나면 화면에서 아이콘만 조용히 사라지고 텍스트는 남아서
+  // 눈으로는 알아채기 어렵다.
+  test('모든 대분류의 아이콘 이름이 ICON_PATH 에 실재한다', async () => {
+    const { ICON_PATH } = await import('../client/src/components/icons/paths.js');
+    for (const [type, style] of Object.entries(CATEGORY_STYLE)) {
+      assert.ok(style.icon in ICON_PATH, `${type} 의 아이콘 '${style.icon}' 이 없다`);
+    }
+    assert.ok(categoryStyle('없는값').icon in ICON_PATH, '폴백 아이콘이 없다');
+  });
+
+  test('대분류에 이모지가 남아 있지 않다', () => {
+    const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+    for (const [type, style] of Object.entries(CATEGORY_STYLE)) {
+      assert.ok(!emoji.test(style.icon), `${type} 에 이모지가 남았다: ${style.icon}`);
+    }
   });
 
   test('AMOUNT_MARK.income.arrow 가 \'▲\', AMOUNT_MARK.expense.arrow 가 \'▼\'', () => {

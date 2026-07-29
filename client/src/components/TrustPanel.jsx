@@ -11,8 +11,8 @@ import { readExport, formatSince, EXPORT_KINDS, withObjectParticle } from '../li
 export function TrustPanel() {
   return (
     <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-2">
-      <h2 className="text-sm font-semibold text-ink-body">내 데이터는 어디에 있나요</h2>
-      <ul className="space-y-1.5 text-xs text-ink-muted">
+      <h2 className="text-sm font-semibold text-body">내 데이터는 어디에 있나요</h2>
+      <ul className="space-y-1.5 text-xs text-body">
         <li>
           입력한 거래 내역·카테고리·설정은 <span className="font-medium text-ink">이 기기의 파일</span>(SQLite)에
           저장됩니다. 기본 설정에서는 이 기기에서만 접근할 수 있어요.
@@ -38,15 +38,15 @@ export function LastExportNote({ kind, now }) {
 
   if (!since) {
     return (
-      <p className="text-xs text-ink-faint">
+      <p className="text-xs text-caption">
         아직 {withObjectParticle(label)} 내보낸 적이 없어요. 파일로 저장해 두면 기기를 옮길 때 그대로 가져갈 수 있습니다.
       </p>
     );
   }
 
   return (
-    <p className="text-xs text-ink-faint">
-      마지막 내보내기 <span className="font-medium text-ink-muted">{since}</span>
+    <p className="text-xs text-caption">
+      마지막 내보내기 <span className="font-medium text-body">{since}</span>
       <span className="ml-1">(이 브라우저 기준)</span>
     </p>
   );

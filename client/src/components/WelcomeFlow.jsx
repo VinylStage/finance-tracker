@@ -34,7 +34,7 @@ export default function WelcomeFlow({ onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 px-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/40 px-4"
       onClick={finish}
     >
       <div
@@ -51,11 +51,11 @@ export default function WelcomeFlow({ onClose }) {
             {WELCOME_STEPS.map((s, i) => (
               <span
                 key={s.id}
-                className={`h-1.5 w-6 rounded-full ${i <= index ? 'bg-accent' : 'bg-surface-sunken'}`}
+                className={`h-1.5 w-6 rounded-full ${i <= index ? 'bg-brand-fill' : 'bg-surface-sunken'}`}
               />
             ))}
           </div>
-          <span className="text-[10px] text-ink-faint tabular-nums">
+          <span className="text-[10px] text-caption tabular-nums">
             {index + 1}/{WELCOME_STEPS.length}
           </span>
         </div>
@@ -63,13 +63,13 @@ export default function WelcomeFlow({ onClose }) {
         <h2 id="welcome-title" className="mt-5 text-lg font-semibold text-ink">
           {step.title}
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-ink-muted">{step.body}</p>
+        <p className="mt-2 text-sm leading-relaxed text-body">{step.body}</p>
 
         {step.cta && (
           <Link
             href={step.cta.href}
             onClick={finish}
-            className="mt-4 inline-block rounded-md bg-accent-soft px-3 py-1.5 text-xs font-medium text-accent-strong hover:bg-accent-soft/70"
+            className="mt-4 inline-block rounded-control bg-brand-tint px-3 py-1.5 text-xs font-medium text-brand-text hover:bg-brand-tint/70"
           >
             {step.cta.label}
           </Link>
@@ -79,7 +79,7 @@ export default function WelcomeFlow({ onClose }) {
           <button
             type="button"
             onClick={finish}
-            className="text-xs text-ink-faint hover:text-ink-body"
+            className="text-xs text-caption hover:text-body"
           >
             건너뛰기
           </button>
@@ -88,7 +88,7 @@ export default function WelcomeFlow({ onClose }) {
               <button
                 type="button"
                 onClick={() => setIndex((i) => i - 1)}
-                className="rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-surface-muted"
+                className="rounded-control px-3 py-1.5 text-sm text-body hover:bg-surface-page"
               >
                 이전
               </button>
@@ -96,7 +96,7 @@ export default function WelcomeFlow({ onClose }) {
             <button
               type="button"
               onClick={() => (isLast ? finish() : setIndex((i) => i + 1))}
-              className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-strong"
+              className="btn-primary px-4 py-1.5 text-sm"
             >
               {isLast ? '시작하기' : '다음'}
             </button>

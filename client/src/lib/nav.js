@@ -5,14 +5,17 @@
 // 5개 그룹으로 묶고 하위 화면은 서브탭(자식 경로)으로 내렸다.
 // 가이드는 어느 그룹에도 속하지 않고 헤더의 ? 버튼으로 분리한다.
 
+// icon 은 이모지가 아니라 인라인 SVG 의 이름이다(components/icons/paths.js 의 키).
+// 이모지는 크기·정렬·굵기를 통제할 수 없고 OS 마다 다르게 렌더된다. 탭바처럼
+// 아이콘이 상태(활성/비활성)를 함께 나타내는 자리에서는 그 편차가 그대로 드러난다.
 export const NAV_GROUPS = [
-  { id: 'home', label: '홈', path: '/', icon: '🏠' },
-  { id: 'transactions', label: '거래', path: '/transactions', icon: '📝' },
+  { id: 'home', label: '홈', path: '/', icon: 'space_dashboard' },
+  { id: 'transactions', label: '거래', path: '/transactions', icon: 'receipt_long' },
   {
     id: 'analysis',
     label: '분석',
     path: '/analysis',
-    icon: '📊',
+    icon: 'analytics',
     children: [
       { label: '기간비교', path: '/analysis/comparison' },
       { label: '시뮬레이터', path: '/analysis/simulator' },
@@ -22,7 +25,7 @@ export const NAV_GROUPS = [
     id: 'assets',
     label: '자산·부채',
     path: '/assets',
-    icon: '🏦',
+    icon: 'account_balance',
     children: [
       { label: '할부', path: '/assets/installments' },
       { label: '리볼빙', path: '/assets/revolving' },
@@ -30,7 +33,7 @@ export const NAV_GROUPS = [
       { label: '적금', path: '/assets/savings' },
     ],
   },
-  { id: 'settings', label: '설정', path: '/settings', icon: '⚙️' },
+  { id: 'settings', label: '설정', path: '/settings', icon: 'settings' },
 ];
 
 // 모바일 하단 탭바에는 핵심 3개만 상시 노출하고 나머지는 '더보기'로 묶는다(#188 AC).

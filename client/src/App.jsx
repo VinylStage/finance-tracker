@@ -3,6 +3,7 @@ import { Link, Redirect, Route, Switch, useLocation } from 'wouter';
 import { NAV_GROUPS, groupForPath } from './lib/nav';
 import BottomTabBar from './components/BottomTabBar';
 import WelcomeGate from './components/WelcomeGate';
+import Icon from './components/Icon';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Transactions = lazy(() => import('./pages/Transactions'));
@@ -20,8 +21,8 @@ function NavLink({ href, active, className = '', children }) {
     <Link
       href={href}
       aria-current={active ? 'page' : undefined}
-      className={`text-sm px-3 py-1.5 rounded-md transition-colors whitespace-nowrap shrink-0 ${
-        active ? 'bg-accent-soft text-accent-strong' : 'text-ink-subtle hover:text-ink hover:bg-surface-muted'
+      className={`text-sm px-3 py-1.5 rounded-control transition-colors whitespace-nowrap shrink-0 ${
+        active ? 'bg-brand-tint text-brand-text' : 'text-caption hover:text-ink hover:bg-surface-page'
       } ${className}`}
     >
       {children}
@@ -35,10 +36,11 @@ export default function App() {
 
   return (
     // pb-16 은 모바일 하단 탭바에 콘텐츠가 가리지 않게 하기 위한 여백이다.
-    <div className="min-h-screen bg-surface-muted pb-16 md:pb-0">
+    <div className="min-h-screen bg-surface-page pb-16 md:pb-0">
       <nav className="bg-surface border-b border-line px-4 py-3 flex items-center gap-4 sm:gap-6">
-        <Link href="/" className="font-bold text-accent text-lg whitespace-nowrap shrink-0">
-          💰 Finance Tracker
+        <Link href="/" className="font-bold text-brand-text text-lg whitespace-nowrap shrink-0 inline-flex items-center gap-1.5">
+          <Icon name="wallet" size={20} className="shrink-0" />
+          Finance Tracker
         </Link>
         <div className="hidden md:flex items-center gap-1 sm:gap-2 overflow-x-auto">
           {NAV_GROUPS.map((g) => (
@@ -54,11 +56,11 @@ export default function App() {
           aria-current={location === '/guide' ? 'page' : undefined}
           className={`ml-auto shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
             location === '/guide'
-              ? 'bg-accent-soft text-accent-strong'
-              : 'text-ink-faint hover:text-ink hover:bg-surface-muted'
+              ? 'bg-brand-tint text-brand-text'
+              : 'text-caption hover:text-ink hover:bg-surface-page'
           }`}
         >
-          ?
+          <Icon name="help" size={18} />
         </Link>
       </nav>
 
@@ -73,7 +75,7 @@ export default function App() {
       )}
 
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-6">
-        <Suspense fallback={<div className="text-ink-subtle text-center py-20">로딩 중...</div>}>
+        <Suspense fallback={<div className="text-caption text-center py-20">로딩 중...</div>}>
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/transactions" component={Transactions} />

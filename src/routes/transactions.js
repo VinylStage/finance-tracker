@@ -463,8 +463,12 @@ router.get('/summary/dashboard', (req, res) => {
     `).all(monthStart, monthEnd);
 
     // 카테고리별 지출 분석 (도넛 차트용)
+    //
+    // major_type 을 함께 내려준다. 자금흐름 화면이 "수입이 어디로 갔나" 를 대분류
+    // 단위로 묶는데, 카테고리 이름만으로는 어느 갈래에 속하는지 알 수 없다.
+    // 기존 소비자는 이 필드를 무시하므로 추가만으로 끝난다.
     const categoryBreakdown = db.prepare(`
-      SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total, c.monthly_budget AS budget
+      SELECT c.name AS category, c.major_type, COALESCE(SUM(t.amount),0) AS total, c.monthly_budget AS budget
       FROM categories c
       LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date < ?
         AND t.payment_style NOT IN ('할부','리볼빙')

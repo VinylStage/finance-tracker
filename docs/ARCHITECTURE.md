@@ -11,7 +11,22 @@
 - 데이터베이스: SQLite (better-sqlite3)
 - 프론트엔드: React + Vite
 - 차트: Recharts
-- 스타일: Tailwind CSS
+- 스타일: Tailwind CSS v4 (CSS-first, `tailwind.config` 없음)
+
+### 시각 토큰
+
+색은 `client/src/index.css` 의 `@theme static` 한 곳에서만 정한다. 컴포넌트는 hex 를 직접
+쓰지 않고 토큰 유틸리티만 참조하며, 다크 팔레트는 `:root[data-theme='dark']` 에서 변수만
+덮어써 컴포넌트 수정 없이 전환된다.
+
+`@theme` 이 아니라 `@theme static` 인 이유는 Tailwind v4 가 유틸리티에서 참조되지 않는
+변수를 출력에서 지우기 때문이다. 차트 색은 Recharts 의 `fill`/`stroke` 속성에 `var()`
+문자열로 들어가 사용 사실이 감지되지 않으므로, `static` 없이는 히트맵·Sankey·모션 토큰이
+CSS 에서 사라진다.
+
+한 화면에 쓰는 hue 는 두 개다 — 액센트 블루와 손실 레드, 그 외 무채색. 카테고리에는 색을
+배정하지 않고 아이콘 모양으로 구분한다. 배경 결정과 WCAG 실측값은 ADR 0006 과
+`docs/design/DESIGN_TOKENS.md` 참조.
 
 ## 컴포넌트 구조
 

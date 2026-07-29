@@ -8,7 +8,7 @@ function fmt(n) {
 
 export default function TransactionList({ items, onEdit, onDelete, bare = false, selectedIds, onToggleSelect, onToggleSelectAll }) {
   if (!items.length) {
-    return <div className="text-ink-subtle text-center py-10 text-sm">거래 내역이 없습니다.</div>;
+    return <div className="text-caption text-center py-10 text-sm">거래 내역이 없습니다.</div>;
   }
 
   const selectable = !!(selectedIds && onToggleSelect);
@@ -32,7 +32,7 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
   return (
     <div className={bare ? 'overflow-hidden' : 'bg-surface shadow-card rounded-card border border-line overflow-hidden'}>
       <table className="w-full text-sm tx-table" role="table">
-        <thead className="bg-surface-muted" role="rowgroup">
+        <thead className="bg-surface-page" role="rowgroup">
           <tr className="border-b border-line" role="row">
             {selectable && (
               <th className="px-4 py-3 w-8" role="columnheader" scope="col">
@@ -45,11 +45,11 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                 />
               </th>
             )}
-            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">날짜</th>
-            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">카테고리</th>
-            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">가맹점</th>
-            <th className="text-right px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">금액</th>
-            <th className="text-left px-4 py-3 text-ink-subtle font-medium" role="columnheader" scope="col">결제수단</th>
+            <th className="text-left px-4 py-3 text-caption font-medium" role="columnheader" scope="col">날짜</th>
+            <th className="text-left px-4 py-3 text-caption font-medium" role="columnheader" scope="col">카테고리</th>
+            <th className="text-left px-4 py-3 text-caption font-medium" role="columnheader" scope="col">가맹점</th>
+            <th className="text-right px-4 py-3 text-caption font-medium" role="columnheader" scope="col">금액</th>
+            <th className="text-left px-4 py-3 text-caption font-medium" role="columnheader" scope="col">결제수단</th>
             <th className="px-4 py-3" role="columnheader" scope="col"><span className="sr-only">작업</span></th>
           </tr>
         </thead>
@@ -58,9 +58,9 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
             <tr
               key={tx.id}
               role="row"
-              className={`border-b border-line-soft hover:bg-surface-muted transition-colors ${
-                i % 2 === 0 ? '' : 'bg-surface-muted/50'
-              } ${selectable && selectedIds.has(tx.id) ? 'bg-accent-soft/60' : ''}`}
+              className={`border-b border-line-faint hover:bg-surface-page transition-colors ${
+                i % 2 === 0 ? '' : 'bg-surface-page/50'
+              } ${selectable && selectedIds.has(tx.id) ? 'bg-brand-tint/60' : ''}`}
             >
               {selectable && (
                 <td className="px-4 py-3" role="cell" data-label="">
@@ -73,7 +73,7 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                   />
                 </td>
               )}
-              <td className="px-4 py-3 text-ink-subtle whitespace-nowrap" role="cell" data-label="날짜">{tx.date}</td>
+              <td className="px-4 py-3 text-caption whitespace-nowrap" role="cell" data-label="날짜">{tx.date}</td>
               <td className="px-4 py-3" role="cell" data-label="카테고리">
                 <CategoryBadge
                   majorType={tx.major_type}
@@ -81,31 +81,31 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                   className="text-xs font-medium max-w-[10rem]"
                 />
               </td>
-              <td className="px-4 py-3 text-ink-muted max-w-xs truncate" role="cell" data-label="가맹점">
-                {tx.merchant || <span className="text-ink-ghost">—</span>}
+              <td className="px-4 py-3 text-body max-w-xs truncate" role="cell" data-label="가맹점">
+                {tx.merchant || <span className="text-disabled">—</span>}
               </td>
               <td className={`px-4 py-3 text-right font-medium tabular-nums ${
-                tx.major_type === '수입' ? 'text-income' : 'text-ink'
+                tx.major_type === '수입' ? 'text-brand-text' : 'text-ink'
               }`} role="cell" data-label="금액">
                 <span aria-hidden="true" className="mr-0.5 text-[10px] align-middle">
                   {tx.major_type === '수입' ? AMOUNT_MARK.income.arrow : AMOUNT_MARK.expense.arrow}
                 </span>
                 {tx.major_type === '수입' ? AMOUNT_MARK.income.sign : AMOUNT_MARK.expense.sign}{fmt(tx.amount)}
               </td>
-              <td className="px-4 py-3 text-ink-faint text-xs" role="cell" data-label="결제수단">
+              <td className="px-4 py-3 text-caption text-xs" role="cell" data-label="결제수단">
                 {tx.payment_method_name || '—'}
               </td>
               <td className="px-4 py-3" role="cell" data-label="">
                 <div className="flex gap-2 justify-end">
                   <button
                     onClick={() => onEdit(tx)}
-                    className="text-ink-faint hover:text-accent transition-colors text-xs"
+                    className="text-caption hover:text-brand-text transition-colors text-xs"
                   >
                     수정
                   </button>
                   <button
                     onClick={() => onDelete(tx.id)}
-                    className="text-ink-faint hover:text-expense transition-colors text-xs"
+                    className="text-caption hover:text-loss-text transition-colors text-xs"
                   >
                     삭제
                   </button>

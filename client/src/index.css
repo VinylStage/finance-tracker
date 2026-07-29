@@ -1,90 +1,270 @@
 @import "tailwindcss";
+@import "./fonts.css";
 
-/* 시맨틱 디자인 토큰 (#190).
-   값은 전부 Tailwind v4 기본 팔레트에서 그대로 가져온 것이라 치환 전후 렌더 결과가 같다.
-   주석의 `= xxx-600` 은 어느 유틸리티를 대체하는지를 가리킨다.
-   `@theme`(inline 아님)이므로 유틸리티가 var() 를 참조한다 — 다크모드(#201)에서
-   :root 아래 변수만 덮어쓰면 컴포넌트 수정 없이 팔레트를 교체할 수 있다. */
-@theme {
-  /* 의미 색상 — 수입/지출/경고/강조 */
-  --color-income: oklch(59.6% 0.145 163.225);        /* = emerald-600 */
-  --color-income-strong: oklch(50.8% 0.118 165.612); /* = emerald-700 */
-  --color-income-soft: oklch(97.9% 0.021 166.113);   /* = emerald-50 */
+/* 시각 디자인 리뉴얼 토큰.
+   라이트 2a(흰 배경 + 단일 블루) / 다크 4a(차가운 뉴트럴).
+   구조·라우팅·행동설계는 건드리지 않는다. 이 파일은 시각 레이어만 다룬다.
 
-  --color-expense: oklch(58.6% 0.253 17.585);        /* = rose-600 */
-  --color-expense-bar: oklch(64.5% 0.246 16.439);    /* = rose-500 */
-  --color-expense-soft: oklch(96.9% 0.015 12.422);   /* = rose-50 */
+   원칙 — hue 는 2개다. 액센트 블루(액센트·링크·수입·차트·선택 상태)와
+   손실 레드(지출·초과·삭제). 그 외 전부 무채색. 카테고리에는 색을 쓰지 않는다.
+   유일한 예외는 자금흐름 Sankey 의 대분류색이며, 그 색은 차트 밴드·노드 밖으로
+   나가지 않는다.
 
-  --color-warning: oklch(55.5% 0.163 48.998);        /* = amber-700 */
-  --color-warning-bar: oklch(76.9% 0.188 70.08);     /* = amber-500 */
-  --color-warning-soft: oklch(98.7% 0.022 95.277);   /* = amber-50 */
+   한 hue 에 값이 두 개다 — 면용(fill)과 글자용(text). 브랜드 hex 는 로고·큰 버튼용
+   값이라 11~17px 본문에 그대로 쓰면 AA 를 통과하지 못한다. fill 은 막대·영역 채움·
+   히트맵 셀에, text 는 금액·라벨·얇은 차트 선에 쓴다.
 
-  --color-accent: oklch(51.1% 0.262 276.966);        /* = indigo-600 */
-  --color-accent-strong: oklch(45.7% 0.24 277.023);  /* = indigo-700 */
-  --color-accent-bar: oklch(58.5% 0.233 277.117);    /* = indigo-500 */
-  --color-accent-soft: oklch(96.2% 0.018 272.314);   /* = indigo-50 */
+   주석의 대비비는 전부 WCAG 2.x 상대휘도 공식으로 실측한 값이다(계산 스크립트로
+   검증). handoff 문서에 적혀 있던 수치는 다수가 실측과 달라 채택하지 않았다.
+   측정 배경은 각 항목에 명시한다 — 같은 색도 흰 카드 위와 가라앉은 면 위에서
+   비율이 다르므로, 그 토큰이 실제로 얹히는 최악의 배경을 기준으로 삼았다.
 
-  /* 같은 값이라도 「배경으로 쓰이는 색」과 「글자로 쓰이는 색」은 토큰을 나눈다(#201).
-     다크모드에서 이 둘은 정반대 방향을 요구한다 — 흰 글자가 얹히려면 어두워야 하고,
-     어두운 배경 위 글자로 읽히려면 밝아야 한다. 한 토큰으로는 동시에 만족할 수 없어서
-     라이트 모드에서 값이 같더라도 지금 분리해 둔다. */
-  --color-accent-hover: oklch(45.7% 0.24 277.023);      /* = indigo-700, 버튼 hover 배경 */
-  --color-accent-soft-hover: oklch(93% 0.034 272.788);  /* = indigo-100 */
-  --color-accent-line: oklch(87% 0.065 274.039);        /* = indigo-200 */
-  --color-accent-line-strong: oklch(78.5% 0.115 274.713); /* = indigo-300 */
+   `static` 이 필요하다. 기본 @theme 은 유틸리티가 참조하지 않는 변수를 출력에서
+   지운다. 차트 색은 Recharts 의 fill/stroke 속성에 var() 문자열로 들어가서
+   Tailwind 가 사용 사실을 알 수 없고, 그대로 두면 히트맵·Sankey·모션 토큰이
+   CSS 에서 통째로 사라진다(실측으로 11개 누락 확인). */
+@theme static {
+  /* ---------- 액센트 · 블루 ----------
+     fill: 막대 / 영역 채움 / 히트맵 셀 / 스와치. 버튼 배경에는 쓰지 않는다.
+     text: 11~17px 글자 · 얇은 차트 선. */
+  --color-brand-fill: #2e74e8;        /* 트랙 #EDF1F7 위 3.88 (비텍스트 3:1) */
+  --color-brand-text: #1b64da;        /* 흰 위 5.41 · 페이지 #F1F5FA 위 4.94 */
+  --color-brand-tint: #e6effb;        /* 배지 배경 — brand-text 얹어 4.66 */
+  --color-brand-tint-strong: #a6c3f4;
+  --color-brand-row: #f4f8fe;         /* 테이블 선택 행 */
 
-  --color-expense-strong: oklch(51.4% 0.222 16.935);    /* = rose-700, 글자 */
-  --color-expense-line: oklch(89.2% 0.058 10.001);      /* = rose-200 */
-  --color-expense-line-strong: oklch(81% 0.117 11.638); /* = rose-300 */
+  /* ---------- 손실 · 레드 ---------- */
+  --color-loss-fill: #ce3852;         /* 트랙 위 4.30 */
+  --color-loss-text: #c0304c;         /* 흰 위 5.57 */
+  --color-loss-strong: #9e2440;       /* 흰 위 7.55 — 위험구역 제목 */
+  --color-loss-tint: #f7e6ea;         /* loss-text 얹어 4.63 */
+  --color-loss-tint-page: #fbf0f3;
+  --color-loss-border: #eab8c2;
+  --color-loss-border-strong: #dfa0ac;
 
-  /* 삭제·위험 동작 버튼의 배경. 값은 expense 와 같지만 역할이 다르다 —
-     이쪽은 흰 글자가 얹히므로 어두워야 하고, expense 는 어두운 배경 위에서 읽혀야 해
-     밝아야 한다. 다크모드에서 한 값으로는 둘 다 만족할 수 없다(측정으로 확인). */
-  --color-danger: oklch(58.6% 0.253 17.585);            /* = rose-600, 버튼 배경 */
-  --color-danger-hover: oklch(51.4% 0.222 16.935);      /* = rose-700, 버튼 hover 배경 */
+  /* ---------- 주의 (예산 80% 임계) ----------
+     레드 계열의 옅은 단계다. hue 11~15° 로 loss(348°)에서 이어지되 pending
+     앰버(41°)와는 분리된다 — 두 상태가 같은 색이면 "아직 안 쓴 돈"과 "너무 많이
+     쓴 돈"이 구별되지 않는다. handoff 원안은 warn 과 pending 에 같은 hex(#D9A63C /
+     #96650F)를 배정해 이 구별이 무너져 있었고, 문서가 서술한 "레드 계열"과도
+     달랐다(실제 hue 41° 앰버). 그래서 warn 쪽을 레드 계열로 재조정했다. */
+  --color-warn-fill: #cf5a34;         /* hue 15° · 트랙 위 3.59 (비텍스트 3:1) */
+  --color-warn-text: #b4442a;         /* hue 11° · 흰 위 5.52 · 페이지 위 5.05 */
+  --color-warn-tint: #fbede7;         /* warn-text 얹어 4.83 */
 
-  --color-warning-mid: oklch(66.6% 0.179 58.318);       /* = amber-600 */
-  --color-warning-strong: oklch(47.3% 0.137 46.201);    /* = amber-800 */
-  --color-warning-line: oklch(92.4% 0.12 95.746);       /* = amber-200 */
+  /* ---------- 보조색 · 목표 (저축 · 완료 · 신뢰) ----------
+     상태 배지 · 진행바 · 차트에만. 본문 글자 · 카테고리 아이콘 · 테두리는 무채색. */
+  --color-goal-fill: #12857f;         /* 트랙 위 3.95 */
+  --color-goal-text: #0f6b62;         /* 흰 위 6.36 · tint 위 5.49 */
+  --color-goal-tint: #e4f1ee;
 
-  /* 모달·오버레이 뒷배경. 표면(surface)이 아니라 화면을 덮는 막이라 따로 둔다. */
-  --color-scrim: oklch(20.8% 0.042 265.755);            /* = slate-900 */
+  /* ---------- 보조색 · 예정 (아직 일어나지 않은 일) ----------
+     반복거래 예정, 할부 청구 예정에만. 예산 주의(warn)에는 쓰지 않는다.
+     handoff 원안 값(fill #D9A63C / text #96650F)은 막대로 쓰면 트랙 위 1.96,
+     tint 위 글자 4.44 로 둘 다 미달이라 명도를 내렸다. */
+  --color-pending-fill: #ad7e23;      /* 트랙 위 3.20 */
+  --color-pending-text: #85590c;      /* 흰 위 6.12 · tint 위 5.39 */
+  --color-pending-tint: #f8f0de;
 
-  /* 카테고리 대분류 6종 */
-  --color-cat-income: oklch(59.6% 0.145 163.225);    /* 수입 = emerald-600 */
-  --color-cat-fixed: oklch(58.6% 0.253 17.585);      /* 고정지출 = rose-600 */
-  --color-cat-needs: oklch(64.6% 0.222 41.116);      /* 변동필수 = orange-600 */
-  --color-cat-debt: oklch(57.7% 0.245 27.325);       /* 부채상환 = red-600 */
-  --color-cat-wants: oklch(68.1% 0.162 75.834);      /* 선택지출 = yellow-600 */
-  --color-cat-savings: oklch(54.6% 0.245 262.881);   /* 저축 = blue-600 */
+  /* ---------- 잉크 · 무채색 ----------
+     3단계로 끝낸다. 기존 6단계(ink~ghost)는 단계 사이 차이가 읽히지 않아
+     위계로 기능하지 못했다. */
+  --color-ink: #0f2540;               /* 흰 위 15.45 — 제목 · 금액 */
+  --color-body: #45596f;              /* 흰 위 7.21 — 본문 · 라벨 */
+  --color-caption: #56697c;           /* 캡션 · 메타 · 카테고리 아이콘 */
+  /* caption 은 흰 카드(5.66)뿐 아니라 페이지(5.17)와 가라앉은 면(5.00) 위에도
+     얹힌다. handoff 원안 #5F7387 은 흰 위 4.90 으로만 통과하고 페이지 위 4.47,
+     가라앉은 면 위 4.32 로 미달이었다. 카테고리 구분이 아이콘 하나에 걸려 있어
+     그 아이콘 색이 화면에서 가장 약한 요소가 되면 안 되므로 최악 배경 기준으로
+     맞췄다. */
 
-  /* 표면·경계 */
-  --color-surface: #ffffff;
-  --color-surface-muted: oklch(98.4% 0.003 247.858);  /* = slate-50 */
-  --color-surface-sunken: oklch(96.8% 0.007 247.896); /* = slate-100 */
-  --color-line-soft: oklch(96.8% 0.007 247.896);      /* = slate-100 */
-  --color-line: oklch(92.9% 0.013 255.508);           /* = slate-200 */
-  --color-line-strong: oklch(86.9% 0.022 252.894);    /* = slate-300, 입력 필드 테두리 */
+  /* ---------- 선 · 표면 ---------- */
+  --color-line-strong: #c3ceda;       /* 입력 테두리 · 표 헤더 상단선 */
+  --color-line: #dde5ee;              /* 섹션 구분선 */
+  --color-line-faint: #edf1f7;        /* 행 구분선 */
+  --color-surface: #ffffff;           /* 카드 · 시트 */
+  --color-surface-sunken: #edf1f7;    /* 진행바 트랙 · 아이콘 칩 · 보조 버튼 */
+  --color-surface-page: #f1f5fa;      /* 페이지 배경 */
+  --color-scrim: #2b3a4c;             /* 모달 오버레이 */
 
-  /* 텍스트 — ink 가 가장 진하고 ghost 로 갈수록 옅어진다.
-     line-* 과 값이 겹치는 단계가 있어도 역할이 달라 토큰을 분리해 둔다
-     (다크모드에서 테두리와 글자는 서로 다른 밝기로 가야 한다). */
-  --color-ink: oklch(27.9% 0.041 260.031);        /* = slate-800 */
-  --color-ink-body: oklch(37.2% 0.044 257.287);   /* = slate-700 */
-  --color-ink-muted: oklch(44.6% 0.043 257.281);  /* = slate-600 */
-  --color-ink-subtle: oklch(55.4% 0.046 257.417); /* = slate-500 */
-  --color-ink-faint: oklch(70.4% 0.04 256.788);   /* = slate-400 */
-  --color-ink-ghost: oklch(86.9% 0.022 252.894);  /* = slate-300, 빈 값 표시용 */
+  /* ---------- 기본 액션 버튼 ----------
+     라이트는 잉크 블랙. 액센트 블루로 칠하면 화면에 파란 덩어리가 남아
+     "색은 데이터에만" 규칙이 깨진다. 게다가 흰 글자를 #2E74E8 에 얹으면 4.39 로
+     본문 AA(4.5)를 통과하지 못한다. 다크는 반전 — 밝은 배경 + 어두운 글자. */
+  --color-action: #0f2540;
+  --color-action-on: #ffffff;         /* 15.45 */
+  --color-action-hover: #24405e;      /* 흰 글자 10.66 */
 
-  /* 형태 */
-  --radius-card: 0.75rem; /* = rounded-xl */
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); /* = shadow-sm */
+  /* 삭제 · 위험 동작 버튼. loss 와 값이 겹치지만 역할이 다르다 —
+     이쪽은 흰 글자가 얹히므로 어두워야 하고, loss-text 는 흰 배경 위에서 읽혀야 한다.
+     다크에서 두 방향은 서로 반대로 간다. */
+  --color-danger: #c0304c;            /* 흰 글자 5.57 */
+  --color-danger-hover: #9e2440;      /* 흰 글자 7.55 */
+  --color-danger-on: #ffffff;
+
+  --color-disabled: #a9b6c6;          /* 체크박스 테두리 · 비활성 */
+
+  /* ---------- 일별 지출 강도 히트맵 ----------
+     5단계 전부 액센트 한 색의 농도. 초과 단계에 손실색을 쓰지 않는다 —
+     초과 여부는 색이 아니라 범례와 셀 안의 날짜 숫자로 읽는다.
+     기준선은 월 예산 합계 ÷ 그 달의 일수(예산 없으면 최근 3개월 일평균). */
+  --color-heat-1: #e6effb;            /* 기준의 절반 이하 — 위 숫자 body 6.22 */
+  --color-heat-2: #a6c3f4;            /* 기준 이내 — 위 숫자 ink 8.63 */
+  --color-heat-3: #4b84e4;            /* 기준 초과 */
+  --color-heat-4: #14498f;            /* 기준 2배 초과 */
+  --color-heat-3-on: #08192f;         /* 3단 위 날짜 숫자 4.80 (원안 #0C1F38 은 4.51) */
+  --color-heat-4-on: #ffffff;         /* 4단 위 날짜 숫자 8.83 */
+
+  /* ---------- 자금흐름 Sankey 대분류색 ----------
+     hue 2개 원칙의 유일한 예외. 6개 흐름을 서로 구분하는 것이 이 차트의 목적이라
+     단일 hue 농도 램프로는 인접 밴드를 구별할 수 없다. 대신 두 가지로 통제한다:
+       (1) 비슷한 명도대에 묶어 여섯 색이 한 가족으로 읽히게 한다
+       (2) 이 색은 차트의 밴드·노드에만 쓴다. 목록·표·아이콘·배지에 쓰면
+           카테고리 색을 되살리는 것과 같다
+     각 노드 옆에 카테고리명이 붙으므로 색↔의미 매핑이 차트 안에서 완결된다. */
+  --color-flow-fixed: #2e74e8;
+  --color-flow-variable: #ad7e23;
+  --color-flow-debt: #ce5a54;
+  --color-flow-optional: #7b62c8;
+  --color-flow-saving: #12857f;
+  --color-flow-rest: #7e8da0;         /* 남은 돈 — 지출이 아니므로 무채색 */
+  --color-flow-source: #45596f;       /* 수입 소스 노드 — 무채색 */
+  --flow-band-opacity: 0.26;          /* 밴드 채움. 노드 rect 는 solid */
+
+  /* ---------- 타입 ----------
+     Pretendard 는 self-host 가 붙기 전까지 시스템 폰트로 폴백한다.
+     CSP 가 default-src 'self' 라 CDN 로드는 차단된다. */
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system,
+               BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  /* 큰 숫자는 화면에 하나만. 가용 현금이 hero 이고 나머지 KPI 는 figure 로 내려간다.
+     세 카드가 같은 크기로 경쟁하면 무엇을 먼저 봐야 하는지 알 수 없다. */
+  --text-hero: 3.25rem;               /* 52px · 가용 현금 (데스크톱) */
+  --text-hero--line-height: 1;
+  --text-hero--letter-spacing: -0.045em;
+  --text-hero-m: 2.375rem;            /* 38px · 모바일 */
+  --text-hero-m--line-height: 1;
+  --text-hero-m--letter-spacing: -0.04em;
+  --text-figure: 1.3125rem;           /* 21px · 수입/지출 KPI */
+  --text-figure--letter-spacing: -0.03em;
+  --text-h1: 1.25rem;                 /* 20px · 페이지 제목 */
+  --text-h1--letter-spacing: -0.025em;
+  --text-base: 0.875rem;              /* 14px · 본문 */
+  --text-sm: 0.8125rem;               /* 13px · 표 셀 */
+  --text-meta: 0.75rem;               /* 12px · 캡션 */
+  --text-label: 0.71875rem;           /* 11.5px · 필드 라벨 */
+
+  /* 섹션 라벨은 대문자화하지 않는다(한글에 의미 없음). 자간과 굵기로만 위계를 만든다. */
+  --tracking-section: 0.06em;
+
+  /* ---------- 형태 ---------- */
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-chip: 7px;
+  --radius-pill: 20px;
+  --radius-bar: 1px;                  /* 진행바 — 거의 직각 */
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.06);
+
+  /* ---------- 모션 ----------
+     모션은 인과관계를 설명할 때만 쓴다. 가계부는 하루에 여러 번 열고 닫는
+     도구라 애니메이션이 길면 방해가 된다. 금액은 애니메이션하지 않는다 —
+     읽는 중에 값이 바뀌면 오독이 생긴다. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out-quad: cubic-bezier(0.45, 0, 0.55, 1);
+  --duration-instant: 90ms;           /* hover · active · focus ring */
+  --duration-fast: 160ms;             /* 색 전환 · 배지 · 체크박스 */
+  --duration-base: 240ms;             /* 아코디언 · 모달 · 시트 · 탭 */
+  --duration-slow: 420ms;             /* 페이지 전환 · 토스트 */
+  --duration-bar: 640ms;              /* 진행바 · 차트 그로우 */
 }
 
-body {
-  background-color: var(--color-surface-muted);
-  color: var(--color-ink);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-surface-page);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    /* 한글은 단어 중간에서 끊지 않는다 */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    text-wrap: pretty;
+  }
+
+  /* 금액·날짜·비율은 전부 타뷸러. 표에서 자리수가 흔들리면 숫자를 비교할 수 없다. */
+  .num,
+  td,
+  th,
+  input[type='number'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-fill);  /* 흰 위 4.39 (비텍스트 3:1) */
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* 모바일 히트 타깃 44px 하한 */
+  @media (max-width: 40rem) {
+    button,
+    a[role='button'],
+    [data-tap] {
+      min-height: 44px;
+    }
+  }
+}
+
+@layer components {
+  /* 기본 액션 버튼. 한 클래스가 라이트/다크 양쪽을 처리한다 —
+     토큰이 테마별로 뒤집히므로 컴포넌트는 분기하지 않는다. */
+  .btn-primary {
+    background-color: var(--color-action);
+    color: var(--color-action-on);
+    border-radius: var(--radius-control);
+    font-weight: 600;
+    transition: background-color var(--duration-instant) var(--ease-out-quart);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-action-hover);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  /* 삭제·위험 동작. 위험 구역은 화면의 유일한 채색 영역으로 남긴다. */
+  .btn-danger {
+    background-color: var(--color-danger);
+    color: var(--color-danger-on);
+    border-radius: var(--radius-control);
+    font-weight: 600;
+    transition: background-color var(--duration-instant) var(--ease-out-quart);
+  }
+
+  .btn-danger:hover {
+    background-color: var(--color-danger-hover);
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  /* 예산 초과분 세그먼트. 막대를 100% 에서 자르면 얼마나 넘었는지 알 수 없어
+     초과분을 막대 밖 별도 세그먼트로 분리한다. 사선 해치는 색 외의 두 번째
+     구분 채널이다 — 색만으로 상태를 전달하지 않기 위한 것(WCAG 1.4.1). */
+  .bar-overflow {
+    background-image: repeating-linear-gradient(
+      135deg,
+      var(--color-loss-fill) 0 3px,
+      var(--color-loss-tint) 3px 6px
+    );
+  }
 }
 
 /* 거래 테이블 모바일 카드뷰(#192).
@@ -139,8 +319,8 @@ body {
     /* 라벨은 왼쪽 끝, 값은 오른쪽 끝. 라벨이 없는 셀은 값만 오른쪽에 남는다. */
     margin-right: auto;
     text-align: left;
-    font-size: 0.6875rem;
-    color: var(--color-ink-faint);
+    font-size: var(--text-label);
+    color: var(--color-caption);
   }
 
   /* data-label 이 빈 셀(체크박스·수정삭제 버튼)은 라벨을 만들지 않는다. */
@@ -154,86 +334,116 @@ body {
   }
 }
 
-/* 다크모드 팔레트(#201). 옵트인이며 기본값은 라이트다 —
-   금융 앱은 익숙한 인터페이스로 신뢰를 유지하는 쪽이 낫다는 리서치를 따랐다.
+/* 다크 팔레트(4a). 옵트인이며 기본값은 라이트다 —
+   금융 앱은 익숙한 인터페이스로 신뢰를 유지하는 쪽이 낫다는 판단을 유지한다(#201).
 
-   컴포넌트는 하나도 고치지 않는다. 토큰이 var() 를 참조하므로 여기서 변수만
-   덮어쓰면 전 화면이 함께 바뀐다(#190 과 그 후속 마이그레이션이 만든 구조).
+   컴포넌트는 하나도 고치지 않는다. @theme(inline 아님)이라 유틸리티가 var() 를
+   참조하므로 여기서 변수만 덮어쓰면 전 화면이 함께 바뀐다.
 
-   모든 값은 WCAG 대비비를 실제로 계산해서 골랐다. 추측한 값은 하나도 없다.
-   기준은 카드 배경(#1c1c1e) 위 4.5:1 이며, 주석의 숫자가 측정값이다.
+   라이트 → 다크 변환 규칙:
+     1. 액센트는 명도를 올리고 채도를 낮춘다. 라이트의 진한 값을 그대로 쓰면
+        어두운 바닥에 잠긴다.
+     2. 면용/글자용이 하나로 합쳐지고, 대신 버튼이 반전된다.
+     3. 바닥의 색기울기를 유지한다(둘 다 차가운 뉴트럴).
+     4. 그림자가 안 보이므로 밝기 단계로만 계층을 만든다: 페이지 → 카드 → 컨트롤.
 
-   순수 검정(#000)을 쓰지 않는다. 어두운 회색이 눈부심과 잔상이 덜하다. */
+   순수 검정(#000)을 쓰지 않는다. #12161C 는 살짝 파란 검정으로 라이트의 차가운
+   성격을 유지하며, 순검정은 대비가 과해 눈이 피로하다.
+   주석의 비율은 카드(#1A1F27) 기준 실측값이다. */
 :root[data-theme='dark'] {
   /* 표면: 페이지가 가장 어둡고 카드가 한 단계 밝다 */
-  --color-surface: #1c1c1e;
-  --color-surface-muted: #121212;
-  --color-surface-sunken: #2a2a2c;
+  --color-surface: #1a1f27;
+  --color-surface-page: #12161c;
+  --color-surface-sunken: #232a33;
 
-  --color-line-soft: #262628;
-  --color-line: #333336;
-  --color-line-strong: #45454a;
+  --color-line-faint: #1f252d;
+  --color-line: #262d37;
+  --color-line-strong: #333b47;
 
-  /* 글자: ink 14.53 / body 11.48 / muted 7.85 / subtle 6.05 / faint 4.93 */
-  --color-ink: #ededed;
-  --color-ink-body: #d4d4d4;
-  --color-ink-muted: #b0b0b0;
-  --color-ink-subtle: #9a9a9a;
-  --color-ink-faint: #8a8a8a;
-  --color-ink-ghost: #5a5a5a;
+  --color-ink: #edf1f7;               /* 14.60 */
+  --color-body: #a9b6c6;              /* 8.03 */
+  --color-caption: #8a97a6;           /* 카드 5.56 · 컨트롤면 #232A33 위 4.87 */
+  /* 라이트와 같은 이유로 최악 배경 기준. 원안 #7E8B9A 는 카드 위 4.76 은 통과하나
+     컨트롤 면 위 4.17 로 미달이었다. */
 
-  /* 수입·지출: 채도를 낮춰 눈부심을 줄이면서 대비는 유지한다 (8.85 / 6.32) */
-  --color-income: #34d399;
-  --color-income-strong: #6ee7b7;
-  --color-income-soft: #04291d;
+  /* 액센트는 면·글자 겸용이 된다 — #5B9BFF 가 카드 위 5.97 로 이미 본문 AA 를
+     넘기므로 fill/text 를 나눌 이유가 없다. */
+  --color-brand-fill: #5b9bff;
+  --color-brand-text: #5b9bff;        /* 카드 5.97 · 페이지 6.55 */
+  --color-brand-tint: #1b2a42;        /* 위 글자 5.20 */
+  --color-brand-tint-strong: #2e4c7c;
+  --color-brand-row: #1b2a42;
 
-  --color-expense: #fb7185;
-  --color-expense-strong: #fda4af;
-  --color-expense-bar: #f43f5e;
-  --color-expense-soft: #3b1119;
-  --color-expense-line: #4c1d24;
-  --color-expense-line-strong: #6b2733;
+  --color-loss-fill: #f0707f;
+  --color-loss-text: #f0707f;         /* 5.77 */
+  --color-loss-strong: #f59aa5;
+  --color-loss-tint: #3a2226;         /* 위 글자 5.10 */
+  --color-loss-tint-page: #2a1a1d;
+  --color-loss-border: #4c2229;
+  --color-loss-border-strong: #6b2f38;
 
-  /* 삭제 버튼 배경. 흰 글자가 얹히므로 글자용 expense 와 반대로 어두워야 한다
-     (흰 글자 6.29 / hover 8.02). 이 분리가 없으면 버튼 글자가 안 읽힌다. */
-  --color-danger: #be123c;
-  --color-danger-hover: #9f1239;
+  --color-warn-fill: #e97a4e;         /* 컨트롤면 위 5.07 */
+  --color-warn-text: #f08a5d;         /* 카드 6.70 · 페이지 7.34 */
+  --color-warn-tint: #3a2118;         /* 위 글자 6.02 */
 
-  --color-warning: #fbbf24;
-  --color-warning-mid: #f59e0b;
-  --color-warning-strong: #fcd34d;
-  --color-warning-bar: #f59e0b;
-  --color-warning-soft: #3a2a05;
-  --color-warning-line: #4a3410;
+  --color-goal-fill: #3fc08a;
+  --color-goal-text: #3fc08a;         /* 7.18 */
+  --color-goal-tint: #14302a;         /* 위 글자 6.14 */
 
-  /* accent 는 글자와 버튼 배경에 함께 쓰인다. 흰 글자가 읽히면서(5.08)
-     어두운 배경 위 큰 글자로도 읽히는(3.35) 좁은 구간을 계산으로 찾았다. */
-  --color-accent: #615ae8;
-  --color-accent-hover: #4f46e5;
-  --color-accent-strong: #a5b4fc;
-  --color-accent-bar: #6366f1;
-  --color-accent-soft: #1e1b4b;
-  --color-accent-soft-hover: #2a2463;
-  --color-accent-line: #3730a3;
-  --color-accent-line-strong: #4338ca;
+  --color-pending-fill: #e0a94a;
+  --color-pending-text: #e0a94a;      /* 7.83 */
+  --color-pending-tint: #33291a;      /* 위 글자 6.75 */
 
-  /* 카테고리 6종: 6.15 ~ 11.11, 서로 구분되는 색상환 위치를 유지한다 */
-  --color-cat-income: #34d399;
-  --color-cat-fixed: #fb7185;
-  --color-cat-needs: #fb923c;
-  --color-cat-debt: #f87171;
-  --color-cat-wants: #facc15;
-  --color-cat-savings: #60a5fa;
+  /* 버튼 반전 — 밝은 액센트 배경 + 어두운 글자 */
+  --color-action: #5b9bff;
+  --color-action-on: #12161c;         /* 6.55 */
+  --color-action-hover: #84aeff;      /* 8.19 */
 
-  /* 모달 뒷배경. 어두운 화면에서는 더 어두워야 덮인 느낌이 난다 */
+  --color-danger: #f0707f;
+  --color-danger-on: #12161c;         /* 6.33 */
+  --color-danger-hover: #f5949f;      /* 8.31 */
+
+  --color-disabled: #4a5361;
+
+  /* 히트맵 램프 방향이 반대다 — 어두운 바닥에서는 밝아질수록 강한 값. */
+  --color-heat-1: #1b2a42;            /* 위 숫자 body 7.00 */
+  --color-heat-2: #2e4c7c;            /* 위 숫자 ink 7.59 */
+  --color-heat-3: #4a7fd4;
+  --color-heat-4: #5b9bff;
+  --color-heat-3-on: #12161c;         /* 4.56 */
+  --color-heat-4-on: #12161c;         /* 6.55 */
+
+  --color-flow-fixed: #5b9bff;
+  --color-flow-variable: #e0a94a;
+  --color-flow-debt: #f0707f;
+  --color-flow-optional: #a78be8;
+  --color-flow-saving: #3fc08a;
+  --color-flow-rest: #7e8b9a;
+  --color-flow-source: #a9b6c6;
+  --flow-band-opacity: 0.34;
+
   --color-scrim: #000000;
 
   /* 어두운 배경에서 그림자는 거의 안 보인다. 대신 경계선에 의존한다. */
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.5);
 }
 
 /* 브라우저 기본 UI(스크롤바·폼 컨트롤·date picker)도 함께 어두워지게 한다.
    이걸 빼면 입력창의 달력 아이콘 같은 요소만 밝게 남아 튄다. */
 :root[data-theme='dark'] {
   color-scheme: dark;
+}
+
+/* 모션 축소 요청 시 transform/opacity 전환을 0 으로 내린다.
+   진행바·차트는 최종 상태로 즉시 렌더한다(0폭에서 멈추지 않게).
+   토스트 자동 소멸 타이머는 유지한다 — 모션이 아니라 타이밍이다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

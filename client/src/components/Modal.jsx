@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { trapIndex } from '../lib/quickEntry';
+import Icon from './Icon';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -55,7 +56,7 @@ export default function Modal({ title, onClose, busy = false, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 px-4 py-8"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim/40 px-4 py-8"
       onMouseDown={(e) => {
         // 배경을 누른 경우에만 닫는다. 패널 안에서 시작한 드래그가 배경에서 끝나도 닫히면 안 된다.
         if (e.target === e.currentTarget && !busy) onClose();
@@ -72,7 +73,7 @@ export default function Modal({ title, onClose, busy = false, children }) {
         className="w-full max-w-2xl rounded-card border border-line bg-surface shadow-card outline-none"
       >
         <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
-          <h2 id="modal-title" className="text-sm font-semibold text-ink-body">
+          <h2 id="modal-title" className="text-sm font-semibold text-body">
             {title}
           </h2>
           <button
@@ -80,9 +81,9 @@ export default function Modal({ title, onClose, busy = false, children }) {
             onClick={onClose}
             disabled={busy}
             aria-label="닫기"
-            className="rounded-md px-2 py-1 text-sm text-ink-faint hover:bg-surface-muted hover:text-ink-body disabled:opacity-40"
+            className="rounded-control px-2 py-1 text-sm text-caption hover:bg-surface-page hover:text-body disabled:opacity-40"
           >
-            ✕
+            <Icon name="close" size={16} />
           </button>
         </div>
         <div className="p-5">{children}</div>
