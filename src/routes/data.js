@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { TRANSACTION_ORIGINS } = require('../constants');
 const { localYMD } = require('../utils/date');
 const { asInt } = require('../utils/validate');
 
@@ -55,9 +56,20 @@ function resolveImportRow(tx, lookups) {
     fkFallback = true;
   }
 
+  // 거래 출처(#268). 백업에 없으면(구버전) manual 로 둔다 — 잠금이 풀리는 쪽이
+  // 아니라 사용자 소유로 보는 쪽이 안전하다.
+  //
+  // origin_ref_id 는 참조 무결성을 검사하지 않고 그대로 복원한다. 원본 테이블
+  // (installments 등)도 같은 백업에 들어 있어 함께 복원되기 때문이다. 원본이
+  // 없는 경우는 파생 거래 재생성(#269)이 정리한다.
+  const origin = TRANSACTION_ORIGINS.includes(tx.origin) ? tx.origin : 'manual';
+  const origin_ref_table = tx.origin_ref_table !== undefined ? tx.origin_ref_table : null;
+  const origin_ref_id = tx.origin_ref_id !== undefined ? tx.origin_ref_id : null;
+
   return {
     date: tx.date, merchant: tx.merchant, amount, categoryId, memo: tx.memo,
     payment_method_id, payment_style, approval_number, installment_id, created_at,
+    origin, origin_ref_table, origin_ref_id,
     isLegacy, fkFallback,
   };
 }
@@ -71,7 +83,8 @@ router.get('/export', (req, res) => {
     // Join transactions with categories to get category names
     const txSql = `
       SELECT t.date, t.merchant, t.amount, t.category_id, c.name AS category_name, t.memo,
-        t.payment_method_id, t.payment_style, t.approval_number, t.installment_id, t.created_at
+        t.payment_method_id, t.payment_style, t.approval_number, t.installment_id, t.created_at,
+        t.origin, t.origin_ref_table, t.origin_ref_id
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
       ORDER BY t.date DESC, t.id DESC
@@ -81,7 +94,9 @@ router.get('/export', (req, res) => {
     
     const data = {
       exported_at: new Date().toISOString(), // 의도적 UTC 타임스탬프(내보내기 메타데이터, 로컬 날짜 아님) — 변경하지 않음
-      schema_version: 2,
+      // origin 3필드가 추가돼 3 으로 올린다(#268). 이걸 안 내보내면 복원 시
+      // 파생 거래가 전부 manual 이 되어 잠금이 풀린다.
+      schema_version: 3,
       transactions: transactions.map(t => ({
         date: t.date,
         merchant: t.merchant,
@@ -94,6 +109,9 @@ router.get('/export', (req, res) => {
         approval_number: t.approval_number,
         installment_id: t.installment_id,
         created_at: t.created_at,
+        origin: t.origin,
+        origin_ref_table: t.origin_ref_table,
+        origin_ref_id: t.origin_ref_id,
         source: 'manual'
       }))
     };
@@ -150,8 +168,8 @@ router.post('/import', (req, res) => {
 
       // created_at 은 백업값을 복원하되, 없으면(구버전 백업) COALESCE 로 현재 시각을 쓴다
       const insertTx = db.prepare(`
-        INSERT INTO transactions (date, merchant, amount, category_id, memo, payment_method_id, payment_style, approval_number, installment_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+        INSERT INTO transactions (date, merchant, amount, category_id, memo, payment_method_id, payment_style, approval_number, installment_id, created_at, origin, origin_ref_table, origin_ref_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?)
       `);
 
       for (const tx of transactions) {
@@ -161,7 +179,8 @@ router.post('/import', (req, res) => {
         if (row.fkFallback) fk_fallback = true;
         insertTx.run(
           row.date, row.merchant, row.amount, row.categoryId, row.memo,
-          row.payment_method_id, row.payment_style, row.approval_number, row.installment_id, row.created_at
+          row.payment_method_id, row.payment_style, row.approval_number, row.installment_id, row.created_at,
+          row.origin, row.origin_ref_table, row.origin_ref_id
         );
         imported++;
       }
