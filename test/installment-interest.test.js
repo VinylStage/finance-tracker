@@ -1,0 +1,203 @@
+'use strict';
+const { test, describe } = require('node:test');
+const assert = require('node:assert');
+const {
+  computeSchedule, scheduleTotals, addMonths, isFreeMonth,
+} = require('../src/services/installmentInterest');
+
+const FREE = { policy_type: '무이자', annual_rate: 0, free_months: 0 };
+const PAID = { policy_type: '유이자', annual_rate: 15.9, free_months: 0 };
+const PARTIAL = { policy_type: '부분무이자', annual_rate: 15.9, free_months: 3 };
+
+describe('addMonths — 청구월 계산', () => {
+  test('같은 해 안', () => assert.strictEqual(addMonths('2026-08', 3), '2026-11'));
+  test('연말을 넘긴다', () => assert.strictEqual(addMonths('2026-11', 3), '2027-02'));
+  test('0 은 그대로', () => assert.strictEqual(addMonths('2026-08', 0), '2026-08'));
+  test('12개월은 정확히 1년', () => assert.strictEqual(addMonths('2026-08', 12), '2027-08'));
+  test('두 자리 패딩', () => assert.strictEqual(addMonths('2026-01', 8), '2026-09'));
+  test('12월 경계', () => assert.strictEqual(addMonths('2026-12', 1), '2027-01'));
+});
+
+describe('isFreeMonth — 면제 구간', () => {
+  test('무이자는 전 회차 면제', () => {
+    for (const s of [1, 6, 12]) assert.strictEqual(isFreeMonth(FREE, s), true);
+  });
+  test('유이자는 면제 없음', () => {
+    for (const s of [1, 6, 12]) assert.strictEqual(isFreeMonth(PAID, s), false);
+  });
+  test('부분무이자는 앞 free_months 만 면제', () => {
+    assert.strictEqual(isFreeMonth(PARTIAL, 1), true);
+    assert.strictEqual(isFreeMonth(PARTIAL, 3), true);
+    assert.strictEqual(isFreeMonth(PARTIAL, 4), false);
+    assert.strictEqual(isFreeMonth(PARTIAL, 12), false);
+  });
+});
+
+describe('입력 검증', () => {
+  const base = { totalAmount: 120000, months: 12, policy: FREE, startBillingMonth: '2026-08' };
+  test('months 2 미만 거부', () => {
+    assert.throws(() => computeSchedule({ ...base, months: 1 }));
+    assert.doesNotThrow(() => computeSchedule({ ...base, months: 2 }));
+  });
+  test('금액이 정수가 아니면 거부', () => {
+    assert.throws(() => computeSchedule({ ...base, totalAmount: 1000.5 }));
+    assert.throws(() => computeSchedule({ ...base, totalAmount: 0 }));
+    assert.throws(() => computeSchedule({ ...base, totalAmount: -1000 }));
+  });
+  test('정책이 없으면 거부', () => {
+    assert.throws(() => computeSchedule({ ...base, policy: null }));
+  });
+});
+
+describe('무이자', () => {
+  const s = computeSchedule({ totalAmount: 1200000, months: 12, policy: FREE, startBillingMonth: '2026-08' });
+
+  test('회차 수가 개월수와 같다', () => assert.strictEqual(s.length, 12));
+  test('이자가 전부 0', () => assert.ok(s.every((r) => r.interest === 0)));
+  test('원금 합계가 총액과 정확히 일치', () => {
+    assert.strictEqual(scheduleTotals(s).principal, 1200000);
+  });
+  test('마지막 잔액이 0', () => assert.strictEqual(s[s.length - 1].remaining_principal, 0));
+  test('청구월이 순차로 증가', () => {
+    assert.strictEqual(s[0].billing_month, '2026-08');
+    assert.strictEqual(s[11].billing_month, '2027-07');
+  });
+});
+
+describe('유이자 — 잔액 기준', () => {
+  const s = computeSchedule({ totalAmount: 1200000, months: 12, policy: PAID, startBillingMonth: '2026-08' });
+
+  test('원금 합계가 총액과 정확히 일치', () => {
+    assert.strictEqual(scheduleTotals(s).principal, 1200000);
+  });
+
+  test('이자가 회차마다 줄어든다 — 잔액 기준이라는 뜻', () => {
+    for (let i = 1; i < s.length; i += 1) {
+      assert.ok(s[i].interest < s[i - 1].interest,
+        `${i + 1}회차 이자(${s[i].interest})가 이전(${s[i - 1].interest})보다 작아야 한다`);
+    }
+  });
+
+  test('첫 회차 이자 = 총액 × 월이자율', () => {
+    assert.strictEqual(s[0].interest, Math.floor(1200000 * (15.9 / 12 / 100)));
+  });
+
+  test('총액 기준이 아니다 — 모든 이자가 같으면 실패', () => {
+    const allSame = s.every((r) => r.interest === s[0].interest);
+    assert.strictEqual(allSame, false);
+  });
+
+  test('이자 합계가 0보다 크다', () => assert.ok(scheduleTotals(s).interest > 0));
+});
+
+describe('부분무이자', () => {
+  const s = computeSchedule({ totalAmount: 1200000, months: 12, policy: PARTIAL, startBillingMonth: '2026-08' });
+
+  test('앞 3회차 이자 0', () => {
+    for (let i = 0; i < 3; i += 1) assert.strictEqual(s[i].interest, 0, `${i + 1}회차`);
+  });
+  test('4회차부터 이자 발생', () => assert.ok(s[3].interest > 0));
+  test('원금 합계가 총액과 정확히 일치', () => {
+    assert.strictEqual(scheduleTotals(s).principal, 1200000);
+  });
+  test('유이자보다 총 이자가 적다', () => {
+    const paid = computeSchedule({ totalAmount: 1200000, months: 12, policy: PAID, startBillingMonth: '2026-08' });
+    assert.ok(scheduleTotals(s).interest < scheduleTotals(paid).interest);
+  });
+
+  test('free_months 경계 — 0이면 유이자와 같다', () => {
+    const z = computeSchedule({
+      totalAmount: 1200000, months: 12, startBillingMonth: '2026-08',
+      policy: { policy_type: '부분무이자', annual_rate: 15.9, free_months: 0 },
+    });
+    const paid = computeSchedule({ totalAmount: 1200000, months: 12, policy: PAID, startBillingMonth: '2026-08' });
+    assert.strictEqual(scheduleTotals(z).interest, scheduleTotals(paid).interest);
+  });
+
+  test('free_months = months-1 이면 마지막 회차만 이자', () => {
+    const n = computeSchedule({
+      totalAmount: 1200000, months: 12, startBillingMonth: '2026-08',
+      policy: { policy_type: '부분무이자', annual_rate: 15.9, free_months: 11 },
+    });
+    assert.ok(n.slice(0, 11).every((r) => r.interest === 0));
+    assert.ok(n[11].interest > 0);
+  });
+});
+
+describe('끝수 처리', () => {
+  test('나누어떨어지지 않아도 원금 합계가 정확하다', () => {
+    // 1,000,000 / 7 = 142857.14...
+    const s = computeSchedule({ totalAmount: 1000000, months: 7, policy: FREE, startBillingMonth: '2026-08' });
+    assert.strictEqual(scheduleTotals(s).principal, 1000000);
+    assert.strictEqual(s[s.length - 1].remaining_principal, 0);
+  });
+
+  test('끝수는 마지막 회차에 몰린다', () => {
+    const s = computeSchedule({ totalAmount: 1000000, months: 7, policy: FREE, startBillingMonth: '2026-08' });
+    const base = Math.floor(1000000 / 7);
+    assert.ok(s.slice(0, 6).every((r) => r.principal === base));
+    assert.ok(s[6].principal > base);
+  });
+
+  test('여러 금액·개월수 조합에서 합계가 항상 일치', () => {
+    for (const amount of [1, 999, 100000, 1234567, 9999999]) {
+      for (const months of [2, 3, 7, 12, 24, 36]) {
+        const s = computeSchedule({ totalAmount: amount, months, policy: PAID, startBillingMonth: '2026-08' });
+        assert.strictEqual(scheduleTotals(s).principal, amount, `${amount}원 ${months}개월`);
+        assert.strictEqual(s[s.length - 1].remaining_principal, 0, `${amount}원 ${months}개월 잔액`);
+      }
+    }
+  });
+});
+
+describe('조기 완납 (#269 확정 요건)', () => {
+  const args = { totalAmount: 1200000, months: 12, policy: PAID, startBillingMonth: '2026-08' };
+
+  test('완납월까지만 회차가 생긴다', () => {
+    const s = computeSchedule({ ...args, paidOffOn: '2026-10-15' });
+    assert.strictEqual(s.length, 3);
+    assert.strictEqual(s[2].billing_month, '2026-10');
+  });
+
+  test('완납 회차가 잔여 원금 전액을 싣는다', () => {
+    const s = computeSchedule({ ...args, paidOffOn: '2026-10-15' });
+    assert.strictEqual(scheduleTotals(s).principal, 1200000);
+    assert.strictEqual(s[2].remaining_principal, 0);
+  });
+
+  test('완납하면 총 이자가 정상 진행보다 작다', () => {
+    const full = computeSchedule(args);
+    const early = computeSchedule({ ...args, paidOffOn: '2026-10-15' });
+    assert.ok(scheduleTotals(early).interest < scheduleTotals(full).interest,
+      '완납 이자가 더 작아야 한다 — 자르기만 하면 이 단언이 통과하지 않는다');
+  });
+
+  test('완납 이후 회차의 이자는 아예 발생하지 않는다', () => {
+    const early = computeSchedule({ ...args, paidOffOn: '2026-10-15' });
+    assert.ok(early.every((r) => r.billing_month <= '2026-10'));
+  });
+
+  test('첫 회차 완납', () => {
+    const s = computeSchedule({ ...args, paidOffOn: '2026-08-20' });
+    assert.strictEqual(s.length, 1);
+    assert.strictEqual(s[0].principal, 1200000);
+    assert.strictEqual(s[0].remaining_principal, 0);
+  });
+
+  test('완납일이 시작 전이면 회차가 없다', () => {
+    const s = computeSchedule({ ...args, paidOffOn: '2026-07-01' });
+    assert.strictEqual(s.length, 0);
+  });
+
+  test('완납일이 종료 후면 정상 진행과 같다', () => {
+    const full = computeSchedule(args);
+    const late = computeSchedule({ ...args, paidOffOn: '2099-01-01' });
+    assert.deepStrictEqual(late, full);
+  });
+
+  test('무이자 완납은 이자가 계속 0', () => {
+    const s = computeSchedule({ ...args, policy: FREE, paidOffOn: '2026-10-15' });
+    assert.ok(s.every((r) => r.interest === 0));
+    assert.strictEqual(scheduleTotals(s).principal, 1200000);
+  });
+});
