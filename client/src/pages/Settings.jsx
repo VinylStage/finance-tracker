@@ -4,7 +4,6 @@ import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import CategoryBadge from '../components/CategoryBadge';
-import { categoryStyle } from '../lib/categoryStyle';
 import { TrustPanel, LastExportNote } from '../components/TrustPanel';
 import { recordExport } from '../lib/backupStatus';
 import { resetOnboarding } from '../lib/onboarding';
@@ -302,7 +301,7 @@ function CategorySection({ categories, onChanged }) {
           <div>
             <label htmlFor="category-major-type" className="block text-xs text-caption mb-1">유형</label>
             <select id="category-major-type" className={inp} value={form.major_type} onChange={e => setForm(f => ({ ...f, major_type: e.target.value }))}>
-              {CATEGORY_TYPES.map(t => <option key={t} value={t}>{categoryStyle(t).icon} {t}</option>)}
+              {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div>
@@ -338,7 +337,7 @@ function CategorySection({ categories, onChanged }) {
                         value={editForm.major_type}
                         onChange={e => setEditForm(f => ({ ...f, major_type: e.target.value }))}
                       >
-                        {CATEGORY_TYPES.map(t => <option key={t} value={t}>{categoryStyle(t).icon} {t}</option>)}
+                        {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </td>
                     <td className="px-3 py-2">

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { localYMD, localYearMonth } from '../lib/date';
-import { categoryStyle } from '../lib/categoryStyle';
 import { remainingBudget, toSpentMap } from '../lib/quickEntry';
 
 // 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
@@ -142,8 +141,11 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           </label>
           <select id="tx-category" className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)} required>
             <option value="">선택...</option>
+            {/* optgroup label 은 문자열만 받는다. 아이콘이 이모지에서 SVG 키로
+                바뀐 뒤 이 자리에 키가 그대로 노출됐다(`payments 수입`). 아이콘은
+                대분류를 나타내는 보조 채널이고 이름이 이미 함께 나오므로 뺀다. */}
             {majorTypes.map(mt => (
-              <optgroup key={mt} label={`${categoryStyle(mt).icon} ${mt}`}>
+              <optgroup key={mt} label={mt}>
                 {categories.filter(c => c.major_type === mt).map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
