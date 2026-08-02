@@ -33,6 +33,7 @@ app.use('/api/stocks',       require('./routes/stocks'));
 app.use('/api/csv-import',   require('./routes/csvImport'));
 app.use('/api/card-import',  require('./routes/cardImport'));
 app.use('/api/guide',        require('./routes/guide'));
+app.use('/api/card-policies', require('./routes/cardPolicies'));
 app.use('/api/data-integrity', require('./routes/dataIntegrity'));
 
 // Health check
