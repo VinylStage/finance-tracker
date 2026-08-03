@@ -105,8 +105,17 @@ function computeSchedule({ totalAmount, months, policy, startBillingMonth, paidO
   }
 
   const monthlyRate = (policy.annual_rate || 0) / 12 / 100;
-  // 원 단위 절사. 남는 끝수는 마지막 회차 원금에 몰아준다.
+  // 원 단위 절사. 남는 끝수는 **첫 회차** 원금에 얹는다.
+  //
+  // 카드사 공시 원문: "월납입액 = 할부 이용대금 / 할부기간(월단위)
+  // (단, 1원 미만의 금액은 첫 회의 월납입액에 포함)"
+  // — 우리카드 상품공시실, 신용카드 개인회원 표준약관 기반이라 카드사 공통이다.
+  //
+  // 처음에는 마지막 회차에 몰아줬는데 실제 관행과 반대였다(#316 조사에서 확인).
+  // 1~3원짜리 차이지만 방향이 틀리면 사용자 청구서와 회차마다 어긋난 채로 쌓이고,
+  // 무엇보다 이 값은 파생 거래(#269)로 실제 transactions 행이 된다.
   const basePrincipal = Math.floor(totalAmount / months);
+  const remainder = totalAmount - basePrincipal * months;
 
   const rows = [];
   let remaining = totalAmount;
@@ -125,7 +134,11 @@ function computeSchedule({ totalAmount, months, policy, startBillingMonth, paidO
     const interest = isFreeMonth(policy, seq) ? 0 : Math.floor(remaining * monthlyRate);
 
     // 마지막 회차이거나 이번 달에 완납하면 잔여 원금을 전부 싣는다.
-    const principal = (isLast || payoffHere) ? remaining : basePrincipal;
+    // 그 외에는 균등액, 단 첫 회차에만 끝수를 얹는다.
+    // (첫 회차가 곧 마지막인 경우는 없다 — months >= 2 를 위에서 강제한다)
+    const principal = (isLast || payoffHere)
+      ? remaining
+      : basePrincipal + (seq === 1 ? remainder : 0);
 
     remaining -= principal;
     rows.push({

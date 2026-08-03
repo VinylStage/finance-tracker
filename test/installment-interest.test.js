@@ -152,11 +152,33 @@ describe('끝수 처리', () => {
     assert.strictEqual(s[s.length - 1].remaining_principal, 0);
   });
 
-  test('끝수는 마지막 회차에 몰린다', () => {
+  test('끝수는 첫 회차에 얹는다', () => {
+    // 카드사 공시: "월납입액 = 할부 이용대금 / 할부기간(월단위)
+    // (단, 1원 미만의 금액은 첫 회의 월납입액에 포함)" — 표준약관 기반(#316).
+    // 처음에는 마지막 회차에 몰아줬는데 실제 관행과 반대였다.
     const s = computeSchedule({ totalAmount: 1000000, months: 7, policy: FREE, startBillingMonth: '2026-08' });
     const base = Math.floor(1000000 / 7);
-    assert.ok(s.slice(0, 6).every((r) => r.principal === base));
-    assert.ok(s[6].principal > base);
+    const remainder = 1000000 - base * 7;
+
+    assert.ok(remainder > 0, '끝수가 없는 조합이면 이 테스트가 아무것도 검증하지 못한다');
+    assert.strictEqual(s[0].principal, base + remainder, '첫 회차가 끝수를 안 받았다');
+    assert.ok(s.slice(1).every((r) => r.principal === base), '나머지 회차는 균등해야 한다');
+  });
+
+  test('끝수가 0이면 전 회차가 균등하다', () => {
+    // 나누어떨어지는 경우까지 첫 회차만 튀면 안 된다.
+    const s = computeSchedule({ totalAmount: 133713, months: 3, policy: FREE, startBillingMonth: '2026-08' });
+    assert.deepStrictEqual(s.map((r) => r.principal), [44571, 44571, 44571]);
+  });
+
+  test('실거래 사례 — 끝수가 첫 회차로 간다', () => {
+    // 실사용 DB 의 할부 2건. 끝수가 1원·3원이라 방향이 틀려도 합계 검사로는
+    // 안 걸린다. 회차별로 못 박아 둔다.
+    const y = computeSchedule({ totalAmount: 232897, months: 6, policy: FREE, startBillingMonth: '2026-08' });
+    assert.deepStrictEqual(y.map((r) => r.principal), [38817, 38816, 38816, 38816, 38816, 38816]);
+
+    const k = computeSchedule({ totalAmount: 283823, months: 5, policy: FREE, startBillingMonth: '2026-07' });
+    assert.deepStrictEqual(k.map((r) => r.principal), [56767, 56764, 56764, 56764, 56764]);
   });
 
   test('여러 금액·개월수 조합에서 합계가 항상 일치', () => {
