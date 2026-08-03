@@ -7,7 +7,7 @@ const path = require('node:path');
 const Database = require('better-sqlite3');
 
 const base = require('../migrations/004-add-recurring-rules');
-const migration = require('../migrations/012-recurring-freq-and-occurrences');
+const migration = require('../migrations/013-recurring-freq-and-occurrences');
 
 let dir, db;
 
