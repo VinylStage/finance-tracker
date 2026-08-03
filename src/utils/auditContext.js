@@ -24,12 +24,40 @@ function newActionId() {
 
 // 요청 하나가 만드는 모든 로그 행이 같은 action_id 를 갖는다. 실행취소가
 // 되돌리는 단위가 이것이다(#297).
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 function auditContext(req, res, next) {
   current = { actor: 'user', actionId: newActionId(), label: null };
+  // 조회 요청은 대부분 쓰기가 없다. 매번 갱신하면 GET 마다 쓰기가 한 번 는다.
+  // 부작용 있는 GET(#205)은 runAs 로 감싸므로 거기서 동기화된다.
+  if (MUTATING.has(req.method)) syncAuditContext();
   // 요청이 끝나면 기본값으로 되돌린다. 다음 요청이 앞선 요청의 라벨을 물려받으면
   // 감사 이력에 엉뚱한 작업 이름이 남는다.
   res.on('finish', () => { current = { ...DEFAULT }; });
   next();
+}
+
+// 트리거는 JS 상태를 볼 수 없다. 단일 행 테이블에 현재 컨텍스트를 밀어넣어야
+// 트리거가 actor/action_id 를 읽을 수 있다(#299).
+//
+// 쓰기가 없는 요청까지 매번 갱신하면 GET 마다 쓰기가 한 번 늘어난다. 호출부가
+// 쓰기 직전에만 부르도록 두고, 미들웨어는 변경 메서드에서만 부른다.
+let syncTarget = null;
+
+function bindAuditDb(db) {
+  syncTarget = db;
+}
+
+function syncAuditContext() {
+  if (!syncTarget) return;
+  const ctx = getAuditContext();
+  try {
+    syncTarget.prepare(
+      `UPDATE _audit_context SET actor=?, action_id=?, action_label=? WHERE id=1`
+    ).run(ctx.actor, ctx.actionId, ctx.label);
+  } catch {
+    // 아직 마이그레이션 전이거나 테이블이 없는 경로에서도 요청이 실패하면 안 된다.
+  }
 }
 
 function getAuditContext() {
@@ -49,10 +77,13 @@ function runAs(actor, fn) {
   // 시스템 작업은 자체 action_id 를 갖는다. 사용자 작업과 한 그룹으로 묶이면
   // 되돌리기가 둘을 같이 되돌린다.
   current = { actor, actionId: newActionId(), label: prev.label };
+  syncAuditContext();
   try {
     return fn();
   } finally {
     current = prev;
+    // 복원도 알려야 한다. 안 하면 그 뒤 쓰기가 시스템 컨텍스트로 찍힌다.
+    syncAuditContext();
   }
 }
 
@@ -60,6 +91,7 @@ function runAs(actor, fn) {
 // #296 이 트리거 캡처를 고른 이유다.
 function setAuditLabel(label) {
   current = { ...current, label };
+  syncAuditContext();
 }
 
 // 테스트에서 상태를 초기화한다. 프로덕션 경로에서는 쓰지 않는다.
@@ -67,4 +99,7 @@ function resetAuditContext() {
   current = { ...DEFAULT };
 }
 
-module.exports = { auditContext, getAuditContext, runAs, setAuditLabel, resetAuditContext };
+module.exports = {
+  auditContext, getAuditContext, runAs, setAuditLabel, resetAuditContext,
+  bindAuditDb, syncAuditContext,
+};
