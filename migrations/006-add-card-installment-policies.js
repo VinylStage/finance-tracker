@@ -11,6 +11,11 @@
 //
 // 부분무이자는 "12개월 중 앞 3개월 무이자" 를 months=12, policy_type='부분무이자',
 // free_months=3, annual_rate=<나머지 9개월 이자율> 로 적는다.
+//
+// ※ 이 전제는 틀렸다. 실제 카드사는 앞 회차를 고객이 부담하고 뒤쪽을 면제한다
+//    ("6개월 부분무이자(4회차부터 면제)"). migrations/009 가 free_months 를
+//    free_from_sequence 로 옮기며 바로잡았다. 적용된 마이그레이션이라 SQL 은
+//    그대로 두고 기록만 남긴다.
 function up(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS card_installment_policies (

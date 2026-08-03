@@ -25,7 +25,7 @@ const CARDS = [
 
 const policyRow = (months, over = {}) => ({
   id: months, payment_method_id: 1, months,
-  policy_type: '무이자', annual_rate: 0, free_months: 0,
+  policy_type: '무이자', annual_rate: 0, free_from_sequence: 0,
   effective_from: '2026-01-01', effective_to: null, memo: null,
   ...over,
 });
@@ -99,8 +99,8 @@ describe('목록 표시', () => {
   });
 
   it('적용 기간과 정책 내용을 함께 보여준다', async () => {
-    setup([policyRow(2, { policy_type: '부분무이자', annual_rate: 15.9, free_months: 2 })]);
-    expect(await screen.findByText(/앞 2회차 무이자, 이후 연 15.9%/)).toBeTruthy();
+    setup([policyRow(2, { policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 4 })]);
+    expect(await screen.findByText(/4회차부터 면제, 그 전은 연 15.9%/)).toBeTruthy();
     expect(screen.getByText('2026-01-01부터')).toBeTruthy();
   });
 
@@ -108,7 +108,7 @@ describe('목록 표시', () => {
     const { container } = setup([policyRow(2), policyRow(3)]);
     await screen.findByText('2~3개월');
     expect(container.textContent).not.toMatch(
-      /policy_type|annual_rate|free_months|effective_from|payment_method_id|months/
+      /policy_type|annual_rate|free_from_sequence|effective_from|payment_method_id|months/
     );
   });
 });
@@ -119,7 +119,7 @@ describe('정책 종류별 입력 노출', () => {
     setup();
     await user.click(await screen.findByText('+ 구간 추가'));
     expect(screen.queryByLabelText('연 이자율(%)')).toBeNull();
-    expect(screen.queryByLabelText('무이자 개월')).toBeNull();
+    expect(screen.queryByLabelText('면제 시작 회차')).toBeNull();
   });
 
   it('유이자면 이자율만 받는다', async () => {
@@ -128,7 +128,7 @@ describe('정책 종류별 입력 노출', () => {
     await user.click(await screen.findByText('+ 구간 추가'));
     await user.selectOptions(screen.getByLabelText('정책 종류'), '유이자');
     expect(screen.getByLabelText('연 이자율(%)')).toBeTruthy();
-    expect(screen.queryByLabelText('무이자 개월')).toBeNull();
+    expect(screen.queryByLabelText('면제 시작 회차')).toBeNull();
   });
 
   it('부분무이자면 둘 다 받는다', async () => {
@@ -137,7 +137,7 @@ describe('정책 종류별 입력 노출', () => {
     await user.click(await screen.findByText('+ 구간 추가'));
     await user.selectOptions(screen.getByLabelText('정책 종류'), '부분무이자');
     expect(screen.getByLabelText('연 이자율(%)')).toBeTruthy();
-    expect(screen.getByLabelText('무이자 개월')).toBeTruthy();
+    expect(screen.getByLabelText('면제 시작 회차')).toBeTruthy();
   });
 });
 

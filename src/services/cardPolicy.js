@@ -44,19 +44,24 @@ function validatePolicy(p) {
   if (p.annual_rate < 0 || p.annual_rate > 100) {
     return '이자율은 0에서 100 사이로 입력해 주세요.';
   }
-  if (p.free_months < 0 || p.free_months >= p.months) {
-    return '무이자 개월수는 전체 개월수보다 작아야 합니다.';
-  }
   // 종류와 값이 서로 어긋나는 입력을 막는다. 무이자인데 이자율이 있으면
   // 어느 쪽이 사용자의 의도인지 알 수 없다.
   if (p.policy_type === '무이자' && p.annual_rate > 0) {
     return '무이자 정책에는 이자율을 넣을 수 없습니다.';
   }
-  if (p.policy_type === '부분무이자' && p.free_months === 0) {
-    return '부분무이자는 면제 개월수가 1 이상이어야 합니다.';
+  // 부분무이자는 "몇 회차부터 면제되는가" 로 받는다(카드사 안내 표기).
+  // 1 이면 전 회차 면제라 무이자와 같아지고, 개월수를 넘으면 면제가 하나도 없다 —
+  // 둘 다 사용자가 종류를 잘못 고른 것이다.
+  if (p.policy_type === '부분무이자') {
+    if (!Number.isInteger(p.free_from_sequence) || p.free_from_sequence < 2) {
+      return '부분무이자는 수수료가 면제되는 시작 회차를 2회차 이상으로 넣어 주세요. 전 회차가 면제라면 무이자를 선택해 주세요.';
+    }
+    if (p.free_from_sequence > p.months) {
+      return '면제 시작 회차가 할부 개월수보다 뒤입니다. 면제되는 회차가 하나도 없습니다.';
+    }
   }
-  if (p.policy_type === '유이자' && p.free_months > 0) {
-    return '유이자 정책에는 면제 개월수를 넣을 수 없습니다.';
+  if (p.policy_type !== '부분무이자' && p.free_from_sequence > 0) {
+    return '면제 시작 회차는 부분무이자에만 넣을 수 있습니다.';
   }
   return null;
 }
@@ -76,7 +81,8 @@ function expandRange(range) {
       months: m,
       policy_type: range.policy_type,
       annual_rate: range.annual_rate === undefined || range.annual_rate === '' ? 0 : Number(range.annual_rate),
-      free_months: range.free_months === undefined || range.free_months === '' ? 0 : Number(range.free_months),
+      free_from_sequence: range.free_from_sequence === undefined || range.free_from_sequence === ''
+        ? 0 : Number(range.free_from_sequence),
       effective_from: range.effective_from,
       effective_to: range.effective_to || null,
       memo: range.memo || null,
@@ -103,11 +109,11 @@ function validateRange(range) {
   if (to > RANGE_MONTH_MAX) {
     return `할부 개월수는 ${RANGE_MONTH_MAX}개월까지 입력할 수 있습니다.`;
   }
-  // 부분무이자의 면제 개월수는 구간에서 가장 짧은 개월수보다도 작아야 한다.
-  // 그렇지 않으면 구간 앞쪽 몇 개만 조용히 거부된다.
-  const free = Number(range.free_months || 0);
-  if (range.policy_type === '부분무이자' && free >= from) {
-    return '무이자 개월수는 구간의 시작 개월수보다 작아야 합니다.';
+  // 면제 시작 회차는 구간에서 가장 짧은 개월수 안에 들어와야 한다. 그렇지
+  // 않으면 구간 앞쪽 몇 개만 조용히 거부된다.
+  const freeFrom = Number(range.free_from_sequence || 0);
+  if (range.policy_type === '부분무이자' && freeFrom > from) {
+    return '면제 시작 회차가 구간의 시작 개월수보다 뒤입니다. 짧은 개월수에는 면제되는 회차가 없습니다.';
   }
   return null;
 }

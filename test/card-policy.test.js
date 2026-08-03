@@ -10,6 +10,7 @@ const {
   isEffectiveOn, overlaps, validatePolicy, policyAt, findOverlapping,
 } = require('../src/services/cardPolicy');
 const migration = require('../migrations/006-add-card-installment-policies');
+const migrationFreeFrom = require('../migrations/009-installment-free-from-sequence');
 const { INSTALLMENT_POLICY_TYPES } = require('../src/constants');
 
 // 실거래 DB 를 절대 건드리지 않는다. 임시 디렉터리에 격리 DB 를 만든다.
@@ -26,6 +27,7 @@ before(() => {
     INSERT INTO payment_methods (id, name, type) VALUES (1, '신용카드', '신용'), (2, '체크카드', '체크');
   `);
   migration.up(db);
+  migrationFreeFrom.up(db);
 });
 
 after(() => {
@@ -36,10 +38,10 @@ after(() => {
 function insert(p) {
   return db.prepare(`
     INSERT INTO card_installment_policies
-      (payment_method_id, months, policy_type, annual_rate, free_months, effective_from, effective_to)
+      (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from, effective_to)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(p.payment_method_id, p.months, p.policy_type, p.annual_rate ?? 0,
-         p.free_months ?? 0, p.effective_from, p.effective_to ?? null);
+         p.free_from_sequence ?? 0, p.effective_from, p.effective_to ?? null);
 }
 
 describe('마이그레이션', () => {
@@ -88,7 +90,7 @@ describe('overlaps — 기간 겹침', () => {
 describe('validatePolicy', () => {
   const ok = {
     payment_method_id: 1, months: 12, policy_type: '유이자',
-    annual_rate: 15.9, free_months: 0, effective_from: '2026-01-01', effective_to: null,
+    annual_rate: 15.9, free_from_sequence: 0, effective_from: '2026-01-01', effective_to: null,
   };
 
   test('정상 입력은 통과', () => assert.strictEqual(validatePolicy(ok), null));
@@ -118,15 +120,27 @@ describe('validatePolicy', () => {
     assert.strictEqual(validatePolicy({ ...ok, annual_rate: 100 }), null);
   });
 
-  test('면제 개월수는 전체 개월수보다 작아야 한다', () => {
-    assert.ok(validatePolicy({ ...ok, policy_type: '부분무이자', free_months: 12 }));
-    assert.strictEqual(validatePolicy({ ...ok, policy_type: '부분무이자', free_months: 11 }), null);
+  test('면제 시작 회차는 개월수 안에 들어와야 한다', () => {
+    // 13회차부터 면제인데 12개월 할부면 면제되는 회차가 하나도 없다.
+    assert.ok(validatePolicy({ ...ok, policy_type: '부분무이자', free_from_sequence: 13 }));
+    assert.strictEqual(validatePolicy({ ...ok, policy_type: '부분무이자', free_from_sequence: 12 }), null);
+  });
+
+  test('1회차부터 면제는 무이자와 같으므로 거부', () => {
+    // 종류를 잘못 고른 것이다. 무이자로 넣어야 이자율 검증도 함께 걸린다.
+    assert.ok(validatePolicy({ ...ok, policy_type: '부분무이자', free_from_sequence: 1 }));
   });
 
   test('종류와 값이 어긋나면 거부', () => {
     assert.ok(validatePolicy({ ...ok, policy_type: '무이자', annual_rate: 5 }));
-    assert.ok(validatePolicy({ ...ok, policy_type: '부분무이자', free_months: 0 }));
-    assert.ok(validatePolicy({ ...ok, policy_type: '유이자', free_months: 3 }));
+    assert.ok(validatePolicy({ ...ok, policy_type: '부분무이자', free_from_sequence: 0 }));
+    assert.ok(validatePolicy({ ...ok, policy_type: '유이자', free_from_sequence: 3 }));
+  });
+
+  test('부분무이자 정상 입력', () => {
+    // 카드사 안내 "12개월 부분무이자(6회차부터 면제)" 를 그대로 옮긴 형태.
+    assert.strictEqual(
+      validatePolicy({ ...ok, policy_type: '부분무이자', free_from_sequence: 6 }), null);
   });
 
   test('정본 상수가 세 종류를 갖는다', () => {

@@ -410,7 +410,7 @@
   {
     "data": {
       "installment_id": "integer",
-      "policy_applied": { "policy_type": "string", "annual_rate": "number", "free_months": "number" },
+      "policy_applied": { "policy_type": "string", "annual_rate": "number", "free_from_sequence": "number" },
       "delete_count": "number",
       "create_count": "number",
       "before_total": "number",
@@ -697,6 +697,10 @@
 카드사 할부 정책 마스터(#266). 저장은 개월수 하나당 한 행이고, 화면은 구간으로
 입력·표시한다(#271).
 
+**부분무이자는 뒤쪽이 면제된다.** 카드사 안내가 "6개월 부분무이자(4회차부터 면제)"
+형태이고, 앞 회차일수록 할부잔액이 커서 수수료도 크기 때문에 비싼 구간을 고객이
+부담한다. `free_from_sequence` 가 그 "면제 시작 회차" 다.
+
 `effective_from` / `effective_to` 로 시점별 정책을 남긴다. 덮어쓰기로 관리하면
 과거 할부의 이자 계산이 소급해서 바뀐다.
 
@@ -722,7 +726,9 @@
   - `from_month` / `to_month` (body, required): 개월수 구간. 2 이상 60 이하
   - `policy_type` (body, required): `무이자` / `부분무이자` / `유이자`
   - `annual_rate` (body, optional, default 0)
-  - `free_months` (body, optional, default 0)
+  - `free_from_sequence` (body, 부분무이자면 required): 수수료가 **면제되기 시작하는 회차**.
+    카드사 안내의 "4회차부터 면제" 를 그대로 넣는다. 그 앞 회차는 고객 부담이다.
+    2 이상이어야 하고 구간의 시작 개월수를 넘을 수 없다
   - `effective_from` (body, required) / `effective_to` (body, optional)
   - `memo` (body, optional)
 - **응답 스키마**: `{ "ok": true, "created": "number" }`
@@ -737,7 +743,7 @@
 개월수 1건 등록. 구간 입력 화면은 `/range` 를 쓴다.
 
 - **요청 파라미터**: `payment_method_id`, `months`, `policy_type`, `effective_from` (required),
-  `annual_rate`, `free_months`, `effective_to`, `memo` (optional)
+  `annual_rate`, `free_from_sequence`, `effective_to`, `memo` (optional)
 - **응답 스키마**: `{ "id": "integer", "ok": true }`
 - **에러 케이스**: 400 (검증 실패), 409 (기간 겹침)
 

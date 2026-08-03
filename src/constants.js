@@ -10,7 +10,8 @@ const PAYMENT_STYLES = ['일시불', '할부', '리볼빙', '해당없음'];
 const MAJOR_TYPES = ['수입', '고정지출', '변동필수', '선택지출', '저축', '부채상환', '미분류'];
 
 // card_installment_policies.policy_type 허용값의 정본(#266).
-// 부분무이자는 앞쪽 free_months 회차만 이자가 면제되고 그 뒤로는 유이자와 같다.
+// 부분무이자는 free_from_sequence 회차부터 이자가 면제되고 그 앞은 고객 부담이다.
+// 방향에 주의 — 카드사 안내가 "6개월 부분무이자(4회차부터 면제)" 형태다.
 const INSTALLMENT_POLICY_TYPES = ['무이자', '부분무이자', '유이자'];
 
 // transactions.origin 허용값의 정본(#268).

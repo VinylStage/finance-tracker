@@ -31,11 +31,20 @@ function addMonths(yearMonth, n) {
 
 // 그 회차가 이자 면제 구간인가.
 //   무이자      : 전 회차 면제
-//   부분무이자  : 앞 free_months 회차 면제
+//   부분무이자  : free_from_sequence 회차부터 면제. 그 앞은 고객 부담
 //   유이자      : 면제 없음
+//
+// 부분무이자의 방향에 주의한다. 카드사 안내는 "6개월 부분무이자(4회차부터 면제)"
+// 처럼 **뒤쪽**을 면제한다 — 앞 회차일수록 할부잔액이 커서 수수료도 크기 때문에
+// 비싼 구간을 고객이 부담한다. 처음엔 이걸 반대로 잡아 이자가 실제의 40% 만
+// 계산됐다(#267 수정, 근거는 migrations/009 주석).
 function isFreeMonth(policy, sequence) {
   if (policy.policy_type === '무이자') return true;
-  if (policy.policy_type === '부분무이자') return sequence <= policy.free_months;
+  if (policy.policy_type === '부분무이자') {
+    // 0 이면 면제 시작 회차가 없다는 뜻이라 전 회차 유이자로 본다.
+    const from = policy.free_from_sequence || 0;
+    return from > 0 && sequence >= from;
+  }
   return false;
 }
 

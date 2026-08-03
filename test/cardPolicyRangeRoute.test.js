@@ -65,7 +65,7 @@ describe('A. 구간 펼치기 (순수 함수)', () => {
     });
     assert.deepStrictEqual(rows.map((r) => r.months), [2, 3, 4]);
     assert.ok(rows.every((r) => r.policy_type === '무이자'));
-    assert.ok(rows.every((r) => r.annual_rate === 0 && r.free_months === 0));
+    assert.ok(rows.every((r) => r.annual_rate === 0 && r.free_from_sequence === 0));
   });
 
   test('A-2. 한 달짜리 구간도 된다', () => {
@@ -80,10 +80,10 @@ describe('A. 구간 펼치기 (순수 함수)', () => {
   test('A-3. 빈 문자열은 0 으로 본다 — 감춘 입력이 그대로 넘어와도 깨지지 않는다', () => {
     const rows = expandRange({
       payment_method_id: 1, from_month: 2, to_month: 2,
-      policy_type: '무이자', annual_rate: '', free_months: '', effective_from: '2026-01-01',
+      policy_type: '무이자', annual_rate: '', free_from_sequence: '', effective_from: '2026-01-01',
     });
     assert.strictEqual(rows[0].annual_rate, 0);
-    assert.strictEqual(rows[0].free_months, 0);
+    assert.strictEqual(rows[0].free_from_sequence, 0);
   });
 });
 
@@ -94,13 +94,14 @@ describe('B. 구간 검증', () => {
     { name: '60개월 초과 거부', input: { from_month: 2, to_month: 61 }, fails: true },
     { name: '정상 구간 통과', input: { from_month: 2, to_month: 12 }, fails: false },
     {
-      name: '면제 개월이 시작 개월 이상이면 거부',
-      input: { from_month: 3, to_month: 12, policy_type: '부분무이자', free_months: 3 },
+      name: '면제 시작 회차가 구간 시작 개월수보다 뒤면 거부',
+      // 4회차부터 면제인데 3개월 할부에는 4회차가 없다.
+      input: { from_month: 3, to_month: 12, policy_type: '부분무이자', free_from_sequence: 4 },
       fails: true,
     },
     {
-      name: '면제 개월이 시작 개월보다 작으면 통과',
-      input: { from_month: 4, to_month: 12, policy_type: '부분무이자', free_months: 3 },
+      name: '면제 시작 회차가 구간 안에 들어오면 통과',
+      input: { from_month: 4, to_month: 12, policy_type: '부분무이자', free_from_sequence: 4 },
       fails: false,
     },
   ];
@@ -111,7 +112,7 @@ describe('B. 구간 검증', () => {
       if (c.fails) {
         assert.ok(result, '거부돼야 하는데 통과했다');
         // 사용자에게 그대로 보이는 문구다. 내부 필드명이 있으면 안 된다(#231).
-        for (const bad of ['from_month', 'to_month', 'free_months', 'policy_type']) {
+        for (const bad of ['from_month', 'to_month', 'free_from_sequence', 'policy_type']) {
           assert.ok(!result.includes(bad), `문구에 내부 필드명 노출: ${result}`);
         }
       } else {
@@ -164,7 +165,7 @@ describe('C. 저장', () => {
       method: 'POST',
       body: JSON.stringify({
         payment_method_id: id, from_month: 4, to_month: 6,
-        policy_type: '부분무이자', annual_rate: 15.9, free_months: 2,
+        policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 3,
         effective_from: '2026-01-01', effective_to: '2026-12-31',
       }),
     });

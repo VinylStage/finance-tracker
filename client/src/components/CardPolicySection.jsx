@@ -22,7 +22,7 @@ const EMPTY_FORM = {
   to_month: '3',
   policy_type: '무이자',
   annual_rate: '',
-  free_months: '',
+  free_from_sequence: '',
   effective_from: '',
   effective_to: '',
   memo: '',
@@ -79,7 +79,7 @@ export default function CardPolicySection({ paymentMethods }) {
         // 감춘 입력은 값을 보내지 않는다. 종류를 바꾸기 전에 적어둔 값이
         // 남아 있으면 서버가 "무이자에는 이자율을 넣을 수 없습니다" 로 막는다.
         annual_rate: visible.rate ? Number(form.annual_rate || 0) : 0,
-        free_months: visible.free ? Number(form.free_months || 0) : 0,
+        free_from_sequence: visible.free ? Number(form.free_from_sequence || 0) : 0,
         effective_from: form.effective_from,
         effective_to: form.effective_to || null,
         memo: form.memo || null,
@@ -137,7 +137,8 @@ export default function CardPolicySection({ paymentMethods }) {
 
       <p className="text-xs text-caption leading-relaxed">
         카드사 안내에 적힌 무이자·부분무이자 구간을 그대로 넣어 두면, 할부를 등록할 때
-        회차별 수수료를 자동으로 계산해요. 한 번 넣어 두면 정책이 바뀔 때까지 다시 만질 일이 없어요.
+        회차별 수수료를 자동으로 계산해요. 부분무이자는 안내에 적힌 "4회차부터 면제" 의
+        숫자를 그대로 넣으시면 돼요. 한 번 넣어 두면 정책이 바뀔 때까지 다시 만질 일이 없어요.
       </p>
 
       {active.length === 0 ? (
@@ -203,12 +204,15 @@ export default function CardPolicySection({ paymentMethods }) {
                   </div>
                 )}
                 {visible.free && (
-                  <div className="w-28">
-                    <label htmlFor="policy-free-months" className="block text-xs text-caption mb-1">무이자 개월</label>
+                  <div className="w-32">
+                    {/* 카드사 안내가 "4회차부터 면제" 라고 적어 주므로 그 숫자를
+                        그대로 옮겨 적게 한다. 앞 회차는 고객 부담이다. */}
+                    <label htmlFor="policy-free-from" className="block text-xs text-caption mb-1">면제 시작 회차</label>
                     <input
-                      id="policy-free-months" type="number" min="1" className={inp}
-                      value={form.free_months}
-                      onChange={(e) => setForm((f) => ({ ...f, free_months: e.target.value }))}
+                      id="policy-free-from" type="number" min="2" className={inp}
+                      placeholder="예: 4"
+                      value={form.free_from_sequence}
+                      onChange={(e) => setForm((f) => ({ ...f, free_from_sequence: e.target.value }))}
                       required
                     />
                   </div>

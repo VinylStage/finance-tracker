@@ -16,7 +16,7 @@ before(async () => {
 // 자기가 넣은 카드사 안내와 다른 것을 보게 된다.
 const row = (months, over = {}) => ({
   id: months, payment_method_id: 1, months,
-  policy_type: '무이자', annual_rate: 0, free_months: 0,
+  policy_type: '무이자', annual_rate: 0, free_from_sequence: 0,
   effective_from: '2026-01-01', effective_to: null, memo: null,
   ...over,
 });
@@ -79,11 +79,12 @@ describe('표시 문구', () => {
   });
 
   test('정책 종류별로 설명이 다르다', () => {
-    assert.strictEqual(describePolicy({ policy_type: '무이자', annual_rate: 0, free_months: 0 }), '무이자');
+    assert.strictEqual(describePolicy({ policy_type: '무이자', annual_rate: 0, free_from_sequence: 0 }), '무이자');
     assert.strictEqual(describePolicy({ policy_type: '유이자', annual_rate: 15.9 }), '연 15.9%');
+    // 카드사 안내 "4회차부터 면제" 를 그대로 되읽어 준다.
     assert.strictEqual(
-      describePolicy({ policy_type: '부분무이자', annual_rate: 15.9, free_months: 2 }),
-      '앞 2회차 무이자, 이후 연 15.9%'
+      describePolicy({ policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 4 }),
+      '4회차부터 면제, 그 전은 연 15.9%'
     );
   });
 
@@ -98,12 +99,12 @@ describe('표시 문구', () => {
 
   test('설명 문구에 내부 필드명이 없다', () => {
     const texts = [
-      describePolicy({ policy_type: '부분무이자', annual_rate: 15.9, free_months: 2 }),
+      describePolicy({ policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 4 }),
       describePeriod({ effective_from: '2026-01-01', effective_to: null }),
       rangeLabel({ from_month: 2, to_month: 3 }),
     ];
     for (const t of texts) {
-      assert.ok(!/policy_type|annual_rate|free_months|effective_/.test(t), `내부 필드명 노출: ${t}`);
+      assert.ok(!/policy_type|annual_rate|free_from_sequence|effective_/.test(t), `내부 필드명 노출: ${t}`);
     }
   });
 });
