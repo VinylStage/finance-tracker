@@ -5,9 +5,10 @@ const {
   computeSchedule, scheduleTotals, addMonths, isFreeMonth,
 } = require('../src/services/installmentInterest');
 
-const FREE = { policy_type: '무이자', annual_rate: 0, free_months: 0 };
-const PAID = { policy_type: '유이자', annual_rate: 15.9, free_months: 0 };
-const PARTIAL = { policy_type: '부분무이자', annual_rate: 15.9, free_months: 3 };
+const FREE = { policy_type: '무이자', annual_rate: 0, free_from_sequence: 0 };
+const PAID = { policy_type: '유이자', annual_rate: 15.9, free_from_sequence: 0 };
+// "6개월 부분무이자(4회차부터 면제)" — 카드사 안내 표기 그대로.
+const PARTIAL = { policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 4 };
 
 describe('addMonths — 청구월 계산', () => {
   test('같은 해 안', () => assert.strictEqual(addMonths('2026-08', 3), '2026-11'));
@@ -25,11 +26,18 @@ describe('isFreeMonth — 면제 구간', () => {
   test('유이자는 면제 없음', () => {
     for (const s of [1, 6, 12]) assert.strictEqual(isFreeMonth(PAID, s), false);
   });
-  test('부분무이자는 앞 free_months 만 면제', () => {
-    assert.strictEqual(isFreeMonth(PARTIAL, 1), true);
-    assert.strictEqual(isFreeMonth(PARTIAL, 3), true);
-    assert.strictEqual(isFreeMonth(PARTIAL, 4), false);
-    assert.strictEqual(isFreeMonth(PARTIAL, 12), false);
+  test('부분무이자는 면제 시작 회차부터 면제 — 앞이 아니라 뒤가 면제다', () => {
+    // 방향이 뒤집혀 이자가 실제의 40% 만 잡혔던 결함의 회귀 테스트(#267 수정).
+    // 앞 회차일수록 할부잔액이 커서 수수료도 크고, 그 비싼 구간이 고객 부담이다.
+    assert.strictEqual(isFreeMonth(PARTIAL, 1), false);
+    assert.strictEqual(isFreeMonth(PARTIAL, 3), false);
+    assert.strictEqual(isFreeMonth(PARTIAL, 4), true);
+    assert.strictEqual(isFreeMonth(PARTIAL, 12), true);
+  });
+
+  test('면제 시작 회차가 0 이면 면제가 없다', () => {
+    const none = { policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 0 };
+    for (const s of [1, 6, 12]) assert.strictEqual(isFreeMonth(none, s), false);
   });
 });
 
@@ -93,10 +101,12 @@ describe('유이자 — 잔액 기준', () => {
 describe('부분무이자', () => {
   const s = computeSchedule({ totalAmount: 1200000, months: 12, policy: PARTIAL, startBillingMonth: '2026-08' });
 
-  test('앞 3회차 이자 0', () => {
-    for (let i = 0; i < 3; i += 1) assert.strictEqual(s[i].interest, 0, `${i + 1}회차`);
+  test('앞 3회차는 고객 부담이라 이자가 붙는다', () => {
+    for (let i = 0; i < 3; i += 1) assert.ok(s[i].interest > 0, `${i + 1}회차`);
   });
-  test('4회차부터 이자 발생', () => assert.ok(s[3].interest > 0));
+  test('4회차부터 면제', () => {
+    for (let i = 3; i < 12; i += 1) assert.strictEqual(s[i].interest, 0, `${i + 1}회차`);
+  });
   test('원금 합계가 총액과 정확히 일치', () => {
     assert.strictEqual(scheduleTotals(s).principal, 1200000);
   });
@@ -105,22 +115,32 @@ describe('부분무이자', () => {
     assert.ok(scheduleTotals(s).interest < scheduleTotals(paid).interest);
   });
 
-  test('free_months 경계 — 0이면 유이자와 같다', () => {
+  test('면제 시작 회차 0 이면 유이자와 같다', () => {
     const z = computeSchedule({
       totalAmount: 1200000, months: 12, startBillingMonth: '2026-08',
-      policy: { policy_type: '부분무이자', annual_rate: 15.9, free_months: 0 },
+      policy: { policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 0 },
     });
     const paid = computeSchedule({ totalAmount: 1200000, months: 12, policy: PAID, startBillingMonth: '2026-08' });
     assert.strictEqual(scheduleTotals(z).interest, scheduleTotals(paid).interest);
   });
 
-  test('free_months = months-1 이면 마지막 회차만 이자', () => {
+  test('면제 시작 회차가 마지막이면 마지막 회차만 면제', () => {
     const n = computeSchedule({
       totalAmount: 1200000, months: 12, startBillingMonth: '2026-08',
-      policy: { policy_type: '부분무이자', annual_rate: 15.9, free_months: 11 },
+      policy: { policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 12 },
     });
-    assert.ok(n.slice(0, 11).every((r) => r.interest === 0));
-    assert.ok(n[11].interest > 0);
+    assert.ok(n.slice(0, 11).every((r) => r.interest > 0));
+    assert.strictEqual(n[11].interest, 0);
+  });
+
+  test('KB 안내 예시를 그대로 재현한다 — 6개월(4회차부터 면제)', () => {
+    // 600,000원 연 15.9%. 잔액 기준 월할이라 1회차가 가장 비싸다.
+    const s = computeSchedule({
+      totalAmount: 600000, months: 6, startBillingMonth: '2026-09',
+      policy: { policy_type: '부분무이자', annual_rate: 15.9, free_from_sequence: 4 },
+    });
+    assert.deepStrictEqual(s.map((r) => r.interest), [7950, 6625, 5300, 0, 0, 0]);
+    assert.strictEqual(scheduleTotals(s).interest, 19875);
   });
 });
 

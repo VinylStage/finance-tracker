@@ -24,7 +24,7 @@ function collectDeclarations() {
 }
 
 const EXPECTED = [
-  { file: 'cardPolicies.js', method: 'POST', routePath: '/range', fields: ['payment_method_id', 'from_month', 'to_month', 'free_months'] },
+  { file: 'cardPolicies.js', method: 'POST', routePath: '/range', fields: ['payment_method_id', 'from_month', 'to_month', 'free_from_sequence'] },
   { file: 'categories.js', method: 'POST', routePath: '/', fields: ['monthly_budget'] },
   { file: 'categories.js', method: 'PUT', routePath: '/:id', fields: ['monthly_budget', 'is_active'] },
   { file: 'debts.js', method: 'POST', routePath: '/', fields: ['balance', 'annual_rate'] },

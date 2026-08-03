@@ -12,7 +12,7 @@ export function signatureOf(p) {
   return [
     p.policy_type,
     Number(p.annual_rate || 0),
-    Number(p.free_months || 0),
+    Number(p.free_from_sequence || 0),
     p.effective_from,
     p.effective_to || '',
     p.memo || '',
@@ -44,7 +44,7 @@ export function groupToRanges(policies) {
       to_month: months,
       policy_type: p.policy_type,
       annual_rate: Number(p.annual_rate || 0),
-      free_months: Number(p.free_months || 0),
+      free_from_sequence: Number(p.free_from_sequence || 0),
       effective_from: p.effective_from,
       effective_to: p.effective_to || null,
       memo: p.memo || null,
@@ -80,7 +80,9 @@ export function describePolicy(range) {
   const rate = `연 ${range.annual_rate}%`;
   if (range.policy_type === '무이자') return '무이자';
   if (range.policy_type === '부분무이자') {
-    return `앞 ${range.free_months}회차 무이자, 이후 ${rate}`;
+    // 카드사 안내 표기를 그대로 따른다 — "6개월 부분무이자(4회차부터 면제)".
+    // 앞 회차가 고객 부담이고 뒤가 면제다.
+    return `${range.free_from_sequence}회차부터 면제, 그 전은 ${rate}`;
   }
   return rate;
 }
