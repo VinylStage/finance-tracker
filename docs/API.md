@@ -399,6 +399,80 @@
   - 428: 프리뷰 없이 회차 변경 시도 (`preview_required: true`)
   - 500: 서버 내부 오류
 
+### GET /api/installments/duplicates?days=14
+할부 전환(B안)으로 생긴 **중복 의심 거래**. **읽기 전용 — DB 를 바꾸지 않는다.**
+
+할부의 정본은 `installments` 행 하나이고 거래내역에는 청구 회차만 파생 거래로
+나타난다(#269 B안). 그 전에 할부 구매를 직접 거래로 넣어 뒀으면 그게 중복이 된다.
+
+**자동으로 지우지 않는다.** 이 저장소는 실거래 2,212건 유실 사고가 있었다.
+
+- **요청 파라미터**: `days` (query, optional, 기본 14, 0~365) — 구매일과 며칠까지 떨어진 것을 볼 것인가
+- **응답 스키마**:
+  ```json
+  {
+    "data": [
+      {
+        "transaction": { "id": "number", "date": "string", "merchant": "string",
+                         "amount": "number", "payment_style": "string",
+                         "category_name": "string", "memo": "string | null" },
+        "installment_id": "number | null",
+        "installment_merchant": "string | null",
+        "confidence": "exact | likely | review",
+        "days_apart": "number | null",
+        "matched_on": "total | monthly | null"
+      }
+    ],
+    "total_amount": "number",
+    "day_window": "number"
+  }
+  ```
+- **확신도**:
+  - `exact` — 등록된 할부와 가맹점·금액·날짜가 모두 맞음
+  - `likely` — 가맹점·날짜는 맞고 금액이 **월납입액** 쪽
+  - `review` — 할부로 적혀 있는데 연결될 할부 등록이 없음
+- **비고**: 가맹점명을 정규화해 비교한다 — 실데이터에 같은 가게가 `예스이십사 주식회사`
+  · `예스이십사(주)` · `예스이십사` 로 들어 있다. 파생 거래는 계산 결과라 후보가 아니다.
+  "중복 아님" 으로 판단한 거래는 목록에서 빠진다.
+
+### POST /api/installments/duplicates/preview
+지울 대상을 확인한다. **DB 를 바꾸지 않는다.**
+
+- **요청 파라미터**: `ids` (body, 거래 id 배열)
+- **응답 스키마**:
+  ```json
+  {
+    "data": {
+      "rows": [{ "id": "number", "date": "string", "merchant": "string", "amount": "number" }],
+      "locked": [ "파생 거래라 지울 수 없는 행" ],
+      "missing": [ "없는 id" ],
+      "total": "number",
+      "fingerprint": "string | null"
+    }
+  }
+  ```
+
+### POST /api/installments/duplicates/resolve
+사용자가 고른 것만 처리한다.
+
+- **요청 파라미터**:
+  - `delete_ids` (body, optional): 지울 거래. **`preview_token` 필수**
+  - `keep_ids` (body, optional): 중복이 아니라고 판단한 거래. 다음부터 목록에서 빠진다
+  - `preview_token` (body, `delete_ids` 가 있으면 required): 프리뷰의 `fingerprint`
+- **응답 스키마**: `{ "ok": true, "deleted": "number", "kept": "number" }`
+- **비고**: 지우는 것만이 판단이 아니다. 둘 다 남겨 두기로 했는데 목록이 계속 같은
+  행을 보여주면 사용자는 결국 목록 자체를 무시하게 되고, 그러면 진짜 중복도 놓친다.
+- **에러 케이스**:
+  - 400: 파생 거래가 섞여 있음
+  - 409: 프리뷰 이후 대상이 바뀜 (`preview_stale`)
+  - 428: 프리뷰 없이 지우기 시도 (`preview_required`)
+
+### POST /api/installments/duplicates/restore
+"중복 아님" 판단을 되돌린다. 다시 목록에 나온다.
+
+- **요청 파라미터**: `ids` (body)
+- **응답 스키마**: `{ "ok": true, "restored": "number" }`
+
 ### POST /api/installments/:id/derived/preview
 회차 재생성 미리보기. **DB 를 바꾸지 않는다.**
 
