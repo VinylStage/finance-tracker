@@ -4,6 +4,8 @@ import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import DerivedTransactions from '../components/DerivedTransactions';
+import { anchorId } from '../lib/derivedOrigin';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 
@@ -164,7 +166,10 @@ export default function Debts() {
             <tbody>
               {items.map((d, i) => (
                 <React.Fragment key={d.id}>
-                  <tr className={`border-b border-line-faint hover:bg-surface-page transition-colors ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}>
+                  <tr
+                    id={anchorId('debt', d.id)}
+                    className={`border-b border-line-faint hover:bg-surface-page transition-colors scroll-mt-6 ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}
+                  >
                     <td className="px-4 py-3 text-ink">{d.name}</td>
                     <td className="px-4 py-3"><TypeBadge type={d.type} /></td>
                     <td className="px-4 py-3 text-right text-loss-text font-medium tabular-nums">{fmt(d.balance)}</td>
@@ -208,6 +213,10 @@ export default function Debts() {
                     <tr className="border-b border-line-faint bg-surface-page/70">
                       <td colSpan={7} className="px-4 py-3">
                         <InterestLog rows={logs[d.id]} />
+                        {/* 이자 기록이 만든 거래를 같은 자리에서 보여준다(#270).
+                            기록과 거래가 떨어져 있으면 사용자는 둘이 이어져
+                            있다는 것을 알 수 없다. */}
+                        <DerivedTransactions kind="debt" id={d.id} />
                       </td>
                     </tr>
                   )}
