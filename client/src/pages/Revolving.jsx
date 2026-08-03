@@ -4,6 +4,9 @@ import { localYearMonth } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import DerivedTransactions from '../components/DerivedTransactions';
+import { useHashTarget } from '../hooks/useHashTarget';
+import { anchorId } from '../lib/derivedOrigin';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -16,6 +19,7 @@ export default function Revolving() {
   const [cardFilter, setCardFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
+  const [openId, setOpenId] = useState(null);
   const { confirm, alert } = useConfirm();
 
   const { loading, error: loadError, reload } = useLoader(async () => {
@@ -28,6 +32,9 @@ export default function Revolving() {
     setCurrentBalance(rev.current_carried_balance || 0);
     setPaymentMethods(pms);
   }, [cardFilter]);
+
+  // 거래내역에서 넘어왔으면 그 이력을 펼쳐 보여준다(#270).
+  useHashTarget('revolving', !loading, setOpenId);
 
   const handleSave = async (formData) => {
     setError('');
@@ -109,9 +116,10 @@ export default function Revolving() {
             </thead>
             <tbody>
               {items.map((r, i) => (
+                <React.Fragment key={r.id}>
                 <tr
-                  key={r.id}
-                  className={`border-b border-line-faint hover:bg-surface-page transition-colors ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}
+                  id={anchorId('revolving', r.id)}
+                  className={`border-b border-line-faint hover:bg-surface-page transition-colors scroll-mt-6 ${i % 2 === 0 ? '' : 'bg-surface-page/50'} ${openId === r.id ? 'bg-brand-tint/40' : ''}`}
                 >
                   <td className="px-4 py-3 text-ink whitespace-nowrap">{r.month}</td>
                   <td className="px-4 py-3 text-caption text-xs hidden sm:table-cell">{r.payment_method_name || '—'}</td>
@@ -121,7 +129,14 @@ export default function Revolving() {
                   <td className="px-4 py-3 text-right text-loss-text tabular-nums">{fmt(r.interest)}</td>
                   <td className="px-4 py-3 text-right text-brand-text font-medium tabular-nums">{fmt(r.next_carried_balance)}</td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end">
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setOpenId(openId === r.id ? null : r.id)}
+                        aria-expanded={openId === r.id}
+                        className="text-caption hover:text-brand-text transition-colors text-xs"
+                      >
+                        수수료 거래 {openId === r.id ? '▲' : '▼'}
+                      </button>
                       <button
                         onClick={() => handleDelete(r.id)}
                         className="text-caption hover:text-loss-text transition-colors text-xs"
@@ -131,6 +146,14 @@ export default function Revolving() {
                     </div>
                   </td>
                 </tr>
+                {openId === r.id && (
+                  <tr className="border-b border-line-faint bg-surface-page/30">
+                    <td colSpan={8} className="px-4">
+                      <DerivedTransactions kind="revolving" id={r.id} />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
