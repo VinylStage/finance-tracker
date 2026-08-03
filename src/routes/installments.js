@@ -72,6 +72,35 @@ function completeExpiredInstallments() {
   });
 }
 
+// 되돌리기가 먹히는가(#295).
+//
+// 위 스윕이 GET 마다 돌기 때문에, 청구 기간이 끝난 할부를 '진행중' 으로 되돌리면
+// **다음 화면 로드에서 즉시 다시 완료가 된다.** 사용자 눈에는 "되돌리기가 안
+// 먹는다" 로 보인다.
+//
+// 그래서 되돌릴 수 있는지를 서버가 판정해 내려준다. 화면이 같은 날짜 계산을 다시
+// 하면 스윕 조건과 어긋날 수 있다 — 판정은 스윕과 같은 자리에 있어야 한다.
+//
+// A안(#295): 기간이 끝난 항목은 되돌리기를 막고 사유를 보여준다. B안(수동 표시
+// 컬럼)은 마이그레이션이 필요하고, #269 가 파생 거래를 만들기 시작하면 어차피
+// 재검토해야 한다.
+function reopenability(row) {
+  const boundary = db.prepare(`
+    SELECT strftime('%Y-%m-%d', date(? || '-01', '+' || ? || ' months')) AS b
+  `).get(row.start_billing_month, row.months).b;
+  const expired = localYMD() >= boundary;
+  return {
+    can_reopen: row.status === '완료' && !expired,
+    // 사용자에게 그대로 보이는 문구다(#231).
+    reopen_blocked_reason: row.status !== '완료'
+      ? null
+      : (expired
+        ? '청구 기간이 이미 끝난 할부예요. 되돌려도 곧 다시 완료로 바뀝니다.'
+        : null),
+    billing_ends_on: boundary,
+  };
+}
+
 // GET /api/installments?status=진행중
 router.get('/', (req, res) => {
   try {
@@ -90,7 +119,9 @@ router.get('/', (req, res) => {
     const params = [curYear, curMonth, curYear, curMonth];
     if (status) { sql += ' AND i.status = ?'; params.push(status); }
     sql += ' ORDER BY i.status ASC, i.start_billing_month DESC';
-    const data = db.prepare(sql).all(...params);
+    // 되돌릴 수 있는지를 서버가 판정한다(#295). 화면이 날짜 계산을 다시 하면
+    // 스윕 조건과 어긋난다.
+    const data = db.prepare(sql).all(...params).map((row) => ({ ...row, ...reopenability(row) }));
 
     const thisMonth = `${curYear}-${String(curMonth).padStart(2, '0')}`;
     // FND-05(감사): 여기서 청구 기간 종료를 반영하지 않던 별도 쿼리를 쓰고 있었다.
@@ -303,6 +334,34 @@ router.post('/:id/derived/apply', (req, res) => {
     res.json({ ok: true, deleted: applied.delete_count, created: applied.create_count });
   } catch (e) {
     if (respondDerivedError(res, e)) return;
+    serverError(res, e, 'installments');
+  }
+});
+
+// POST /api/installments/:id/reopen — 완료 처리를 되돌린다(#295)
+//
+// PUT 으로도 status 를 바꿀 수 있지만 경로를 나눈다. 되돌리기는 "이게 먹히는가" 를
+// 서버가 판정해야 하는 동작이고, 일반 수정과 섞으면 그 판정을 넣을 자리가 없다.
+router.post('/:id/reopen', (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM installments WHERE id=?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: '찾는 할부 내역이 없습니다. 이미 삭제됐을 수 있어요.' });
+    if (row.status !== '완료') {
+      return res.status(400).json({ error: '이미 진행중인 할부예요.' });
+    }
+
+    const state = reopenability(row);
+    if (!state.can_reopen) {
+      // 되돌려 봐야 다음 조회에서 스윕이 다시 완료로 바꾼다. 되는 것처럼
+      // 응답하고 조용히 되뒤집히면 사용자는 앱을 못 믿게 된다.
+      return res.status(409).json({ error: state.reopen_blocked_reason, billing_ends_on: state.billing_ends_on });
+    }
+
+    // status 하나만 바꾼다. #295 실측대로 완료 처리는 순수 플래그 변경이고
+    // 되돌리기도 플래그만 되돌리면 된다 — 회차 재생성은 필요 없다.
+    db.prepare("UPDATE installments SET status='진행중' WHERE id=? AND status='완료'").run(req.params.id);
+    res.json({ ok: true, status: '진행중' });
+  } catch (e) {
     serverError(res, e, 'installments');
   }
 });

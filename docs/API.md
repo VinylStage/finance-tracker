@@ -335,12 +335,17 @@
         "status": "string",
         "payment_method_name": "string",
         "remaining_months": "integer",
-        "billed_months": "integer"
+        "billed_months": "integer",
+        "can_reopen": "boolean",
+        "reopen_blocked_reason": "string | null",
+        "billing_ends_on": "string (YYYY-MM-DD)"
       }
     ],
     "this_month_total": "number"
   }
   ```
+- **비고**: `can_reopen` 은 완료 처리를 되돌릴 수 있는지를 **서버가 판정한** 값이다(#295).
+  화면이 같은 날짜 계산을 다시 하면 스윕 조건과 어긋날 수 있어 판정을 서버에 둔다.
 - **에러 케이스**:
   - 500: 서버 내부 오류
 
@@ -521,6 +526,24 @@
   - 404: 할부 정보 없음
   - 409 / 428: PUT 과 같음
   - 500: 서버 내부 오류
+
+### POST /api/installments/:id/reopen
+완료 처리를 되돌린다(#295). `status` 하나만 `완료` → `진행중` 으로 바꾼다.
+
+`PUT /api/installments/:id` 로도 `status` 를 바꿀 수 있지만 경로를 나눈다. 되돌리기는
+**"이게 먹히는가" 를 서버가 판정해야 하는 동작**이고, 일반 수정과 섞으면 그 판정을
+넣을 자리가 없다.
+
+- **응답 스키마**: `{ "ok": true, "status": "진행중" }`
+- **에러 케이스**:
+  - 404: 할부 없음
+  - 400: 이미 진행중
+  - 409: 청구 기간이 끝나 되돌려도 스윕이 다시 완료로 바꾼다 (`billing_ends_on` 동봉)
+
+**왜 409 로 막는가.** `GET /api/installments` 는 매 호출마다 청구 기간이 끝난 할부를
+`완료` 로 바꾸는 스윕을 돈다. 기간이 끝난 항목을 되돌리면 다음 조회에서 즉시 다시
+완료가 되어 사용자 눈에는 "되돌리기가 안 먹는다" 로 보인다. 되는 것처럼 응답하고
+조용히 되뒤집히면 앱을 못 믿게 된다.
 
 ### GET /api/installments/:id/derived
 이 할부가 만든 거래 목록.
