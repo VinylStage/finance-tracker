@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
+const { isEditable, lockedMessage, findLocked, countLockedAll } = require('../services/transactionOrigin');
 const { PAYMENT_STYLES } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
 const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
@@ -280,12 +281,30 @@ router.delete('/', (req, res) => {
   try {
     const { ids, all } = req.body || {};
     if (all === true) {
+      // 전체 삭제가 파생 거래까지 지우면 원본(할부·리볼빙·부채)과 어긋난다(#268).
+      // 감사 FND-01 이 실증한 바로 그 경로라 여기서 반드시 막는다.
+      const locked = countLockedAll(db);
+      if (locked > 0) {
+        return res.status(403).json({
+          error: `자동으로 만들어진 내역 ${locked}건이 포함돼 있어 전체 삭제를 할 수 없어요. 할부·리볼빙·부채 화면에서 원본을 먼저 정리해 주세요.`,
+        });
+      }
       const deleted = db.prepare('DELETE FROM transactions').run().changes;
       return res.json({ ok: true, deleted });
     }
     if (Array.isArray(ids) && ids.length > 0) {
       const validIds = ids.map(Number).filter(Number.isInteger);
       if (!validIds.length) return res.status(400).json({ error: '선택한 거래를 확인할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.' });
+
+      // 선택 목록에 잠긴 거래가 섞이면 전체를 거부한다. 일부만 지우면 사용자가
+      // 무엇이 남았는지 알 수 없다.
+      const lockedRows = findLocked(db, validIds);
+      if (lockedRows.length) {
+        return res.status(403).json({
+          error: `선택한 내역 중 ${lockedRows.length}건은 자동으로 만들어진 것이라 지울 수 없어요. 원래 등록한 화면에서 정리해 주세요.`,
+        });
+      }
+
       const placeholders = validIds.map(() => '?').join(',');
       const deleted = db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
       return res.json({ ok: true, deleted });
@@ -393,6 +412,12 @@ router.put('/:id', (req, res) => {
   try {
     const err = validateTxBody(req.body);
     if (err) return res.status(400).json({ error: err });
+
+    // 파생 거래는 거래내역에서 고칠 수 없다(#268). 원본을 고쳐야 계산과 맞는다.
+    const target = db.prepare('SELECT id, origin FROM transactions WHERE id=?').get(req.params.id);
+    if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
+    if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
+
     const { date, category_id, amount, payment_method_id, payment_style, merchant, memo } = req.body;
     const result = db.prepare(`
       UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?,
@@ -410,6 +435,11 @@ router.put('/:id', (req, res) => {
 // DELETE /api/transactions/:id
 router.delete('/:id', (req, res) => {
   try {
+    // 파생 거래는 거래내역에서 지울 수 없다(#268). 원본을 지워야 함께 사라진다.
+    const target = db.prepare('SELECT id, origin FROM transactions WHERE id=?').get(req.params.id);
+    if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
+    if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
+
     const result = db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
