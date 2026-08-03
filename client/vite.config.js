@@ -7,7 +7,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
+      // 여러 세션이 각자 워크트리에서 미리보기를 띄우면 API 포트가 서로 달라야
+      // 한다. 여기가 3000 으로 고정돼 있으면 내 화면이 남의 서버에 붙는다 —
+      // 포트만 나눠도 프록시가 따라오지 않으면 격리가 성립하지 않는다.
+      '/api': process.env.VITE_API_TARGET || 'http://localhost:3000',
     },
   },
   build: {
