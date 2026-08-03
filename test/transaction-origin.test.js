@@ -21,6 +21,9 @@ const POLICY = [
   { origin: 'debt_interest', editable: false },
   // 상환액은 사용자가 넣은 값이지만 이자 계산의 입력이라 거래내역에서 못 고친다(#287).
   { origin: 'debt_repayment', editable: false },
+  // 반복거래는 파생이지만 수정 가능하다(#279). 공과금처럼 규칙에 넣어둔 금액과
+  // 실제 청구액이 다를 수 있고, 규칙을 고치면 다음 달부터 틀어진다.
+  { origin: 'recurring', editable: true },
 ];
 
 let dir, db;
