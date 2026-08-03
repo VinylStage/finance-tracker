@@ -56,8 +56,25 @@ const INSTALLMENT_SCHEDULE_FIELDS = [
   'payment_method_id', 'purchase_date', 'paid_off_on', 'fee_per_month',
 ];
 
+// audit_log.actor 허용값의 정본(#297).
+//
+// 사용자가 하지 않은 쓰기가 이미 있다. GET /api/installments 가 만료 할부를
+// 완료로 바꾸고(#205), M9 는 서버 기동 시 반복거래를 만든다(#279). 파일 임포트는
+// 한 번에 수백 행을 넣는다.
+//
+// 이 구분이 없으면 실행취소(#300)가 판단할 근거가 없다 — 사용자가 되돌리기를
+// 눌렀을 때 자기가 하지 않은 시스템 작업이 취소되면 안 된다.
+const AUDIT_ACTORS = ['user', 'system', 'import'];
+
+// audit_log.op 허용값의 정본(#297).
+//
+// RESTORE 는 백업 복원처럼 DB 를 통째로 갈아끼우는 작업이다. 행 단위로 남기면
+// 로그가 데이터보다 커지므로 사실 1행만 남기고, 실행취소 대상에서 제외한다.
+const AUDIT_OPS = ['INSERT', 'UPDATE', 'DELETE', 'RESTORE'];
+
 module.exports = {
   PAYMENT_STYLES, MAJOR_TYPES, INSTALLMENT_POLICY_TYPES,
   TRANSACTION_ORIGINS, LOCKED_ORIGINS,
   DERIVED_CATEGORIES, INSTALLMENT_SCHEDULE_FIELDS,
+  AUDIT_ACTORS, AUDIT_OPS,
 };
