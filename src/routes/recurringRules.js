@@ -5,6 +5,7 @@ const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES } = require('../constants');
+const { getLastCatchupSummary } = require('../services/recurringCatchup');
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 function thisYearMonth() {
@@ -37,6 +38,12 @@ function validateRuleBody(body) {
 }
 
 // GET /api/recurring-rules?include_inactive=1
+// 기동 시 따라잡기 결과(#279). 고정 경로이므로 /:id 형태 라우트보다 앞에 둔다 —
+// 뒤에 두면 나중에 GET /:id 가 생겼을 때 조용히 가려진다.
+router.get('/catchup', (_req, res) => {
+  res.json(getLastCatchupSummary());
+});
+
 router.get('/', (req, res) => {
   try {
     const includeInactive = req.query.include_inactive;

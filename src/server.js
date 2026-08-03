@@ -5,6 +5,7 @@ const { csrfGuard } = require('./utils/csrfGuard');
 const { securityHeaders } = require('./utils/securityHeaders');
 const { auditContext, bindAuditDb } = require('./utils/auditContext');
 const db = require('./db/init');
+const { runCatchup, setLastCatchupSummary } = require('./services/recurringCatchup');
 const { serverError } = require('./utils/errors');
 const app = express();
 
@@ -43,6 +44,23 @@ app.use('/api/card-import',  require('./routes/cardImport'));
 app.use('/api/guide',        require('./routes/guide'));
 app.use('/api/card-policies', require('./routes/cardPolicies'));
 app.use('/api/data-integrity', require('./routes/dataIntegrity'));
+
+// 반복거래 따라잡기(#279). 기동 시 1회, 라우트 등록 뒤에 돈다.
+//
+// 이 앱은 사용자가 열 때만 프로세스가 산다 — 상시 구동 전제의 스케줄러는 이
+// 배포 형태에서 동작하지 않는다. 실패해도 서버는 떠야 하므로 여기서 삼킨다.
+// 결과는 /api/recurring-rules/catchup 으로 화면이 가져간다.
+try {
+  const summary = runCatchup(db);
+  setLastCatchupSummary(summary);
+  if (summary.created > 0 || summary.skipped > 0) {
+    console.log(`[catchup] 생성 ${summary.created}건, 건너뜀 ${summary.skipped}건`);
+  }
+} catch (e) {
+  // 기동을 막지 않는다. 다음 기동에서 같은 구간을 다시 시도한다.
+  setLastCatchupSummary({ created: 0, skipped: 0, rules: 0, details: [], error: '반복거래 자동 생성에 실패했습니다.' });
+  console.error('[catchup] 실패:', e.message);
+}
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));

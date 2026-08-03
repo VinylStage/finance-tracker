@@ -17,7 +17,7 @@ const INSTALLMENT_POLICY_TYPES = ['무이자', '부분무이자', '유이자'];
 // transactions.origin 허용값의 정본(#268).
 // 'manual' 은 사용자 직접 입력과 CSV·카드 임포트를 포함한다 — 명세서에서
 // 가져온 실제 결제라 사용자 소유로 본다.
-const TRANSACTION_ORIGINS = ['manual', 'installment', 'revolving', 'debt_interest', 'debt_repayment'];
+const TRANSACTION_ORIGINS = ['manual', 'installment', 'revolving', 'debt_interest', 'debt_repayment', 'recurring'];
 
 // 거래내역 화면에서 수정·삭제할 수 없는 출처(#268).
 //
