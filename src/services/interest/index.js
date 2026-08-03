@@ -2,6 +2,7 @@
 
 const { LOAN_TYPES, LOAN_TYPE_DEFAULTS } = require('../../constants');
 const generalLoan = require('./generalLoan');
+const creditLine = require('./creditLine');
 
 // 유형별 이자 전략 디스패치(#285).
 //
@@ -17,16 +18,12 @@ const generalLoan = require('./generalLoan');
 
 const STRATEGIES = {
   general: generalLoan,
-  // credit_line 은 #286 이 채운다. 지금 등록하지 않는 이유는 아래 참조.
+  credit_line: creditLine,
 };
 
-// 아직 전략이 없는 유형. LOAN_TYPES 에는 있어서 **저장은 되지만** 계산은 못 한다.
-//
-// 저장을 먼저 허용하는 이유는 사용자가 마이너스통장을 지금 등록해 둘 수 있어야
-// 하기 때문이다(이자는 지금도 직접 입력한다). 계산만 아직 없다.
-const PENDING = {
-  credit_line: '마이너스통장 이자 계산은 아직 준비 중입니다(#286).',
-};
+// 아직 전략이 없는 유형. LOAN_TYPES 에는 있어서 저장은 되지만 계산은 못 한다.
+// 지금은 비어 있다 — 유형을 새로 열 때 전략을 같이 넣지 못하면 여기 적는다.
+const PENDING = {};
 
 class UnknownLoanTypeError extends Error {
   constructor(message) {
