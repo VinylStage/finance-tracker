@@ -6,8 +6,8 @@
 |-------------|------|-----------|
 | payment_methods | 결제수단 정보 저장 | id, name, type, is_active, created_at |
 | categories | 지출/수입 카테고리 저장 | id, major_type, name, monthly_budget, is_active |
-| transactions | 일시불 및 일반적인 거래 내역 저장 | id, date, category_id, amount, payment_method_id, payment_style, merchant, memo, installment_id, created_at |
-| installments | 분할 결제 정보 저장 | id, purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, status |
+| transactions | 일시불 및 일반적인 거래 내역 저장 | id, date, category_id, amount, payment_method_id, payment_style, merchant, memo, installment_id, origin, origin_ref_table, origin_ref_id, origin_seq, origin_seq_total, created_at |
+| installments | 분할 결제 정보 저장 | id, purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, status, paid_off_on |
 | revolving_history | 신용카드 회계 기록 저장 | id, month, carried_balance, new_charge, paid_amount, interest, next_carried_balance, payment_method_id |
 | debts | 부채 정보 저장 | id, name, balance, annual_rate, memo, updated_at |
 | debt_interest_log | 부채 이자 로그 기록 | id, debt_id, log_date, rate_at_time, interest_amount, balance_before, balance_after, memo, created_at |
@@ -23,6 +23,39 @@
 - `revolving_history.payment_method_id` → `payment_methods.id` (1:N)
 - `debt_interest_log.debt_id` → `debts.id` (1:N)
 - `savings_products.category_id` → `categories.id` (1:N)
+
+## 파생 거래 (#268, #269)
+
+`transactions` 의 일부 행은 사용자가 입력한 것이 아니라 할부·리볼빙·부채이자
+원본에서 계산돼 만들어진다. 그 행을 식별하는 것이 `origin` 계열 컬럼이다.
+
+| 컬럼 | 의미 |
+|---|---|
+| `origin` | `manual` / `installment` / `revolving` / `debt_interest` |
+| `origin_ref_table` | 원본 테이블명 (`installments`, `revolving_history`, `debt_interest_log`) |
+| `origin_ref_id` | 원본 행 id |
+| `origin_seq` | 할부 회차 번호. 할부에만 값이 있다 |
+| `origin_seq_total` | 실제로 청구되는 총 회차 수. 조기 완납이면 개월수보다 작다 |
+
+- `origin != 'manual'` 인 행은 거래내역 화면에서 수정·삭제할 수 없다. 원본을 고쳐야 한다
+- 원본이 삭제되면 딸린 파생 거래도 같은 트랜잭션에서 삭제된다. 고아 행을 남기지 않는다
+- 파생 거래 생성·재생성은 `src/services/derivedTransactions.js` 한 곳을 거친다
+
+### 집계에서의 취급
+
+파생 거래는 **현재 어떤 합계에도 더해지지 않는다.** 세 경로 모두 이미 다른
+방식으로 집계에 들어가 있어서, 그대로 더하면 이중계산이 된다.
+
+| 출처 | `payment_style` | 제외되는 이유 |
+|---|---|---|
+| 할부 | `할부` | 대시보드가 `installmentsDue` 로 따로 센다 |
+| 리볼빙 수수료 | `리볼빙` | 수수료는 다음 달 이월 잔액에 얹히는 발생액이다 |
+| 부채 이자 | `해당없음` | 이자가 부채 잔액에 자본화된다. 실제 상환은 사용자가 따로 입력한다 |
+
+앞의 둘은 `EXPENSE_CASE` 의 `payment_style` 조건이 이미 걸러내고, 부채 이자는
+`origin` 으로 따로 제외한다(`src/utils/aggregation.js`).
+
+집계 기준을 파생 거래 쪽으로 옮기는 것은 화면 전체가 걸린 별도 결정이라 M7·M11 에서 다룬다.
 
 ## 테이블 분리 이유 요약
 

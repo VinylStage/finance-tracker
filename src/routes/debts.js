@@ -4,6 +4,9 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { asInt, numericBody } = require('../utils/validate');
+const {
+  createDebtInterestDerived, deleteDebtDerived, derivedRowsForDebt,
+} = require('../services/derivedTransactions');
 
 // GET /api/debts
 router.get('/', (req, res) => {
@@ -56,12 +59,16 @@ router.put('/:id', (req, res) => {
 
 // DELETE /api/debts/:id
 router.delete('/:id', (req, res) => {
+  // 파생 이자 거래 → 이자 이력 → 부채 순으로 지운다. 이력을 먼저 지우면
+  // 어떤 거래가 이 부채 것이었는지 찾을 방법이 없어져 고아 행이 남는다(#269).
+  let deleted = 0;
   const tx = db.transaction(() => {
+    deleted = deleteDebtDerived(db, Number(req.params.id));
     db.prepare('DELETE FROM debt_interest_log WHERE debt_id=?').run(req.params.id);
     db.prepare('DELETE FROM debts WHERE id=?').run(req.params.id);
   });
   tx();
-  res.json({ ok: true });
+  res.json({ ok: true, derived: { deleted } });
 });
 
 // POST /api/debts/:id/interest — 이자 추가 (잔액 자동 반영)
@@ -82,8 +89,9 @@ router.post('/:id/interest', numericBody(['rate', 'interest_amount']), (req, res
     const balance_before = debt.balance;
     const balance_after = balance_before + interestAmount;
 
+    let derived = { created: 0 };
     const tx = db.transaction(() => {
-      db.prepare(`
+      const info = db.prepare(`
         INSERT INTO debt_interest_log (debt_id, log_date, rate_at_time, interest_amount, balance_before, balance_after, memo)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(req.params.id, log_date, rate, interestAmount, balance_before, balance_after, memo || null);
@@ -91,10 +99,13 @@ router.post('/:id/interest', numericBody(['rate', 'interest_amount']), (req, res
       db.prepare(`
         UPDATE debts SET balance=?, annual_rate=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
       `).run(balance_after, rate, req.params.id);
+
+      // 이자 기록이 거래 1건을 만든다(#269). 기록·잔액·거래가 한 트랜잭션이다.
+      derived = createDebtInterestDerived(db, Number(info.lastInsertRowid));
     });
     tx();
 
-    res.status(201).json({ ok: true, balance_after });
+    res.status(201).json({ ok: true, balance_after, derived });
   } catch (e) {
     serverError(res, e, 'debts');
   }
@@ -107,6 +118,15 @@ router.get('/:id/interest-log', (req, res) => {
       SELECT * FROM debt_interest_log WHERE debt_id = ? ORDER BY log_date DESC, id DESC
     `).all(req.params.id);
     res.json({ data });
+  } catch (e) {
+    serverError(res, e, 'debts');
+  }
+});
+
+// GET /api/debts/:id/derived — 이 부채가 만든 이자 거래 목록(#270).
+router.get('/:id/derived', (req, res) => {
+  try {
+    res.json({ data: derivedRowsForDebt(db, Number(req.params.id)) });
   } catch (e) {
     serverError(res, e, 'debts');
   }

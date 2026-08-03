@@ -358,9 +358,12 @@
   ```json
   {
     "id": "integer",
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "created": "number" }
   }
   ```
+- **비고**: 등록과 동시에 회차별 파생 거래가 만들어진다(#269). 지울 것이 없는
+  신규 생성이므로 프리뷰를 요구하지 않는다. 몇 건이 생겼는지는 `derived.created` 로 알린다.
 - **에러 케이스**:
   - 400: 필수 파라미터 누락 또는 months가 2개 미만
   - 500: 서버 내부 오류
@@ -376,16 +379,79 @@
   - `fee_per_month` (body, optional): 월 수수료
   - `payment_method_id` (body, optional): 결제수단 ID
   - `start_billing_month` (body, optional): 시작 청구월
+  - `paid_off_on` (body, optional): 조기 완납일 `YYYY-MM-DD`
   - `status` (body, optional): 상태
+  - `preview_token` (body, conditional): 회차에 영향을 주는 값을 고칠 때 **필수**
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "deleted": "number", "created": "number" }
   }
   ```
+- **비고**: 회차에 영향을 주는 필드(`total_amount`, `months`, `start_billing_month`,
+  `payment_method_id`, `purchase_date`, `paid_off_on`, `fee_per_month`)를 고치면
+  파생 거래가 전부 지워지고 다시 만들어진다. 그래서 그 경우에만 프리뷰 확인을
+  요구한다(ADR 0008). 메모·상태처럼 회차와 무관한 수정은 토큰 없이 통과한다.
+- **에러 케이스**:
+  - 404: 할부 정보 없음
+  - 409: 프리뷰 이후 원본이 바뀜 (`preview_stale: true`) — 다시 미리보고 저장해야 한다
+  - 428: 프리뷰 없이 회차 변경 시도 (`preview_required: true`)
+  - 500: 서버 내부 오류
+
+### POST /api/installments/:id/derived/preview
+회차 재생성 미리보기. **DB 를 바꾸지 않는다.**
+
+- **요청 파라미터**:
+  - `id` (path parameter, required): 할부 ID
+  - 본문에 PUT 과 같은 모양의 변경안을 넣는다. 비우면 현재 값 기준으로 계산한다
+- **응답 스키마**:
+  ```json
+  {
+    "data": {
+      "installment_id": "integer",
+      "policy_applied": { "policy_type": "string", "annual_rate": "number", "free_months": "number" },
+      "delete_count": "number",
+      "create_count": "number",
+      "before_total": "number",
+      "after_total": "number",
+      "delta": "number",
+      "rows_before": [{ "billing_month": "string", "sequence": "number", "amount": "number" }],
+      "rows_after":  [{ "billing_month": "string", "sequence": "number", "amount": "number" }],
+      "changed_months": [{ "billing_month": "string", "before": "number", "after": "number", "is_past": "boolean" }],
+      "past_affected": [{ "billing_month": "string", "before": "number", "after": "number", "is_past": true }],
+      "reversible": "backup",
+      "fingerprint": "string"
+    }
+  }
+  ```
+- **비고**: `fingerprint` 를 PUT 또는 apply 의 `preview_token` 으로 넘긴다.
+  프리뷰 이후 원본이나 기존 파생 거래가 바뀌면 지문이 달라져 실행이 거부된다.
+  `policy_applied` 가 `null` 이면 등록된 카드 정책이 없어 `fee_per_month` 를 회차
+  수수료로 쓴 것이다.
 - **에러 케이스**:
   - 404: 할부 정보 없음
   - 500: 서버 내부 오류
+
+### POST /api/installments/:id/derived/apply
+할부 값은 그대로 두고 회차만 다시 만든다. 카드 정책을 새로 입력한 뒤 쓴다.
+
+- **요청 파라미터**:
+  - `id` (path parameter, required): 할부 ID
+  - `preview_token` (body, required): 프리뷰가 준 `fingerprint`
+- **응답 스키마**:
+  ```json
+  { "ok": "boolean", "deleted": "number", "created": "number" }
+  ```
+- **에러 케이스**:
+  - 404: 할부 정보 없음
+  - 409 / 428: PUT 과 같음
+  - 500: 서버 내부 오류
+
+### GET /api/installments/:id/derived
+이 할부가 만든 거래 목록.
+
+- **응답 스키마**: `{ "data": [ transactions 행 ] }`
 
 ### DELETE /api/installments/:id
 - **요청 파라미터**:
@@ -393,9 +459,11 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "deleted": "number" }
   }
   ```
+- **비고**: 딸린 파생 거래를 같은 트랜잭션에서 지운다. 고아 행이 남지 않는다.
 - **에러 케이스**:
   - 500: 서버 내부 오류
 
@@ -440,9 +508,12 @@
   ```json
   {
     "id": "integer",
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "created": "number", "deleted": "number" }
   }
   ```
+- **비고**: `interest` 가 0보다 크면 그 달의 수수료 거래 1건이 함께 만들어진다(#269).
+  0이면 만들지 않는다. 한 건짜리 CRUD 라 프리뷰를 요구하지 않는다(ADR 0008 제외 항목).
 - **에러 케이스**:
   - 400: 필수 파라미터 누락
   - 409: 해당 월/카드 조합이 이미 등록되어 있음
@@ -460,13 +531,20 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "created": "number", "deleted": "number" }
   }
   ```
+- **비고**: 수수료가 바뀌면 파생 거래도 따라 갱신된다. 0으로 고치면 기존 거래가 사라진다.
 - **에러 케이스**:
   - 404: 리볼빙 정보 없음
   - 409: 해당 월/카드 조합이 이미 등록되어 있음
   - 500: 서버 내부 오류
+
+### GET /api/revolving/:id/derived
+이 리볼빙 이력이 만든 수수료 거래.
+
+- **응답 스키마**: `{ "data": [ transactions 행 ] }`
 
 ### DELETE /api/revolving/:id
 - **요청 파라미터**:
@@ -474,9 +552,11 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "deleted": "number" }
   }
   ```
+- **비고**: 딸린 수수료 거래를 같은 트랜잭션에서 지운다.
 - **에러 케이스**:
   - 500: 서버 내부 오류
 ## debts.js
@@ -553,9 +633,12 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": true
+    "ok": true,
+    "derived": { "deleted": "number" }
   }
   ```
+- **비고**: 파생 이자 거래 → 이자 이력 → 부채 순으로 같은 트랜잭션에서 지운다.
+  이력을 먼저 지우면 어떤 거래가 이 부채 것이었는지 찾을 수 없어 고아 행이 남는다.
 - **에러 케이스**: 없음
 
 ### POST /api/debts/:id/interest
@@ -572,13 +655,21 @@
   ```json
   {
     "ok": true,
-    "balance_after": number
+    "balance_after": number,
+    "derived": { "created": "number" }
   }
   ```
+- **비고**: 이자 기록·잔액 갱신·이자 거래 생성이 한 트랜잭션이다(#269).
+  `interest_amount` 가 0이면 거래를 만들지 않는다.
 - **에러 케이스**:
   - 404: debt 없음
   - 400: rate, interest_amount, log_date 누락
   - 500: DB 오류
+
+### GET /api/debts/:id/derived
+이 부채의 이자 기록이 만든 거래 전부.
+
+- **응답 스키마**: `{ "data": [ transactions 행 ] }`
 
 ### GET /api/debts/:id/interest-log
 - **요청 파라미터**: 없음

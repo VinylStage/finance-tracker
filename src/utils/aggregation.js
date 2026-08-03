@@ -6,7 +6,22 @@ const db = require('../db/init');
 // 중복돼 있었다. 규칙이 바뀌면 한 곳만 고치면 되도록 단일 상수로 추출한다.
 // 사용하는 모든 쿼리가 transactions AS t, categories AS c 로 조인한다고 가정한다.
 const INCOME_CASE = `CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END`;
-const EXPENSE_CASE = `CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END`;
+
+// #269: 부채 이자 파생 거래를 지출에서 뺀다.
+//
+// 할부·리볼빙 파생 거래는 payment_style 이 이미 걸러주지만 부채 이자는
+// payment_style 이 '해당없음' 이라 그대로 지출에 들어간다. 그런데 이 앱의 이자
+// 기록은 잔액에 자본화된다(debts.balance += interest_amount) — 그 시점에 통장에서
+// 나가는 돈이 아니다. 실제 상환은 사용자가 따로 거래로 넣으므로 둘 다 세면
+// 이중계산이 된다.
+//
+// origin 컬럼이 없던 시절의 행을 위해 COALESCE 로 manual 을 기본값으로 둔다.
+//
+// 행 단위 조건을 따로 빼는 이유는 같은 규칙을 SUM(CASE ...) 로 쓰는 곳과
+// JOIN 조건으로 쓰는 곳이 둘 다 있기 때문이다(대시보드 카테고리 분석).
+// 문자열을 두 번 적으면 한쪽만 고쳐지고, FND-13 이 잡은 게 정확히 그 유형이다.
+const EXPENSE_ROW = `t.payment_style NOT IN ('할부','리볼빙') AND COALESCE(t.origin, 'manual') != 'debt_interest'`;
+const EXPENSE_CASE = `CASE WHEN c.major_type != '수입' AND ${EXPENSE_ROW} THEN t.amount ELSE 0 END`;
 
 // FND-05(감사): installments.js가 청구 기간 종료를 반영하지 않고 "진행중"
 // 상태 + 시작월만 보고 합산해, 종료된 할부까지 계속 이번 달 합계에 포함시켰다
@@ -61,4 +76,7 @@ function monthlyTotalsInRange(startMonth, endMonthInclusive) {
   return new Map(rows.map(r => [r.month, r]));
 }
 
-module.exports = { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange };
+module.exports = {
+  INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW,
+  installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange,
+};
