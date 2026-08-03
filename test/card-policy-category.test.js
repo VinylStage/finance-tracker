@@ -7,7 +7,7 @@ const os = require('os');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const migration = require('../migrations/014-add-policy-category');
+const migration = require('../migrations/015-add-policy-category');
 const { policyAt, resolvePolicy, findOverlapping } = require('../src/services/cardPolicy');
 
 // 이 마이그레이션의 핵심은 SQLite 의 NULL 유니크 함정을 피하는 것이다.
