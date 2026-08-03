@@ -7,7 +7,7 @@ const { serverError } = require('../utils/errors');
 const { isEditable, lockedMessage, findLocked, countLockedAll } = require('../services/transactionOrigin');
 const { PAYMENT_STYLES } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
-const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
+const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
 
 // FND-02(감사): 화면(client/Transactions.jsx)이 최대 5000건을 요청했지만
 // 서버가 500건으로 잘라(응답의 total은 정확했지만 화면이 안 씀) 검색/월별합계/
@@ -458,19 +458,21 @@ router.get('/summary/dashboard', (req, res) => {
     // 비교로 바꿔 이 라우트의 모든 "이번 달" 조회에서 재사용한다.
     const [monthStart, monthEnd] = monthBounds(thisMonth);
 
+    // FND-13 의 단일 상수화가 이 두 쿼리만 빠뜨려 지출 규칙이 여기에 다시
+    // 인라인으로 적혀 있었다. #269 가 파생 부채이자를 지출에서 빼면서 한쪽만
+    // 고쳐지는 문제가 실제로 드러나 공유 상수로 옮긴다.
     const income = db.prepare(`
-      SELECT COALESCE(SUM(t.amount),0) AS total
+      SELECT COALESCE(SUM(${INCOME_CASE}),0) AS total
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= ? AND t.date < ? AND c.major_type = '수입'
+      WHERE t.date >= ? AND t.date < ?
     `).get(monthStart, monthEnd).total;
 
     const expense = db.prepare(`
-      SELECT COALESCE(SUM(t.amount),0) AS total
+      SELECT COALESCE(SUM(${EXPENSE_CASE}),0) AS total
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= ? AND t.date < ? AND c.major_type != '수입'
-      AND t.payment_style NOT IN ('할부','리볼빙')
+      WHERE t.date >= ? AND t.date < ?
     `).get(monthStart, monthEnd).total;
 
     // FND-05(감사): 이 정확한 버전을 /api/installments가 별도로 재구현하며
@@ -501,7 +503,7 @@ router.get('/summary/dashboard', (req, res) => {
       SELECT c.name AS category, c.major_type, COALESCE(SUM(t.amount),0) AS total, c.monthly_budget AS budget
       FROM categories c
       LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date < ?
-        AND t.payment_style NOT IN ('할부','리볼빙')
+        AND ${EXPENSE_ROW}
       WHERE c.is_active = 1 AND c.major_type != '수입'
       GROUP BY c.id
       HAVING total > 0

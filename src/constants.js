@@ -28,7 +28,35 @@ const TRANSACTION_ORIGINS = ['manual', 'installment', 'revolving', 'debt_interes
 // 아래 셋은 계산 결과라 원본을 고쳐야 값이 맞는다. 거래만 고치면 계산과 어긋난다.
 const LOCKED_ORIGINS = ['installment', 'revolving', 'debt_interest'];
 
+// 파생 거래가 쓰는 카테고리의 정본(#269).
+//
+// "할부 전용 카테고리 신설, `부채상환` 재사용 금지" 는 기존 카테고리(대출원금상환
+// 등)를 돌려쓰지 말라는 뜻으로 읽는다 — 할부·리볼빙 수수료·부채 이자는 성격이
+// 서로 달라 하나로 뭉치면 카테고리별 분석이 무의미해지기 때문이다. 대분류는
+// 셋 다 '부채상환' 을 쓴다. 셋 다 빚에 딸린 지출이고, 새 대분류를 만들면
+// MAJOR_TYPES 를 쓰는 예산·집계 화면이 전부 따라 움직여야 한다.
+//
+// 이름을 여기 모아 두는 이유는 실사용 DB 에 사용자가 이미 만들어 둔 카테고리가
+// 있기 때문이다(할부회차금·대출이자). 그 이름과 일치시켜야 같은 뜻의 카테고리가
+// 두 벌 생기지 않는다.
+const DERIVED_CATEGORIES = {
+  installment: { major_type: '부채상환', name: '할부회차금' },
+  revolving: { major_type: '부채상환', name: '리볼빙수수료' },
+  debt_interest: { major_type: '부채상환', name: '대출이자' },
+};
+
+// 이 값이 바뀌면 할부 회차가 다시 계산된다(#269).
+//
+// 목록을 상수로 둔 이유는 "무엇이 바뀌면 프리뷰가 필요한가" 를 라우트가 아니라
+// 한 곳에서 정하기 위해서다. 라우트에 인라인으로 적으면 필드가 늘 때 조용히
+// 빠지고, 그러면 프리뷰 없이 대량 변경이 실행된다(ADR 0008 이 막으려는 것).
+const INSTALLMENT_SCHEDULE_FIELDS = [
+  'total_amount', 'months', 'start_billing_month',
+  'payment_method_id', 'purchase_date', 'paid_off_on', 'fee_per_month',
+];
+
 module.exports = {
   PAYMENT_STYLES, MAJOR_TYPES, INSTALLMENT_POLICY_TYPES,
   TRANSACTION_ORIGINS, LOCKED_ORIGINS,
+  DERIVED_CATEGORIES, INSTALLMENT_SCHEDULE_FIELDS,
 };
