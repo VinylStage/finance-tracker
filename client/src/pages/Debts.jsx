@@ -33,6 +33,8 @@ export default function Debts() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [interestTarget, setInterestTarget] = useState(null);
+  const [repayTarget, setRepayTarget] = useState(null);
+  const [repayments, setRepayments] = useState({});
   const [expandedLog, setExpandedLog] = useState(null);
   const [logs, setLogs] = useState({});
   const { confirm, alert } = useConfirm();
@@ -76,15 +78,48 @@ export default function Debts() {
     setLogs(prev => ({ ...prev, [debtId]: r.data || [] }));
   };
 
+  const loadRepayments = async (debtId) => {
+    const r = await api.get(`/api/debts/${debtId}/repayments`);
+    setRepayments(prev => ({ ...prev, [debtId]: r.data || [] }));
+  };
+
+  // 부분상환은 잔액을 직접 고치지 않고 여기를 거친다(#287). 직접 고치면 언제
+  // 얼마를 갚았는지가 남지 않아 과거 이자를 재계산할 수 없다.
+  const handleRepay = async (formData) => {
+    const debtId = repayTarget.id;
+    try {
+      await api.post(`/api/debts/${debtId}/repayments`, formData);
+      setRepayTarget(null);
+      reload();
+      if (expandedLog === debtId) await loadRepayments(debtId);
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const handleDeleteRepayment = async (debtId, repayment) => {
+    const ok = await confirm(
+      `${fmt(repayment.amount)} 상환 기록을 지울까요? 원금 ${fmt(repayment.principal_portion)}이 잔액으로 되돌아갑니다.`,
+      { tone: 'danger', confirmLabel: '지우기' }
+    );
+    if (!ok) return;
+    try {
+      await api.del(`/api/debts/${debtId}/repayments/${repayment.id}`);
+      reload();
+      await loadRepayments(debtId);
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
   const toggleLog = async (debt) => {
     if (expandedLog === debt.id) { setExpandedLog(null); return; }
     setExpandedLog(debt.id);
-    if (!logs[debt.id]) {
-      try {
-        await loadInterestLog(debt.id);
-      } catch (err) {
-        await alert(err.message);
-      }
+    try {
+      if (!logs[debt.id]) await loadInterestLog(debt.id);
+      if (!repayments[debt.id]) await loadRepayments(debt.id);
+    } catch (err) {
+      await alert(err.message);
     }
   };
 
@@ -139,6 +174,14 @@ export default function Debts() {
         />
       )}
 
+      {repayTarget && (
+        <RepaymentForm
+          debt={repayTarget}
+          onSave={handleRepay}
+          onCancel={() => setRepayTarget(null)}
+        />
+      )}
+
       {loading ? (
         <div className="text-caption text-center py-10">로딩 중...</div>
       ) : error ? (
@@ -186,14 +229,20 @@ export default function Debts() {
                             >
                               이자 추가
                             </button>
-                            <button
-                              onClick={() => toggleLog(d)}
-                              className="text-caption hover:text-brand-text transition-colors text-xs"
-                            >
-                              이력 {expandedLog === d.id ? '▲' : '▼'}
-                            </button>
                           </>
                         )}
+                        <button
+                          onClick={() => setRepayTarget(d)}
+                          className="text-caption hover:text-brand-text transition-colors text-xs"
+                        >
+                          상환
+                        </button>
+                        <button
+                          onClick={() => toggleLog(d)}
+                          className="text-caption hover:text-brand-text transition-colors text-xs"
+                        >
+                          이력 {expandedLog === d.id ? '▲' : '▼'}
+                        </button>
                         <button
                           onClick={() => handleEdit(d)}
                           className="text-caption hover:text-brand-text transition-colors text-xs"
@@ -213,6 +262,10 @@ export default function Debts() {
                     <tr className="border-b border-line-faint bg-surface-page/70">
                       <td colSpan={7} className="px-4 py-3">
                         <InterestLog rows={logs[d.id]} />
+                        <RepaymentLog
+                          rows={repayments[d.id]}
+                          onDelete={(r) => handleDeleteRepayment(d.id, r)}
+                        />
                         {/* 이자 기록이 만든 거래를 같은 자리에서 보여준다(#270).
                             기록과 거래가 떨어져 있으면 사용자는 둘이 이어져
                             있다는 것을 알 수 없다. */}
@@ -246,6 +299,108 @@ function InterestLog({ rows }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// 부분상환 이력(#287). 이자 이력과 같은 모양으로 둔다 — 두 이력이 같은 잔액
+// 타임라인을 이루므로 화면에서도 나란히 읽혀야 한다.
+function RepaymentLog({ rows, onDelete }) {
+  if (!rows) return null;
+  if (!rows.length) {
+    return (
+      <div className="mt-3">
+        <h4 className="text-xs font-medium text-caption mb-1">상환 이력</h4>
+        <p className="text-caption text-xs py-2">
+          아직 상환 기록이 없어요. 갚은 금액을 넣어 두면 그 시점 이후 이자가 줄어든 것으로 계산돼요.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3">
+      <h4 className="text-xs font-medium text-caption mb-1">상환 이력</h4>
+      <ul className="divide-y divide-line-faint">
+        {rows.map((r) => (
+          <li key={r.id} className="flex items-center justify-between gap-3 py-1.5 text-xs">
+            <span className="text-caption whitespace-nowrap">{r.repaid_on}</span>
+            <span className="text-body truncate flex-1">
+              원금 {fmt(r.principal_portion)}
+              {r.interest_portion > 0 && ` · 이자 ${fmt(r.interest_portion)}`}
+              {r.memo && ` · ${r.memo}`}
+            </span>
+            <span className="text-ink tabular-nums whitespace-nowrap">{fmt(r.amount)}</span>
+            <button
+              type="button"
+              onClick={() => onDelete(r)}
+              aria-label={`${r.repaid_on} 상환 기록 삭제`}
+              className="shrink-0 text-caption hover:text-loss-text px-1 rounded-full hover:bg-loss-tint"
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RepaymentForm({ debt, onSave, onCancel }) {
+  const today = localYMD();
+  const [form, setForm] = useState({ repaid_on: today, amount: '', interest_portion: '', memo: '' });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const amount = Number(form.amount) || 0;
+  const interest = Number(form.interest_portion) || 0;
+  const principal = Math.max(0, amount - interest);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const payload = { repaid_on: form.repaid_on, amount, memo: form.memo };
+    // 배분을 적었을 때만 보낸다. 안 적으면 서버가 전액을 원금으로 잡는다 —
+    // 이 앱은 이자를 잔액에 편입하므로 그게 보통이다.
+    if (form.interest_portion !== '') {
+      payload.interest_portion = interest;
+      payload.principal_portion = principal;
+    }
+    onSave(payload);
+  };
+
+  const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-surface shadow-card rounded-card border border-brand-tint p-5 space-y-4">
+      <h2 className="text-sm font-semibold text-body">
+        상환 기록 — <span className="text-brand-text">{debt.name}</span>
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div>
+          <label htmlFor="repay-date" className="block text-xs text-caption mb-1">상환일 *</label>
+          <input id="repay-date" type="date" className={inp} value={form.repaid_on} onChange={e => set('repaid_on', e.target.value)} required />
+        </div>
+        <div>
+          <label htmlFor="repay-amount" className="block text-xs text-caption mb-1">상환 금액 (원) *</label>
+          <input id="repay-amount" type="number" min="1" className={inp} value={form.amount} onChange={e => set('amount', e.target.value)} required />
+        </div>
+        <div>
+          <label htmlFor="repay-interest" className="block text-xs text-caption mb-1">이자분 (원)</label>
+          <input id="repay-interest" type="number" min="0" className={inp} placeholder="비우면 전액 원금" value={form.interest_portion} onChange={e => set('interest_portion', e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="repay-memo" className="block text-xs text-caption mb-1">메모</label>
+          <input id="repay-memo" type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
+        </div>
+      </div>
+      <p className="text-xs text-caption">
+        원금 {fmt(principal)}만큼 잔액이 줄고, 거래내역에 상환 1건이 만들어져요.
+        명세서에 원금·이자가 나뉘어 있으면 이자분을 적어 주세요.
+      </p>
+      <div className="flex gap-3 pt-1">
+        <button type="submit" className="btn-primary text-sm px-5 py-2 rounded-control transition-colors">기록</button>
+        <button type="button" onClick={onCancel} className="text-caption hover:text-ink text-sm px-4 py-2 rounded-control hover:bg-surface-sunken transition-colors">
+          취소
+        </button>
+      </div>
+    </form>
   );
 }
 

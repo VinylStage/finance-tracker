@@ -17,7 +17,7 @@ const INSTALLMENT_POLICY_TYPES = ['무이자', '부분무이자', '유이자'];
 // transactions.origin 허용값의 정본(#268).
 // 'manual' 은 사용자 직접 입력과 CSV·카드 임포트를 포함한다 — 명세서에서
 // 가져온 실제 결제라 사용자 소유로 본다.
-const TRANSACTION_ORIGINS = ['manual', 'installment', 'revolving', 'debt_interest'];
+const TRANSACTION_ORIGINS = ['manual', 'installment', 'revolving', 'debt_interest', 'debt_repayment'];
 
 // 거래내역 화면에서 수정·삭제할 수 없는 출처(#268).
 //
@@ -27,7 +27,11 @@ const TRANSACTION_ORIGINS = ['manual', 'installment', 'revolving', 'debt_interes
 // 틀어지기 때문이다.
 //
 // 아래 셋은 계산 결과라 원본을 고쳐야 값이 맞는다. 거래만 고치면 계산과 어긋난다.
-const LOCKED_ORIGINS = ['installment', 'revolving', 'debt_interest'];
+// debt_repayment 도 여기 넣는다(#287). 상환액은 사용자가 직접 넣은 값이라 M9
+// 반복거래(recurring) 쪽에 가까워 보이지만, 거래내역에서 금액을 고치면 원금·이자
+// 배분과 그 이후 이자 계산이 전부 어긋난다. 이자 계산의 입력이 되는 값은 원본
+// 화면에서만 고칠 수 있어야 한다.
+const LOCKED_ORIGINS = ['installment', 'revolving', 'debt_interest', 'debt_repayment'];
 
 // 파생 거래가 쓰는 카테고리의 정본(#269).
 //
@@ -44,6 +48,8 @@ const DERIVED_CATEGORIES = {
   installment: { major_type: '부채상환', name: '할부회차금' },
   revolving: { major_type: '부채상환', name: '리볼빙수수료' },
   debt_interest: { major_type: '부채상환', name: '대출이자' },
+  // 상환은 원금을 줄이는 실제 현금 유출이다. 이자와 성격이 달라 카테고리를 나눈다.
+  debt_repayment: { major_type: '부채상환', name: '대출원금상환' },
 };
 
 // 이 값이 바뀌면 할부 회차가 다시 계산된다(#269).

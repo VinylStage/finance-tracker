@@ -325,3 +325,100 @@ describe('F. 이자 계산 조회 (#286)', () => {
     assert.strictEqual(res.status, 404);
   });
 });
+
+describe('G. 부분상환 (#287)', () => {
+  let debtId;
+  let repaymentId;
+
+  test('G-1. 상환을 기록하면 잔액이 줄고 거래가 만들어진다', async () => {
+    const created = await json('/api/debts', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: '상환대상', type: '마이너스통장', loan_type: 'credit_line',
+        balance: 3566196, annual_rate: 4.17, credit_limit: 4800000,
+        rate_effective_from: '2026-01-01',
+      }),
+    });
+    debtId = created.body.id;
+
+    const res = await json(`/api/debts/${debtId}/repayments`, {
+      method: 'POST',
+      body: JSON.stringify({ amount: 566196, repaid_on: '2026-05-01', memo: '보너스' }),
+    });
+    assert.strictEqual(res.status, 201, JSON.stringify(res.body));
+    assert.strictEqual(res.body.principal_portion, 566196);
+    assert.strictEqual(res.body.balance_after, 3000000);
+    assert.strictEqual(res.body.derived.created, 1);
+    repaymentId = res.body.id;
+
+    const list = await json('/api/debts');
+    assert.strictEqual(list.body.data.find((d) => d.id === debtId).balance, 3000000);
+  });
+
+  test('G-2. 거래내역에 상환이 잠긴 채로 남는다', async () => {
+    const rows = await json(`/api/debts/${debtId}/derived`);
+    const repay = rows.body.data.find((r) => r.origin === 'debt_repayment');
+    assert.ok(repay, '상환 거래가 없다');
+    assert.strictEqual(repay.amount, 566196);
+
+    const put = await json(`/api/transactions/${repay.id}`, {
+      method: 'PUT', body: JSON.stringify({ amount: 1 }),
+    });
+    assert.ok(put.status >= 400, '거래내역에서 상환액이 수정됐다');
+  });
+
+  test('G-3. 상환이 이자 계산에 반영된다', async () => {
+    // 상환 이력이 없으면 과거 이자를 재계산할 수 없다는 것이 이 이슈의 요점이다.
+    const res = await json(`/api/debts/${debtId}/interest-projection?from=2026-04-30&to=2026-05-30`);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    const segs = res.body.data.postings[0].segments;
+    assert.ok(segs.length >= 2, '상환일에서 구간이 갈리지 않았다');
+    assert.strictEqual(segs[segs.length - 1].balance, 3000000);
+  });
+
+  test('G-4. 배분 합이 안 맞으면 거부한다', async () => {
+    const res = await json(`/api/debts/${debtId}/repayments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: 100000, repaid_on: '2026-06-01',
+        principal_portion: 90000, interest_portion: 5000,
+      }),
+    });
+    assert.strictEqual(res.status, 400);
+    assert.ok(!/principal_portion|interest_portion/.test(res.body.error));
+  });
+
+  test('G-5. 상환 기록을 지우면 원금분이 되돌아오고 거래도 사라진다', async () => {
+    const del = await json(`/api/debts/${debtId}/repayments/${repaymentId}`, { method: 'DELETE' });
+    assert.strictEqual(del.status, 200, JSON.stringify(del.body));
+    assert.strictEqual(del.body.restored, 566196);
+    assert.strictEqual(del.body.derived.deleted, 1);
+
+    const list = await json('/api/debts');
+    assert.strictEqual(list.body.data.find((d) => d.id === debtId).balance, 3566196);
+
+    const rows = await json(`/api/debts/${debtId}/derived`);
+    assert.ok(!rows.body.data.some((r) => r.origin === 'debt_repayment'));
+  });
+
+  test('G-6. 부채를 지우면 상환 이력과 거래도 사라진다', async () => {
+    const created = await json('/api/debts', {
+      method: 'POST', body: JSON.stringify({ name: '삭제대상', balance: 1000000, annual_rate: 5 }),
+    });
+    await json(`/api/debts/${created.body.id}/repayments`, {
+      method: 'POST', body: JSON.stringify({ amount: 100000, repaid_on: '2026-05-01' }),
+    });
+    const del = await json(`/api/debts/${created.body.id}`, { method: 'DELETE' });
+    assert.strictEqual(del.body.derived.deleted, 1);
+
+    const rows = await json(`/api/debts/${created.body.id}/repayments`);
+    assert.strictEqual(rows.body.data.length, 0);
+  });
+
+  test('G-7. 없는 부채면 404', async () => {
+    const res = await json('/api/debts/999999/repayments', {
+      method: 'POST', body: JSON.stringify({ amount: 1000, repaid_on: '2026-05-01' }),
+    });
+    assert.strictEqual(res.status, 404);
+  });
+});

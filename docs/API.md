@@ -680,6 +680,45 @@
 
 - **응답 스키마**: `{ "data": [ transactions 행 ] }`
 
+### GET /api/debts/:id/repayments
+부분상환 이력. 최근 상환이 위로 온다.
+
+- **응답 스키마**: `{ "data": [ debt_repayments 행 ] }`
+
+### POST /api/debts/:id/repayments
+부분상환을 기록하고 잔액을 줄인다(#287).
+
+`debts.balance` 를 직접 고치는 대신 여기를 거치게 하는 것이 요점이다. 직접 고치면
+언제 얼마를 갚았는지가 남지 않아 과거 이자를 재계산할 수 없다.
+
+- **요청 파라미터**:
+  - `amount` (body, required): 총 상환액. 0보다 큰 정수
+  - `repaid_on` (body, required): `YYYY-MM-DD`
+  - `principal_portion` / `interest_portion` (body, optional): 배분을 직접 넣을 때.
+    **둘을 더한 값이 `amount` 와 같아야 한다.** 비우면 전액이 원금분이 된다
+  - `memo` (body, optional)
+- **응답 스키마**:
+  ```json
+  {
+    "ok": true, "id": "integer",
+    "principal_portion": "number", "interest_portion": "number",
+    "balance_before": "number", "balance_after": "number",
+    "derived": { "created": "number" }
+  }
+  ```
+- **비고**: 이력·잔액·거래가 한 트랜잭션이다. **원금분만 잔액에서 뺀다** — 이자분은
+  이미 잔액에 편입돼 있던 이자를 갚는 것이라 전액을 빼면 이중으로 줄어든다.
+  거래는 `origin='debt_repayment'` 로 만들어지고 거래내역에서 수정·삭제할 수 없다.
+- **에러 케이스**: 404 (부채 없음), 400 (금액·날짜·배분 합)
+
+### DELETE /api/debts/:id/repayments/:repaymentId
+상환 기록을 지우고 **원금분만큼** 잔액을 되돌린다. 딸린 거래도 함께 지운다.
+
+`balance_after` 로 되돌리지 않는다 — 그 사이에 다른 상환이나 이자가 있었으면 그것들까지 되감긴다.
+
+- **응답 스키마**: `{ "ok": true, "restored": "number", "derived": { "deleted": "number" } }`
+- **에러 케이스**: 404
+
 ### GET /api/debts/:id/interest-projection?from=&to=
 마이너스통장의 기간 이자를 계산한다(#286). **읽기 전용 — DB 를 바꾸지 않는다.**
 

@@ -21,6 +21,7 @@ const LOCKED_MESSAGE_BY_ORIGIN = {
   installment: '이 내역은 할부 등록에서 자동으로 만들어졌어요. 할부 화면에서 고칠 수 있어요.',
   revolving: '이 내역은 리볼빙 기록에서 자동으로 만들어졌어요. 리볼빙 화면에서 고칠 수 있어요.',
   debt_interest: '이 내역은 대출 이자 기록에서 자동으로 만들어졌어요. 부채 화면에서 고칠 수 있어요.',
+  debt_repayment: '이 내역은 대출 상환 기록에서 자동으로 만들어졌어요. 부채 화면에서 고칠 수 있어요.',
 };
 
 function lockedMessage(row) {

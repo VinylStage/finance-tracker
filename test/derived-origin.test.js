@@ -22,6 +22,7 @@ describe('isDerived', () => {
     { tx: { origin: 'installment' }, expected: true },
     { tx: { origin: 'revolving' }, expected: true },
     { tx: { origin: 'debt_interest' }, expected: true },
+    { tx: { origin: 'debt_repayment' }, expected: true },
     // origin 컬럼이 없던 시절의 행. 사용자가 직접 넣은 것으로 본다(#268 과 같은 기준).
     { tx: {}, expected: false },
     { tx: { origin: null }, expected: false },
@@ -54,9 +55,10 @@ describe('표식 문구', () => {
     assert.strictEqual(originLabel({ origin: 'installment' }), '할부');
   });
 
-  test('리볼빙·부채이자는 회차 개념이 없다', () => {
+  test('리볼빙·부채이자·상환은 회차 개념이 없다', () => {
     assert.strictEqual(originLabel({ origin: 'revolving' }), '리볼빙 수수료');
     assert.strictEqual(originLabel({ origin: 'debt_interest' }), '대출 이자');
+    assert.strictEqual(originLabel({ origin: 'debt_repayment' }), '대출 상환');
   });
 
   test('수동 거래에는 표식이 없다', () => {
@@ -66,7 +68,7 @@ describe('표식 문구', () => {
 
   test('색 말고 아이콘도 함께 쓴다', () => {
     // 색만으로 구분하면 색을 구분 못 하는 사용자에게 아무 정보가 없다(WCAG 1.4.1).
-    for (const origin of ['installment', 'revolving', 'debt_interest']) {
+    for (const origin of ['installment', 'revolving', 'debt_interest', 'debt_repayment']) {
       assert.ok(originIcon({ origin }), `${origin} 아이콘 없음`);
       assert.ok(originLabel({ origin }), `${origin} 텍스트 없음`);
     }
@@ -105,13 +107,14 @@ describe('고칠 수 있는 곳으로 보내기', () => {
     assert.strictEqual(originLinkText({ origin: 'installment' }), '할부 화면에서 수정');
     assert.strictEqual(originLinkText({ origin: 'revolving' }), '리볼빙 화면에서 수정');
     assert.strictEqual(originLinkText({ origin: 'debt_interest' }), '부채 화면에서 수정');
+    assert.strictEqual(originLinkText({ origin: 'debt_repayment' }), '부채 화면에서 수정');
   });
 });
 
 describe('안내 문구', () => {
   test('무엇을 할 수 있는지로 끝난다', () => {
     // "수정할 수 없습니다" 같은 통보형은 다음 행동이 빠져 있다.
-    for (const origin of ['installment', 'revolving', 'debt_interest']) {
+    for (const origin of ['installment', 'revolving', 'debt_interest', 'debt_repayment']) {
       const hint = originHint({ origin });
       assert.ok(hint.includes('고칠 수 있어요'), `다음 행동이 없다: ${hint}`);
       assert.ok(!hint.includes('수정할 수 없습니다'), `통보형 문구: ${hint}`);
@@ -119,7 +122,7 @@ describe('안내 문구', () => {
   });
 
   test('사용자에게 보이는 문구에 내부 용어가 없다', () => {
-    for (const origin of ['installment', 'revolving', 'debt_interest']) {
+    for (const origin of ['installment', 'revolving', 'debt_interest', 'debt_repayment']) {
       const tx = { origin, origin_ref_id: 1, origin_seq: 2, origin_seq_total: 6 };
       const texts = [originLabel(tx), originLinkText(tx), originHint(tx)];
       for (const t of texts) {
