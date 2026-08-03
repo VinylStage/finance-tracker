@@ -410,7 +410,7 @@
   {
     "data": {
       "installment_id": "integer",
-      "policy_applied": { "policy_type": "string", "annual_rate": "number", "free_months": "number" },
+      "policy_applied": { "policy_type": "string", "annual_rate": "number", "free_from_sequence": "number" },
       "delete_count": "number",
       "create_count": "number",
       "before_total": "number",

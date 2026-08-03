@@ -121,7 +121,7 @@ function monthOf(dateOrMonth) {
 // 정책이 없을 때 쓰는 자리표. 이자율 0 이라 computeSchedule 은 원금만 쪼갠다.
 // 수수료는 기존 fee_per_month 를 회차마다 그대로 얹어 따로 채운다 — #266 정책을
 // 아직 입력하지 않은 사용자(#271 이전)도 할부를 쓸 수 있어야 한다.
-const NO_POLICY = { policy_type: '유이자', annual_rate: 0, free_months: 0 };
+const NO_POLICY = { policy_type: '유이자', annual_rate: 0, free_from_sequence: 0 };
 
 // 어느 시점의 정책을 쓸 것인가.
 //
@@ -277,7 +277,7 @@ function planInstallmentDerived(db, installmentId, overrides = {}) {
     // 어떤 정책으로 계산했는지 보여준다. 정책이 없으면 화면이 "고정 수수료로
     // 계산했다" 를 안내할 수 있어야 한다.
     policy_applied: policy
-      ? { policy_type: policy.policy_type, annual_rate: policy.annual_rate, free_months: policy.free_months }
+      ? { policy_type: policy.policy_type, annual_rate: policy.annual_rate, free_from_sequence: policy.free_from_sequence }
       : null,
     delete_count: before.length,
     create_count: after.length,

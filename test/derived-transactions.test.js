@@ -226,7 +226,7 @@ describe('D. 재생성', () => {
   test('D-6. 정책이 있으면 정책 이자를 쓰고 고정 수수료를 무시한다', () => {
     db.prepare(`
       INSERT INTO card_installment_policies
-        (payment_method_id, months, policy_type, annual_rate, free_months, effective_from)
+        (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from)
       VALUES (?, 3, '무이자', 0, 0, '2026-01-01')
     `).run(cardId);
     const id = makeInstallment({ months: 3, total_amount: 300000, fee_per_month: 5000 });
@@ -238,12 +238,12 @@ describe('D. 재생성', () => {
   test('D-7. 구매 시점 정책을 쓴다 — 뒤에 등록된 정책이 소급 적용되지 않는다', () => {
     db.prepare(`
       INSERT INTO card_installment_policies
-        (payment_method_id, months, policy_type, annual_rate, free_months, effective_from, effective_to)
+        (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from, effective_to)
       VALUES (?, 3, '무이자', 0, 0, '2026-01-01', '2026-06-30')
     `).run(cardId);
     db.prepare(`
       INSERT INTO card_installment_policies
-        (payment_method_id, months, policy_type, annual_rate, free_months, effective_from)
+        (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from)
       VALUES (?, 3, '유이자', 12, 0, '2026-07-01')
     `).run(cardId);
 
