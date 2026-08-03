@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
+const { resolvePeriod } = require('../utils/period');
 const { isEditable, lockedMessage, findLocked, countLockedAll } = require('../services/transactionOrigin');
 const { PAYMENT_STYLES } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
@@ -337,10 +338,15 @@ router.get('/years', (req, res) => {
 // 등록 순서 무관(세그먼트 2개라 /:id 와 충돌 없음) — 가독성상 /:id 근처에 둔다.
 router.get('/summary/by-month', (req, res) => {
   try {
-    const { year } = req.query;
-    if (!year || !/^\d{4}$/.test(year)) return res.status(400).json({ error: '조회할 연도를 선택해 주세요.' });
+    // year 를 그대로 받되 from/to 공통 규약도 받는다(#272). 기존 호출부는
+    // year 만 보내므로 동작이 바뀌지 않는다.
+    const period = resolvePeriod(req.query);
+    if (period.error) return res.status(400).json({ error: period.error });
+    if (!period.from || !period.to) {
+      return res.status(400).json({ error: '조회할 연도를 선택해 주세요.' });
+    }
     const { where, params } = buildTransactionFilters({
-      ...req.query, from: `${year}-01-01`, to: `${year}-12-31`,
+      ...req.query, from: period.from, to: period.to,
     });
     const rows = db.prepare(`
       SELECT strftime('%Y-%m', t.date) AS month,
