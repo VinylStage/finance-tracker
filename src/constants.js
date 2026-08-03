@@ -72,9 +72,15 @@ const AUDIT_ACTORS = ['user', 'system', 'import'];
 // 로그가 데이터보다 커지므로 사실 1행만 남기고, 실행취소 대상에서 제외한다.
 const AUDIT_OPS = ['INSERT', 'UPDATE', 'DELETE', 'RESTORE'];
 
+// recurring_rules.freq 허용값의 정본(#278).
+//
+// 기존 규칙은 월 단위 고정이었다. 마이그레이션 기본값이 'monthly' 라 기존 행은
+// 그대로 남는다. interval 과 조합해 "2개월마다" 같은 주기를 표현한다.
+const RECURRING_FREQS = ['daily', 'monthly', 'yearly'];
+
 module.exports = {
   PAYMENT_STYLES, MAJOR_TYPES, INSTALLMENT_POLICY_TYPES,
   TRANSACTION_ORIGINS, LOCKED_ORIGINS,
   DERIVED_CATEGORIES, INSTALLMENT_SCHEDULE_FIELDS,
-  AUDIT_ACTORS, AUDIT_OPS,
+  AUDIT_ACTORS, AUDIT_OPS, RECURRING_FREQS,
 };
