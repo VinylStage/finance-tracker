@@ -6,6 +6,7 @@ const { serverError } = require('../utils/errors');
 const { localYearMonth, localYMD } = require('../utils/date');
 const { installmentsDueForMonth } = require('../utils/aggregation');
 const { numericBody } = require('../utils/validate');
+const { runAs } = require('../utils/auditContext');
 const { INSTALLMENT_SCHEDULE_FIELDS } = require('../constants');
 const {
   planInstallmentDerived, applyInstallmentDerived, derivedRowsFor, deleteDerivedFor,
@@ -53,14 +54,19 @@ const MONTHS_ELAPSED = `
 // 이 앱엔 배치/스케줄러가 없으므로, remaining_months를 매 조회마다 동적으로
 // 계산하는 이 라우트의 기존 방식과 일관되게 조회 시점에 자가교정한다 —
 // 청구 기간이 끝난 '진행중' 행을 GET 때마다 '완료'로 갱신.
+// 사용자는 조회만 했는데 데이터가 바뀐다. 감사로그에 user 로 찍히면 실행취소가
+// 사용자가 하지 않은 일을 되돌리게 된다 — runAs('system') 으로 감싼다(#298).
+// 부작용 있는 GET 자체는 #205 에서 따로 다룬다.
 function completeExpiredInstallments() {
   const today = localYMD();
-  db.prepare(`
-    UPDATE installments
-    SET status = '완료'
-    WHERE status = '진행중'
-      AND ? >= strftime('%Y-%m-%d', date(start_billing_month || '-01', '+' || months || ' months'))
-  `).run(today);
+  runAs('system', () => {
+    db.prepare(`
+      UPDATE installments
+      SET status = '완료'
+      WHERE status = '진행중'
+        AND ? >= strftime('%Y-%m-%d', date(start_billing_month || '-01', '+' || months || ' months'))
+    `).run(today);
+  });
 }
 
 // GET /api/installments?status=진행중

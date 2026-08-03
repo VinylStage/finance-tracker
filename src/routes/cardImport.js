@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const db = require('../db/init');
 const { serverError, errMsg, UserInputError, isUserInputError } = require('../utils/errors');
+const { runAs } = require('../utils/auditContext');
 const { parseCardExcel, detectCardCompany } = require('../services/cardExcelImport');
 
 // FND-09(감사): 파일 개수(30개)만 제한하고 크기·형식 제한이 없어 memoryStorage에
@@ -203,7 +204,9 @@ router.post('/', uploadOrReject(upload.array('files', 30)), async (req, res) => 
 
     const isPreview = req.query.preview === 'true';
     // append 전용: card-import 는 중복 체크 후 삽입이라 파괴적 동작(overwrite/delete)이 없다.
-    const results = files.map((f) => processOne(f, isPreview));
+    // 파일에서 들어온 대량 삽입은 사용자가 한 건씩 넣은 것과 성격이 다르다.
+    // 실행취소 단위도 다르므로 actor 를 구분한다(#298).
+    const results = runAs('import', () => files.map((f) => processOne(f, isPreview)));
     res.json({ results, totals: aggregate(results) });
   } catch (e) {
     // 파일별 오류는 processOne 이 담으므로 여기 도달하면 예상 못한 서버 오류다(내부 메시지 숨김+로깅).
@@ -216,7 +219,7 @@ router.post('/single', uploadOrReject(upload.single('file')), async (req, res) =
   try {
     if (!req.file) return res.status(400).json({ error: '업로드할 파일을 선택해 주세요.' });
     const isPreview = req.query.preview === 'true';
-    const result = processTransactions(req.file.originalname, req.file.buffer, isPreview);
+    const result = runAs('import', () => processTransactions(req.file.originalname, req.file.buffer, isPreview));
     res.json(result);
   } catch (e) {
     // 잘못된 입력(미지원 카드사, 시트 부재, 파일 해석 실패)은 400. DB 등 그 외 오류는 500(내부 메시지 숨김+로깅).

@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { runAs } = require('../utils/auditContext');
 const { localYMD } = require('../utils/date');
 
 const SCHEMA_VERSION = 1;
@@ -194,7 +195,7 @@ router.post('/settings/restore', (req, res) => {
     if (!payload.categories && !payload.payment_methods && !payload.app_settings) {
       return res.status(400).json({ error: '복원할 내용이 없습니다. 카테고리·결제수단·설정 중 하나 이상이 담긴 파일이어야 합니다.' });
     }
-    restoreSettings(payload);
+    runAs('import', () => restoreSettings(payload));
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'export');
