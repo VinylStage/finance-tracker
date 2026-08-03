@@ -5,6 +5,7 @@ import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import DerivedTransactions from '../components/DerivedTransactions';
+import DuplicateCandidates from '../components/DuplicateCandidates';
 import { useHashTarget } from '../hooks/useHashTarget';
 import { anchorId } from '../lib/derivedOrigin';
 
@@ -85,6 +86,10 @@ export default function Installments() {
           onCancel={() => setShowForm(false)}
         />
       )}
+
+      {/* 중복 의심 거래는 목록 위에 둔다. 할부를 새로 등록한 직후가 가장 흔한
+          발견 시점이고, 아래로 내리면 스크롤해야 만난다(#269). */}
+      <DuplicateCandidates />
 
       <div className="flex items-center justify-between">
         <div className="flex gap-2">

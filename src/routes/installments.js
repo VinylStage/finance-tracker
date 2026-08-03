@@ -5,13 +5,16 @@ const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYearMonth, localYMD } = require('../utils/date');
 const { installmentsDueForMonth } = require('../utils/aggregation');
-const { numericBody } = require('../utils/validate');
+const { numericBody, asInt } = require('../utils/validate');
 const { runAs } = require('../utils/auditContext');
 const { INSTALLMENT_SCHEDULE_FIELDS } = require('../constants');
 const {
   planInstallmentDerived, applyInstallmentDerived, derivedRowsFor, deleteDerivedFor,
   PreviewRequiredError, PreviewMismatchError,
 } = require('../services/derivedTransactions');
+const {
+  findDuplicateCandidates, planResolve, dismiss, undismiss,
+} = require('../services/installmentDuplicates');
 
 // 프리뷰 관련 오류를 상태코드로 옮긴다(ADR 0008).
 //
@@ -96,6 +99,94 @@ router.get('/', (req, res) => {
     const this_month_total = installmentsDueForMonth(thisMonth);
 
     res.json({ data, this_month_total });
+  } catch (e) {
+    serverError(res, e, 'installments');
+  }
+});
+
+// GET /api/installments/duplicates?days=14 — 중복 의심 거래(#269 잔여)
+//
+// **읽기 전용이다.** B안 전환으로 "할부 구매를 이미 거래로 넣어둔" 경우가 중복이
+// 되는데, 자동으로 지우지 않는다 — 이 저장소는 실거래 2,212건 유실 사고가 있었다.
+// 후보를 보여주고 판단을 받는다.
+//
+// '/:id/...' 보다 먼저 선언한다. 뒤에 두면 'duplicates' 가 id 로 잡힐 수 있다.
+router.get('/duplicates', (req, res) => {
+  try {
+    const days = req.query.days === undefined ? 14 : asInt(req.query.days);
+    if (days === null || days < 0 || days > 365) {
+      return res.status(400).json({ error: '며칠 이내를 볼지 0에서 365 사이로 정해 주세요.' });
+    }
+    const data = findDuplicateCandidates(db, { dayWindow: days });
+    res.json({
+      data,
+      total_amount: data.reduce((s, c) => s + c.transaction.amount, 0),
+      day_window: days,
+    });
+  } catch (e) {
+    serverError(res, e, 'installments');
+  }
+});
+
+// POST /api/installments/duplicates/preview — 지울 대상 확인. DB 를 바꾸지 않는다.
+router.post('/duplicates/preview', (req, res) => {
+  try {
+    const plan = planResolve(db, (req.body || {}).ids);
+    res.json({ data: plan });
+  } catch (e) {
+    serverError(res, e, 'installments');
+  }
+});
+
+// POST /api/installments/duplicates/resolve — 사용자가 고른 것만 처리한다.
+//
+// 지우기는 프리뷰 지문을 요구한다(ADR 0008). 중복이 아니라고 판단한 것은
+// dismiss 로 기억해 다음부터 목록에서 빠진다 — 지우는 것만이 판단이 아니다.
+router.post('/duplicates/resolve', (req, res) => {
+  try {
+    const { delete_ids = [], keep_ids = [], preview_token } = req.body || {};
+
+    let deleted = 0;
+    if (delete_ids.length) {
+      const plan = planResolve(db, delete_ids);
+      if (plan.locked.length) {
+        return res.status(400).json({
+          error: '자동으로 만들어진 내역은 여기서 지울 수 없어요. 원래 등록한 화면에서 고쳐 주세요.',
+        });
+      }
+      if (!preview_token) {
+        return res.status(428).json({
+          error: '지울 내역을 먼저 확인해 주세요. 미리보기를 거쳐야 지울 수 있어요.',
+          preview_required: true,
+        });
+      }
+      if (preview_token !== plan.fingerprint) {
+        return res.status(409).json({
+          error: '미리보기를 본 뒤 내용이 달라졌어요. 다시 확인하고 지워 주세요.',
+          preview_stale: true,
+        });
+      }
+
+      const ids = plan.rows.map((r) => r.id);
+      const placeholders = ids.map(() => '?').join(',');
+      db.transaction(() => {
+        deleted = db.prepare(
+          `DELETE FROM transactions WHERE id IN (${placeholders}) AND COALESCE(origin,'manual')='manual'`
+        ).run(...ids).changes;
+      })();
+    }
+
+    const kept = keep_ids.length ? dismiss(db, keep_ids) : 0;
+    res.json({ ok: true, deleted, kept });
+  } catch (e) {
+    serverError(res, e, 'installments');
+  }
+});
+
+// POST /api/installments/duplicates/restore — 판단을 되돌린다(다시 목록에 나온다)
+router.post('/duplicates/restore', (req, res) => {
+  try {
+    res.json({ ok: true, restored: undismiss(db, (req.body || {}).ids) });
   } catch (e) {
     serverError(res, e, 'installments');
   }
