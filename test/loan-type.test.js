@@ -164,13 +164,20 @@ describe('C. 유형 정본과 전략 디스패치', () => {
     assert.throws(() => settingsFor({ loan_type: '알수없음' }), UnknownLoanTypeError);
   });
 
-  test('C-3. 전략이 아직 없는 유형은 그 사실을 명시적으로 알린다', () => {
-    // 틀린 계산보다 계산이 없는 편이 낫다.
-    assert.throws(() => strategyFor('credit_line'), StrategyNotReadyError);
+  test('C-3. 정본의 모든 유형에 전략이 있다', () => {
+    // 전략 없는 유형이 남아 있으면 사용자가 고를 수는 있는데 계산이 안 된다.
+    // StrategyNotReadyError 는 그 상태를 명시적으로 알리는 안전망이지, 정상 상태가 아니다.
+    for (const t of LOAN_TYPES) {
+      assert.doesNotThrow(() => strategyFor(t), `${t} 전략 없음`);
+    }
   });
 
   test('C-4. general 은 전략이 있다', () => {
     assert.strictEqual(strategyFor('general'), generalLoan);
+  });
+
+  test('C-5. 전략 미준비 안전망은 살아 있다', () => {
+    assert.ok(StrategyNotReadyError.prototype instanceof Error);
   });
 });
 

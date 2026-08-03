@@ -263,3 +263,65 @@ describe('E. 소수 금리 회귀 (#285 에서 발견한 결함)', () => {
     assert.strictEqual(res.status, 400);
   });
 });
+
+describe('F. 이자 계산 조회 (#286)', () => {
+  let debtId;
+
+  test('F-1. 마이너스통장 기간 이자를 계산한다 — 실제 계좌 조건', async () => {
+    const created = await json('/api/debts', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: '계산확인', type: '마이너스통장', loan_type: 'credit_line',
+        balance: REAL.balance, annual_rate: REAL.annual_rate,
+        credit_limit: REAL.credit_limit, interest_day: 30,
+        rate_effective_from: '2026-01-01',
+      }),
+    });
+    debtId = created.body.id;
+
+    const res = await json(`/api/debts/${debtId}/interest-projection?from=2026-04-30&to=2026-07-30`);
+    assert.strictEqual(res.status, 200, JSON.stringify(res.body));
+    // #284 검산과 같은 값
+    assert.deepStrictEqual(res.body.data.postings.map((p) => p.interest), [12222, 12673, 12308]);
+    assert.strictEqual(res.body.data.total_interest, 37203);
+    assert.strictEqual(res.body.data.final_balance, 3603399);
+  });
+
+  test('F-2. 읽기 전용이다 — 잔액이 바뀌지 않는다', async () => {
+    // 계산만 보여주는 경로가 조용히 쓰면 ADR 0008 이 무의미해진다.
+    const before = await json('/api/debts');
+    const b = before.body.data.find((d) => d.id === debtId).balance;
+    await json(`/api/debts/${debtId}/interest-projection?from=2026-04-30&to=2026-07-30`);
+    const after = await json('/api/debts');
+    assert.strictEqual(after.body.data.find((d) => d.id === debtId).balance, b);
+  });
+
+  test('F-3. 금리 이력이 없는 과거 구간은 사유를 알려준다', async () => {
+    // 0% 로 계산해 이자를 조용히 없애지 않는다.
+    const res = await json(`/api/debts/${debtId}/interest-projection?from=2025-01-01&to=2025-06-01`);
+    assert.strictEqual(res.status, 400);
+    assert.ok(res.body.error.includes('금리'));
+  });
+
+  test('F-4. general 부채는 기간 계산을 지원하지 않는다고 알린다', async () => {
+    // 월 단위 어림값이라 구간 계산이 성립하지 않는다. 없는 정밀도를 만들지 않는다.
+    const created = await json('/api/debts', {
+      method: 'POST', body: JSON.stringify({ name: '일반부채', balance: 1000000, annual_rate: 5 }),
+    });
+    const res = await json(`/api/debts/${created.body.id}/interest-projection?from=2026-01-01&to=2026-02-01`);
+    assert.strictEqual(res.status, 400);
+    assert.ok(!/loan_type|interest_basis|daily/.test(res.body.error), `내부 용어 노출: ${res.body.error}`);
+  });
+
+  test('F-5. 잘못된 기간을 막는다', async () => {
+    for (const q of ['from=2026-01-01', 'from=2026-05-01&to=2026-01-01', 'from=x&to=y']) {
+      const res = await json(`/api/debts/${debtId}/interest-projection?${q}`);
+      assert.strictEqual(res.status, 400, q);
+    }
+  });
+
+  test('F-6. 없는 부채면 404', async () => {
+    const res = await json('/api/debts/999999/interest-projection?from=2026-01-01&to=2026-02-01');
+    assert.strictEqual(res.status, 404);
+  });
+});
