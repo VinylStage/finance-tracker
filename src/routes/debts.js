@@ -7,9 +7,11 @@ const { asInt, numericBody } = require('../utils/validate');
 const {
   createDebtInterestDerived, deleteDebtDerived, derivedRowsForDebt,
 } = require('../services/derivedTransactions');
-const { validateLoanFields, creditLineStatus, settingsFor } = require('../services/interest');
 const {
-  setDebtRate, listRates, rateAt, validateRateChange,
+  validateLoanFields, creditLineStatus, settingsFor, strategyFor,
+} = require('../services/interest');
+const {
+  setDebtRate, listRates, rateAt, rateTimeline, validateRateChange,
 } = require('../services/debtRate');
 
 
@@ -183,6 +185,77 @@ router.get('/:id/derived', (req, res) => {
     serverError(res, e, 'debts');
   }
 });
+
+// GET /api/debts/:id/interest-projection?from=&to= — 마이너스통장 이자 계산(#286)
+//
+// **읽기 전용이다. DB 를 바꾸지 않는다.** 이자를 실제로 기록하는 것은 여전히
+// POST /:id/interest 이고, 여기서는 "이 기간에 얼마가 붙는가" 만 보여준다.
+// ADR 0008 이 읽기 전용 계산을 프리뷰 대상에서 제외한 것과 같은 성격이다.
+router.get('/:id/interest-projection', (req, res) => {
+  try {
+    const debt = db.prepare('SELECT * FROM debts WHERE id=?').get(req.params.id);
+    if (!debt) return res.status(404).json({ error: '찾는 부채가 없습니다. 이미 삭제됐을 수 있어요.' });
+
+    const { from, to } = req.query;
+    if (!isYMD(from) || !isYMD(to)) {
+      return res.status(400).json({ error: '조회할 기간을 선택해 주세요.' });
+    }
+    if (from >= to) {
+      return res.status(400).json({ error: '시작일이 종료일보다 늦습니다. 날짜를 확인해 주세요.' });
+    }
+
+    const settings = settingsFor(debt);
+    if (settings.interest_basis !== 'daily') {
+      // general 은 월 단위 어림값이라 구간 계산이 성립하지 않는다. 없는 정밀도를
+      // 만들어 내지 않고 사실대로 거부한다.
+      return res.status(400).json({
+        error: '이 부채는 기간별 이자 계산을 지원하지 않아요. 마이너스통장으로 등록하면 계산할 수 있어요.',
+      });
+    }
+
+    const strategy = strategyFor(settings.loan_type);
+    const result = strategy.simulate({
+      balanceTimeline: balanceTimelineFor(db, Number(req.params.id), debt),
+      rateTimeline: rateTimeline(db, Number(req.params.id), from, to),
+      from,
+      to,
+      interestDay: debt.interest_day || null,
+      compounds: settings.compounds === 1,
+      creditLimit: settings.credit_limit,
+    });
+    res.json({ data: result });
+  } catch (e) {
+    if (e && e.name === 'MissingRateError') {
+      return res.status(400).json({ error: e.message });
+    }
+    serverError(res, e, 'debts');
+  }
+});
+
+// 잔액 이력. 지금은 이자 기록의 balance_after 가 유일한 원천이다.
+//
+// #287 이 부분상환 이력을 넣으면 여기에 합쳐진다 — 두 이력을 시간순으로 이으면
+// 잔액 타임라인이 된다. 그때까지는 현재 잔액을 기준선으로 쓴다.
+function balanceTimelineFor(database, debtId, debt) {
+  const logs = database.prepare(`
+    SELECT log_date, balance_after FROM debt_interest_log
+    WHERE debt_id = ? ORDER BY log_date ASC, id ASC
+  `).all(debtId);
+
+  if (!logs.length) {
+    // 이력이 없으면 현재 잔액이 처음부터 유지된 것으로 본다. 근거 없는 과거
+    // 잔액을 지어내지 않는다.
+    return [{ from: '1900-01-01', balance: debt.balance }];
+  }
+  return [
+    { from: '1900-01-01', balance: logs[0].balance_after },
+    ...logs.map((l) => ({ from: l.log_date, balance: l.balance_after })),
+  ];
+}
+
+function isYMD(v) {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
 
 // GET /api/debts/:id/rates — 금리 이력(#285)
 router.get('/:id/rates', (req, res) => {

@@ -680,6 +680,45 @@
 
 - **응답 스키마**: `{ "data": [ transactions 행 ] }`
 
+### GET /api/debts/:id/interest-projection?from=&to=
+마이너스통장의 기간 이자를 계산한다(#286). **읽기 전용 — DB 를 바꾸지 않는다.**
+
+이자를 실제로 기록하는 것은 `POST /api/debts/:id/interest` 이고, 여기서는 "이 기간에
+얼마가 붙는가" 만 보여준다. ADR 0008 이 읽기 전용 계산을 프리뷰 대상에서 제외한 것과
+같은 성격이다.
+
+구간을 **잔액 변동점과 금리 변경점 양쪽에서** 자른다. 변동금리 계좌에서 현재 금리로
+소급 계산하면 그때 청구된 금액과 다르다.
+
+- **요청 파라미터**: `from`, `to` (query, required, `YYYY-MM-DD`. `[from, to)` 반개구간)
+- **응답 스키마**:
+  ```json
+  {
+    "data": {
+      "postings": [
+        {
+          "date": "string", "from": "string", "to": "string",
+          "interest": "number",
+          "balance_before": "number", "balance_after": "number",
+          "over_limit": "boolean",
+          "segments": [{ "from": "string", "to": "string", "days": "number",
+                         "balance": "number", "annual_rate": "number", "interest": "number" }]
+        }
+      ],
+      "total_interest": "number",
+      "accrued_since_last_posting": "number",
+      "capitalized": "number",
+      "final_balance": "number"
+    }
+  }
+  ```
+- **비고**: `interest_day` 가 있으면 매월 그날이 회차 경계가 되고, 없으면 기간 전체가
+  한 회차다. 복리(`compounds`)면 회차마다 이자가 잔액에 편입되어 다음 회차 이자가
+  늘어난다. 한도를 넘어도 계산은 계속되고 `over_limit` 로만 알린다.
+- **에러 케이스**:
+  - 400: 기간 형식·순서 오류 / 그 구간의 금리 이력 없음 / 기간 계산을 지원하지 않는 유형
+  - 404: 부채 없음
+
 ### GET /api/debts/:id/rates
 금리 이력. 최근 적용분이 위로 온다.
 
