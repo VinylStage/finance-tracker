@@ -344,8 +344,8 @@ router.get('/summary/by-month', (req, res) => {
     });
     const rows = db.prepare(`
       SELECT strftime('%Y-%m', t.date) AS month,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense,
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense,
         COUNT(*) AS count
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
@@ -559,7 +559,7 @@ router.get('/summary/dashboard', (req, res) => {
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       WHERE t.date >= ? AND t.date < ? AND c.major_type != '수입'
-        AND t.payment_style NOT IN ('할부','리볼빙')
+        AND ${EXPENSE_ROW}
         AND t.merchant IS NOT NULL AND t.merchant != ''
       GROUP BY t.merchant
       ORDER BY total DESC
@@ -586,7 +586,7 @@ router.get('/summary/category-breakdown', (req, res) => {
       SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total
       FROM categories c
       LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date <= ?
-        AND t.payment_style NOT IN ('할부','리볼빙')
+        AND ${EXPENSE_ROW}
       WHERE c.is_active = 1 AND c.major_type != '수입'
       GROUP BY c.id
       HAVING total > 0

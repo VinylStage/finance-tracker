@@ -305,4 +305,28 @@ describe('F. 기존 집계가 움직이지 않는다', () => {
     assert.strictEqual(after.body.income, before.body.income, '파생 거래가 수입을 바꿨다');
     assert.strictEqual(after.body.expense, before.body.expense, '파생 거래가 지출을 바꿨다');
   });
+
+  test('F-2. 월별 요약도 파생 거래를 지출에 넣지 않는다', async () => {
+    // 대시보드만 맞추고 월별 요약이 어긋나면 같은 달을 두 화면에서 다르게 본다.
+    const year = CUR_MONTH.slice(0, 4);
+    const { body } = await json(`/api/transactions/summary/by-month?year=${year}`);
+    const row = body.data.find((r) => r.month === CUR_MONTH);
+    assert.ok(row, '이번 달 요약이 없다');
+    assert.ok(row.count > 0, 'F-1 이 만든 파생 거래가 집계 대상에 없다 — 이 테스트가 무의미해진다');
+    assert.strictEqual(row.expense, 0, `파생 거래가 월별 지출에 들어갔다 (${row.expense})`);
+  });
+
+  test('F-3. 지출 규칙이 라우트에 다시 인라인으로 적히지 않았다', () => {
+    // FND-13 이 단일 상수로 뽑은 규칙이 세 곳에 다시 적혀 있었고, #269 가
+    // 부채이자를 제외하면서 한쪽만 고쳐지는 문제가 실제로 났다.
+    // 소스를 훑어 재발을 막는다 — 새 라우트가 규칙을 복사해 붙이면 여기서 걸린다.
+    const routesDir = path.join(__dirname, '..', 'src', 'routes');
+    const offenders = [];
+    for (const file of fs.readdirSync(routesDir).filter((f) => f.endsWith('.js'))) {
+      const text = fs.readFileSync(path.join(routesDir, file), 'utf8');
+      if (text.includes("payment_style NOT IN ('할부','리볼빙')")) offenders.push(file);
+    }
+    assert.deepStrictEqual(offenders, [],
+      'utils/aggregation.js 의 EXPENSE_CASE / EXPENSE_ROW 를 쓸 것');
+  });
 });
