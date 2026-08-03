@@ -4,6 +4,9 @@ import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import DerivedTransactions from '../components/DerivedTransactions';
+import { useHashTarget } from '../hooks/useHashTarget';
+import { anchorId } from '../lib/derivedOrigin';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -17,6 +20,7 @@ export default function Installments() {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [filter, setFilter] = useState('진행중');
   const [showForm, setShowForm] = useState(false);
+  const [openId, setOpenId] = useState(null);
   const { confirm, alert } = useConfirm();
 
   const { loading, error, reload } = useLoader(async () => {
@@ -29,6 +33,9 @@ export default function Installments() {
     setThisMonthTotal(inst.this_month_total || 0);
     setPaymentMethods(pms);
   }, [filter]);
+
+  // 거래내역에서 넘어왔으면 그 할부를 펼쳐 보여준다(#270).
+  useHashTarget('installment', !loading, setOpenId);
 
   const handleComplete = async (id) => {
     try {
@@ -121,9 +128,10 @@ export default function Installments() {
             </thead>
             <tbody>
               {items.map((it, i) => (
+                <React.Fragment key={it.id}>
                 <tr
-                  key={it.id}
-                  className={`border-b border-line-faint hover:bg-surface-page transition-colors ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}
+                  id={anchorId('installment', it.id)}
+                  className={`border-b border-line-faint hover:bg-surface-page transition-colors scroll-mt-6 ${i % 2 === 0 ? '' : 'bg-surface-page/50'} ${openId === it.id ? 'bg-brand-tint/40' : ''}`}
                 >
                   <td className="px-4 py-3 text-ink">{it.merchant}</td>
                   <td className="px-4 py-3 text-right text-body tabular-nums">{fmt(it.total_amount)}</td>
@@ -140,6 +148,13 @@ export default function Installments() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setOpenId(openId === it.id ? null : it.id)}
+                        aria-expanded={openId === it.id}
+                        className="text-caption hover:text-brand-text transition-colors text-xs"
+                      >
+                        청구 내역 {openId === it.id ? '▲' : '▼'}
+                      </button>
                       {it.status === '진행중' && (
                         <button
                           onClick={() => handleComplete(it.id)}
@@ -157,6 +172,14 @@ export default function Installments() {
                     </div>
                   </td>
                 </tr>
+                {openId === it.id && (
+                  <tr className="border-b border-line-faint bg-surface-page/30">
+                    <td colSpan={8} className="px-4">
+                      <DerivedTransactions kind="installment" id={it.id} />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

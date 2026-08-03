@@ -1,27 +1,37 @@
 import React, { useRef } from 'react';
 import CategoryBadge from './CategoryBadge';
+import DerivedBadge from './DerivedBadge';
 import { AMOUNT_MARK } from '../lib/categoryStyle';
+import { isDerived } from '../lib/derivedOrigin';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
 }
 
 export default function TransactionList({ items, onEdit, onDelete, bare = false, selectedIds, onToggleSelect, onToggleSelectAll }) {
+  const lastCheckedIndexRef = useRef(null);
+
   if (!items.length) {
     return <div className="text-caption text-center py-10 text-sm">거래 내역이 없습니다.</div>;
   }
 
   const selectable = !!(selectedIds && onToggleSelect);
-  const allSelected = selectable && items.every(tx => selectedIds.has(tx.id));
 
-  const lastCheckedIndexRef = useRef(null);
+  // 파생 거래는 일괄 선택에서 아예 뺀다(#270). 선택은 되는데 삭제만 실패하면
+  // 사용자는 왜 안 됐는지 알 방법이 없다 — 서버는 이미 잠갔으므로(#268)
+  // 고르게 두는 것 자체가 잘못된 약속이다.
+  const selectableItems = items.filter((tx) => !isDerived(tx));
+  const allSelected = selectable
+    && selectableItems.length > 0
+    && selectableItems.every((tx) => selectedIds.has(tx.id));
 
   const handleCheckboxChange = (e, id, index) => {
     const shiftKey = e.nativeEvent.shiftKey;
     if (shiftKey && lastCheckedIndexRef.current !== null && onToggleSelectAll) {
       const start = Math.min(lastCheckedIndexRef.current, index);
       const end = Math.max(lastCheckedIndexRef.current, index);
-      const rangeIds = items.slice(start, end + 1).map(tx => tx.id);
+      // 범위 선택도 마찬가지다. 사이에 낀 파생 거래까지 집어 오면 안 된다.
+      const rangeIds = items.slice(start, end + 1).filter((tx) => !isDerived(tx)).map((tx) => tx.id);
       onToggleSelectAll(rangeIds, e.target.checked);
     } else {
       onToggleSelect(id);
@@ -40,7 +50,7 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                   type="checkbox"
                   aria-label="전체 선택"
                   checked={allSelected}
-                  onChange={() => onToggleSelectAll?.(items.map(tx => tx.id), !allSelected)}
+                  onChange={() => onToggleSelectAll?.(selectableItems.map(tx => tx.id), !allSelected)}
                   className="cursor-pointer"
                 />
               </th>
@@ -64,13 +74,15 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
             >
               {selectable && (
                 <td className="px-4 py-3" role="cell" data-label="">
-                  <input
-                    type="checkbox"
-                    aria-label={`${tx.date} ${tx.merchant || tx.category_name} 거래 선택`}
-                    checked={selectedIds.has(tx.id)}
-                    onChange={(e) => handleCheckboxChange(e, tx.id, i)}
-                    className="cursor-pointer"
-                  />
+                  {!isDerived(tx) && (
+                    <input
+                      type="checkbox"
+                      aria-label={`${tx.date} ${tx.merchant || tx.category_name} 거래 선택`}
+                      checked={selectedIds.has(tx.id)}
+                      onChange={(e) => handleCheckboxChange(e, tx.id, i)}
+                      className="cursor-pointer"
+                    />
+                  )}
                 </td>
               )}
               <td className="px-4 py-3 text-caption whitespace-nowrap" role="cell" data-label="날짜">{tx.date}</td>
@@ -96,19 +108,28 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                 {tx.payment_method_name || '—'}
               </td>
               <td className="px-4 py-3" role="cell" data-label="">
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => onEdit(tx)}
-                    className="text-caption hover:text-brand-text transition-colors text-xs"
-                  >
-                    수정
-                  </button>
-                  <button
-                    onClick={() => onDelete(tx.id)}
-                    className="text-caption hover:text-loss-text transition-colors text-xs"
-                  >
-                    삭제
-                  </button>
+                {/* 파생 거래에는 수정·삭제 버튼을 비활성으로 두지 않고 아예
+                    렌더하지 않는다. 비활성 버튼은 누를 수 있는 것처럼 보이면서
+                    이유도 알려주지 않는다(#270). */}
+                <div className="flex gap-2 justify-end items-center">
+                  {isDerived(tx) ? (
+                    <DerivedBadge tx={tx} />
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => onEdit(tx)}
+                        className="text-caption hover:text-brand-text transition-colors text-xs"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => onDelete(tx.id)}
+                        className="text-caption hover:text-loss-text transition-colors text-xs"
+                      >
+                        삭제
+                      </button>
+                    </>
+                  )}
                 </div>
               </td>
             </tr>
