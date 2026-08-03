@@ -221,3 +221,41 @@ describe('조기 완납 (#269 확정 요건)', () => {
     assert.strictEqual(scheduleTotals(s).principal, 1200000);
   });
 });
+
+describe('계산 기준 — 카드사 공시값 대조 (#284 확정)', () => {
+  // 비씨카드 상품공시실이 "100원당 수수료 1.66원" 을 연 19.90% 기준으로 적고,
+  // "100원당 할부 수수료는 1회차에 부담하셔야 할 예상 금액입니다" 라고 단다.
+  // 1회차 잔액은 언제나 전액이므로 이 값이 곧 월이자율 검증이 된다.
+  //
+  // 이 테스트가 깨지면 계산 기준이 월할에서 벗어난 것이다 — 근거는
+  // services/installmentInterest.js 머리주석에 있다.
+  test('연 19.90% 의 1회차 수수료가 공시값(100원당 1.66원)과 맞는다', () => {
+    const s = computeSchedule({
+      totalAmount: 100000, months: 12, startBillingMonth: '2026-09',
+      policy: { policy_type: '유이자', annual_rate: 19.9, free_from_sequence: 0 },
+    });
+    // 100,000원은 100원의 1,000배 → 1.66 × 1000 = 1,660원
+    assert.strictEqual(s[0].interest, 1658); // floor(100000 × 0.199 / 12) = 1658
+    assert.strictEqual(Math.round((s[0].interest / 1000) * 100) / 100, 1.66);
+  });
+
+  test('일할이었다면 나오지 않는 값이다', () => {
+    // 30일 기준 일할이면 100원당 1.64원(= 1,635원), 31일이면 1.69원(= 1,690원).
+    // 어느 쪽도 공시값 1.66 이 아니다.
+    const daily30 = Math.floor(100000 * 0.199 * 30 / 365);
+    const daily31 = Math.floor(100000 * 0.199 * 31 / 365);
+    assert.notStrictEqual(daily30, 1658);
+    assert.notStrictEqual(daily31, 1658);
+  });
+
+  test('이자는 잔액 기준이다 — 협회 공식의 할부잔액', () => {
+    // 할부잔액 = 이용원금 − 기결제원금. 회차마다 원금만큼 줄어든다.
+    const s = computeSchedule({
+      totalAmount: 1200000, months: 12, startBillingMonth: '2026-09',
+      policy: { policy_type: '유이자', annual_rate: 12, free_from_sequence: 0 },
+    });
+    assert.strictEqual(s[0].interest, Math.floor(1200000 * 0.12 / 12));
+    assert.strictEqual(s[1].interest, Math.floor(1100000 * 0.12 / 12));
+    assert.strictEqual(s[11].interest, Math.floor(100000 * 0.12 / 12));
+  });
+});
