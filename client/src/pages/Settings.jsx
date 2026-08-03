@@ -10,6 +10,7 @@ import { resetOnboarding } from '../lib/onboarding';
 import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
 import Icon from '../components/Icon';
 import AnchorNav from '../components/AnchorNav';
+import CardPolicySection from '../components/CardPolicySection';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
@@ -67,6 +68,10 @@ export default function Settings() {
           <Anchor id="payment">
             <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
           </Anchor>
+          {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
+          <Anchor id="card-policy">
+            <CardPolicySection paymentMethods={paymentMethods} />
+          </Anchor>
           <Anchor id="recurring">
             <RecurringRuleSection rules={recurringRules} categories={categories} paymentMethods={paymentMethods} onChanged={reload} />
           </Anchor>
@@ -102,6 +107,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'app', label: '기본 설정' },
   { id: 'category', label: '카테고리 관리' },
   { id: 'payment', label: '결제수단 관리' },
+  { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
   { id: 'export', label: '데이터 내보내기' },
   { id: 'settings-backup', label: '설정 백업 / 복원' },

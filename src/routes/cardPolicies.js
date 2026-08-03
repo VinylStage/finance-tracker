@@ -4,7 +4,9 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { numericBody, missingFields } = require('../utils/validate');
-const { validatePolicy, findOverlapping, policyAt } = require('../services/cardPolicy');
+const {
+  validatePolicy, findOverlapping, policyAt, expandRange, validateRange,
+} = require('../services/cardPolicy');
 
 // 숫자 필드 선언(#211). 라우트 정의에 붙여 두면 어느 필드에 검증을 빠뜨렸는지
 // 소스에서 기계적으로 셀 수 있다.
@@ -46,6 +48,74 @@ router.get('/effective', (req, res) => {
     }
     const found = policyAt(db, Number(payment_method_id), Number(months), on);
     res.json({ data: found });
+  } catch (e) {
+    serverError(res, e, 'cardPolicies');
+  }
+});
+
+// POST /api/card-policies/range — 개월수 구간을 개월수별 행으로 펼쳐 한 번에 등록(#271)
+//
+// 카드사 안내가 "2~3개월 무이자" 처럼 구간이라 사용자가 개월수를 하나씩 11번
+// 입력하게 두면 안 된다. 펼치기를 서버가 하는 이유는 원자성이다 — 화면이 11번
+// POST 를 날리면 중간에 겹침으로 막혔을 때 앞부분만 들어간 상태가 남는다.
+//
+// '/:id' 보다 먼저 선언해야 한다. 뒤에 두면 'range' 가 id 로 잡힌다.
+router.post('/range', numericBody(['payment_method_id', 'from_month', 'to_month', 'free_months']), (req, res) => {
+  try {
+    const missing = missingFields(req.body, ['payment_method_id', 'from_month', 'to_month', 'policy_type', 'effective_from']);
+    if (missing.length) {
+      return res.status(400).json({ error: '결제수단, 개월수 구간, 정책 종류, 적용 시작일은 필수입니다.' });
+    }
+    const rangeError = validateRange(req.body);
+    if (rangeError) return res.status(400).json({ error: rangeError });
+
+    const rows = expandRange(req.body);
+    for (const p of rows) {
+      const invalid = validatePolicy(p);
+      if (invalid) return res.status(400).json({ error: invalid });
+    }
+
+    // 겹침은 전부 먼저 확인한다. 넣다가 막히면 어디까지 들어갔는지 사용자가 알 수 없다.
+    const clashing = rows.filter((p) => findOverlapping(db, p)).map((p) => p.months);
+    if (clashing.length) {
+      return res.status(409).json({
+        error: `${clashing.join(', ')}개월에 적용 기간이 겹치는 정책이 이미 있습니다. 기간이나 개월수 구간을 조정해 주세요.`,
+      });
+    }
+
+    const insert = db.prepare(`
+      INSERT INTO card_installment_policies
+        (payment_method_id, months, policy_type, annual_rate, free_months, effective_from, effective_to, memo)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    db.transaction(() => {
+      for (const p of rows) {
+        insert.run(p.payment_method_id, p.months, p.policy_type, p.annual_rate,
+                   p.free_months, p.effective_from, p.effective_to, p.memo);
+      }
+    })();
+
+    res.status(201).json({ ok: true, created: rows.length });
+  } catch (e) {
+    serverError(res, e, 'cardPolicies');
+  }
+});
+
+// DELETE /api/card-policies/range?payment_method_id=&from_month=&to_month=&effective_from=
+// 목록에 구간으로 보이는 것을 구간째로 지운다. 화면이 id 를 하나씩 지우면
+// 중간에 실패했을 때 구간이 반쪽만 남는다.
+router.delete('/range', (req, res) => {
+  try {
+    const { payment_method_id, from_month, to_month, effective_from } = req.query;
+    const missing = missingFields(req.query, ['payment_method_id', 'from_month', 'to_month', 'effective_from']);
+    if (missing.length) {
+      return res.status(400).json({ error: '지울 구간을 특정할 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.' });
+    }
+    const info = db.prepare(`
+      DELETE FROM card_installment_policies
+      WHERE payment_method_id = ? AND months BETWEEN ? AND ? AND effective_from = ?
+    `).run(Number(payment_method_id), Number(from_month), Number(to_month), effective_from);
+    res.json({ ok: true, deleted: info.changes });
   } catch (e) {
     serverError(res, e, 'cardPolicies');
   }

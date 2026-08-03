@@ -692,6 +692,73 @@
   ```
 - **에러 케이스**:
   - 500: DB 오류
+## cardPolicies.js
+
+카드사 할부 정책 마스터(#266). 저장은 개월수 하나당 한 행이고, 화면은 구간으로
+입력·표시한다(#271).
+
+`effective_from` / `effective_to` 로 시점별 정책을 남긴다. 덮어쓰기로 관리하면
+과거 할부의 이자 계산이 소급해서 바뀐다.
+
+### GET /api/card-policies
+- **요청 파라미터**:
+  - `payment_method_id` (query, optional): 결제수단으로 거르기
+  - `months` (query, optional): 개월수로 거르기
+  - `on` (query, optional): 이 날짜에 유효한 것만
+- **응답 스키마**: `{ "data": [ card_installment_policies 행 + payment_method_name ] }`
+
+### GET /api/card-policies/effective
+특정 시점에 유효한 정책 1건. 이자 계산이 쓰는 조회다.
+
+- **요청 파라미터**: `payment_method_id`, `months`, `on` (모두 required)
+- **응답 스키마**: `{ "data": 정책 행 | null }`
+- **에러 케이스**: 400 — 셋 중 하나라도 빠짐
+
+### POST /api/card-policies/range
+개월수 구간을 개월수별 행으로 펼쳐 **한 트랜잭션에** 등록한다.
+
+- **요청 파라미터**:
+  - `payment_method_id` (body, required)
+  - `from_month` / `to_month` (body, required): 개월수 구간. 2 이상 60 이하
+  - `policy_type` (body, required): `무이자` / `부분무이자` / `유이자`
+  - `annual_rate` (body, optional, default 0)
+  - `free_months` (body, optional, default 0)
+  - `effective_from` (body, required) / `effective_to` (body, optional)
+  - `memo` (body, optional)
+- **응답 스키마**: `{ "ok": true, "created": "number" }`
+- **비고**: 펼치기를 서버가 하는 이유는 원자성이다. 화면이 개월수마다 POST 하면
+  중간에 겹침으로 막혔을 때 앞부분만 저장된 상태가 남는다. 겹침은 **전부 먼저
+  확인하고** 하나라도 걸리면 아무것도 넣지 않는다.
+- **에러 케이스**:
+  - 400: 필수값 누락 / 구간이 뒤집힘 / 정책 종류와 값이 어긋남
+  - 409: 겹치는 개월수가 있음. 어느 개월인지 문구에 담는다
+
+### POST /api/card-policies
+개월수 1건 등록. 구간 입력 화면은 `/range` 를 쓴다.
+
+- **요청 파라미터**: `payment_method_id`, `months`, `policy_type`, `effective_from` (required),
+  `annual_rate`, `free_months`, `effective_to`, `memo` (optional)
+- **응답 스키마**: `{ "id": "integer", "ok": true }`
+- **에러 케이스**: 400 (검증 실패), 409 (기간 겹침)
+
+### PUT /api/card-policies/:id
+- **요청 파라미터**: POST 와 같음 (부분 갱신)
+- **응답 스키마**: `{ "ok": true }`
+- **에러 케이스**: 404, 400, 409
+
+### DELETE /api/card-policies/range
+목록에 구간으로 보이는 것을 구간째 지운다.
+
+- **요청 파라미터**: `payment_method_id`, `from_month`, `to_month`, `effective_from` (모두 query, required)
+- **응답 스키마**: `{ "ok": true, "deleted": "number" }`
+- **비고**: `effective_from` 까지 일치해야 지운다. 같은 개월수라도 적용 기간이
+  다르면 별개 정책이라 함께 사라지면 안 된다.
+- **에러 케이스**: 400 — 구간을 특정할 수 없음
+
+### DELETE /api/card-policies/:id
+- **응답 스키마**: `{ "ok": true }`
+- **에러 케이스**: 404
+
 ## savings.js
 
 ### GET /api/savings
