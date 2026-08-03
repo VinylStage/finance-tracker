@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { runAs } = require('../utils/auditContext');
 const { TRANSACTION_ORIGINS } = require('../constants');
 const { localYMD } = require('../utils/date');
 const { asInt } = require('../utils/validate');
@@ -186,7 +187,9 @@ router.post('/import', (req, res) => {
       }
     });
     
-    restore();
+    // 백업 복원은 DB 를 통째로 갈아끼운다. 사용자가 한 건씩 넣은 것과 실행취소
+    // 단위가 완전히 달라 actor 를 구분한다 — 되돌리기 대상에서 빠진다(#300).
+    runAs('import', restore);
     
     const response = { ok: true, imported, skipped, deleted, total: transactions.length };
     if (legacy_fields_defaulted) {

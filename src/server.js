@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const { csrfGuard } = require('./utils/csrfGuard');
 const { securityHeaders } = require('./utils/securityHeaders');
+const { auditContext } = require('./utils/auditContext');
 const { serverError } = require('./utils/errors');
 const app = express();
 
@@ -14,6 +15,9 @@ app.use(securityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 app.use(csrfGuard);
+// 감사 컨텍스트는 라우트 앞에 둔다. csrfGuard 에서 거부된 요청은 쓰기가 없으므로
+// 그 뒤에 두어 action_id 를 낭비하지 않는다.
+app.use(auditContext);
 
 // API routes
 app.use('/api/transactions', require('./routes/transactions'));

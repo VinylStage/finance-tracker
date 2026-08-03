@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError, errMsg, isUserInputError } = require('../utils/errors');
+const { runAs } = require('../utils/auditContext');
 const { parseCardCsv } = require('../services/csvImport');
 
 // CSV 경로는 엑셀 내보내기가 없는 카드사만 남긴다(#88) — 라벨은 카드사 판별용, 결제수단 조회에도 재사용.
@@ -81,7 +82,7 @@ router.post('/', async (req, res) => {
     }
 
     const isPreview = req.query.preview === 'true';
-    const result = importCsvTransactions(cardCompany, csvText, isPreview);
+    const result = runAs('import', () => importCsvTransactions(cardCompany, csvText, isPreview));
     res.json(result);
   } catch (error) {
     if (isUserInputError(error)) {
