@@ -3,7 +3,8 @@ const express = require('express');
 const path = require('path');
 const { csrfGuard } = require('./utils/csrfGuard');
 const { securityHeaders } = require('./utils/securityHeaders');
-const { auditContext } = require('./utils/auditContext');
+const { auditContext, bindAuditDb } = require('./utils/auditContext');
+const db = require('./db/init');
 const { serverError } = require('./utils/errors');
 const app = express();
 
@@ -17,6 +18,9 @@ app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 app.use(csrfGuard);
 // 감사 컨텍스트는 라우트 앞에 둔다. csrfGuard 에서 거부된 요청은 쓰기가 없으므로
 // 그 뒤에 두어 action_id 를 낭비하지 않는다.
+// 트리거가 읽을 컨텍스트 테이블에 연결한다(#299). 마이그레이션이 먼저 돌아야 하므로
+// db 를 require 한 뒤에 건다.
+bindAuditDb(db);
 app.use(auditContext);
 
 // API routes
