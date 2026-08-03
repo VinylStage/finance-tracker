@@ -587,6 +587,15 @@
 
 ### POST /api/debts
 - **요청 파라미터**:
+  - `loan_type` (body, optional, default `general`): 이자 **계산 방식**. `general` | `credit_line`.
+    `type`(용도 분류)과 다른 축이다 — 자세한 것은 `docs/DATA_MODEL.md`
+  - `credit_limit` (body, `credit_line` 이면 required): 한도
+  - `interest_basis` (body, optional): `daily` | `monthly`. 비우면 유형 기본값
+  - `compounds` (body, optional): 이자의 원금 편입 여부. 비우면 유형 기본값
+  - `interest_day` (body, optional): 이자 결제일
+  - `rate_effective_from` (body, optional): 금리 이력 첫 행의 시작일. 비우면 오늘
+  - `annual_rate` 는 **소수를 허용한다** (연 4.17%). 정수만 받던 검증이 실제 금리를
+    거부하던 결함을 #285 에서 고쳤다
   ```json
   {
     "name": "string",
@@ -670,6 +679,36 @@
 이 부채의 이자 기록이 만든 거래 전부.
 
 - **응답 스키마**: `{ "data": [ transactions 행 ] }`
+
+### GET /api/debts/:id/rates
+금리 이력. 최근 적용분이 위로 온다.
+
+- **응답 스키마**: `{ "data": [ debt_rate_history 행 ] }`
+
+### POST /api/debts/:id/rates
+금리를 바꾼다. 열려 있던 구간을 **전날로 닫고** 새 구간을 연다(#285).
+
+변동금리(3개월 주기 등)를 통보받을 때마다 여기로 넣는다. `PUT /api/debts/:id` 는
+금리를 건드리지 않는다 — 금리는 시점이 붙어야 의미가 있고, 덮어쓰면 과거 이자를
+그때 금리로 재현할 수 없다.
+
+- **요청 파라미터**:
+  - `annual_rate` (body, required): 연이율. **소수 허용** (연 4.17% 등)
+  - `effective_from` (body, required): `YYYY-MM-DD`. 이 금리가 적용되기 시작한 날
+  - `memo` (body, optional): 예 `3개월 재산정`
+- **응답 스키마**: `{ "ok": true, "id": "integer", "closed": "number" }` — `closed` 는 닫은 이전 구간 수
+- **비고**: 같은 `effective_from` 으로 다시 넣으면 그 행을 고친다. 날짜 오타를
+  바로잡을 때마다 이력이 늘면 읽을 수 없다. 미래 날짜로 넣으면 `debts.annual_rate`
+  (현재 금리)는 바뀌지 않는다.
+- **에러 케이스**: 404 (부채 없음), 400 (금리 범위·날짜 형식)
+
+### GET /api/debts/:id/rate-on?date=YYYY-MM-DD
+그 시점에 적용되던 연이율. 이력보다 앞선 날짜면 `null` 이다.
+
+**`null` 을 0 으로 흘리지 않는다.** 금리를 모르는 구간을 0% 로 계산하면 이자가 조용히 사라진다.
+
+- **응답 스키마**: `{ "data": "number | null" }`
+- **에러 케이스**: 400 (날짜 형식)
 
 ### GET /api/debts/:id/interest-log
 - **요청 파라미터**: 없음

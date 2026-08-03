@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { computeSchedule } = require('./installmentInterest');
+const { computeSchedule } = require('./interest/installment');
 const { policyAt } = require('./cardPolicy');
 const { DERIVED_CATEGORIES } = require('../constants');
 const { localYearMonth } = require('../utils/date');

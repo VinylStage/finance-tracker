@@ -3,7 +3,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const {
   computeSchedule, scheduleTotals, addMonths, isFreeMonth,
-} = require('../src/services/installmentInterest');
+} = require('../src/services/interest/installment');
 
 const FREE = { policy_type: '무이자', annual_rate: 0, free_from_sequence: 0 };
 const PAID = { policy_type: '유이자', annual_rate: 15.9, free_from_sequence: 0 };
@@ -228,7 +228,7 @@ describe('계산 기준 — 카드사 공시값 대조 (#284 확정)', () => {
   // 1회차 잔액은 언제나 전액이므로 이 값이 곧 월이자율 검증이 된다.
   //
   // 이 테스트가 깨지면 계산 기준이 월할에서 벗어난 것이다 — 근거는
-  // services/installmentInterest.js 머리주석에 있다.
+  // services/interest/installment.js 머리주석에 있다.
   test('연 19.90% 의 1회차 수수료가 공시값(100원당 1.66원)과 맞는다', () => {
     const s = computeSchedule({
       totalAmount: 100000, months: 12, startBillingMonth: '2026-09',

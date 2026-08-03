@@ -71,6 +71,25 @@ const AUDIT_ACTORS = ['user', 'system', 'import'];
 // RESTORE 는 백업 복원처럼 DB 를 통째로 갈아끼우는 작업이다. 행 단위로 남기면
 // 로그가 데이터보다 커지므로 사실 1행만 남기고, 실행취소 대상에서 제외한다.
 const AUDIT_OPS = ['INSERT', 'UPDATE', 'DELETE', 'RESTORE'];
+// debts.loan_type 허용값의 정본(#285).
+//
+// debts.type(용도 — 일반/마이너스통장/학자금/전세자금)과 **다른 축**이다.
+// 이쪽은 이자를 어떻게 계산하는가만 정한다. 용도를 바꿨다고 계산이 바뀌면 안 된다.
+//
+// 신용대출 3종(원리금균등·원금균등·만기일시)은 #284 조사로 산식이 확정돼 있으나
+// 이번 사이클에는 넣지 않는다. 쓰는 곳이 없는 유형을 미리 열어 두면 사용자가
+// 고를 수는 있는데 계산이 안 되는 상태가 된다.
+const LOAN_TYPES = ['general', 'credit_line'];
+
+// 유형만 고르면 계산 방식이 정해져야 한다. 사용자가 일할/복리 여부까지 직접
+// 고르게 하면 잘못 고른 조합(마이너스통장인데 월할 단리)이 조용히 저장된다.
+// debts.interest_basis / compounds 가 NULL 이면 여기 값을 쓴다.
+const LOAN_TYPE_DEFAULTS = {
+  // 기존 동작 유지. 월 이자를 잔액 × 연이율 ÷ 12 로 어림한다.
+  general: { interest_basis: 'monthly', compounds: 0, requires: [] },
+  // 마이너스통장. #284 조사 — 일할(365, 윤년 366)이고 이자가 잔액에 편입된다.
+  credit_line: { interest_basis: 'daily', compounds: 1, requires: ['credit_limit'] },
+};
 
 // recurring_rules.freq 허용값의 정본(#278).
 //
@@ -83,4 +102,6 @@ module.exports = {
   TRANSACTION_ORIGINS, LOCKED_ORIGINS,
   DERIVED_CATEGORIES, INSTALLMENT_SCHEDULE_FIELDS,
   AUDIT_ACTORS, AUDIT_OPS, RECURRING_FREQS,
+  AUDIT_ACTORS, AUDIT_OPS,
+  LOAN_TYPES, LOAN_TYPE_DEFAULTS,
 };
