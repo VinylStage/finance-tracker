@@ -11,6 +11,7 @@
 | revolving_history | 신용카드 회계 기록 저장 | id, month, carried_balance, new_charge, paid_amount, interest, next_carried_balance, payment_method_id |
 | debts | 부채 정보 저장 | id, name, balance, annual_rate, type, memo, loan_type, credit_limit, interest_basis, compounds, interest_day, updated_at |
 | debt_rate_history | 부채 금리의 시점별 이력 | id, debt_id, annual_rate, effective_from, effective_to, memo, created_at |
+| debt_repayments | 부채 부분상환 이력 | id, debt_id, repaid_on, amount, principal_portion, interest_portion, balance_before, balance_after, memo, created_at |
 | debt_interest_log | 부채 이자 로그 기록 | id, debt_id, log_date, rate_at_time, interest_amount, balance_before, balance_after, memo, created_at |
 | app_settings | 애플리케이션 설정 정보 저장 | key, value |
 | savings_products | 저축 상품 정보 저장 | id, name, monthly_contribution, start_date, maturity_date, expected_payout, category_id, status |
@@ -24,6 +25,7 @@
 - `revolving_history.payment_method_id` → `payment_methods.id` (1:N)
 - `debt_interest_log.debt_id` → `debts.id` (1:N)
 - `debt_rate_history.debt_id` → `debts.id` (1:N)
+- `debt_repayments.debt_id` → `debts.id` (1:N)
 - `savings_products.category_id` → `categories.id` (1:N)
 
 ## 파생 거래 (#268, #269)
@@ -33,8 +35,8 @@
 
 | 컬럼 | 의미 |
 |---|---|
-| `origin` | `manual` / `installment` / `revolving` / `debt_interest` |
-| `origin_ref_table` | 원본 테이블명 (`installments`, `revolving_history`, `debt_interest_log`) |
+| `origin` | `manual` / `installment` / `revolving` / `debt_interest` / `debt_repayment` |
+| `origin_ref_table` | 원본 테이블명 (`installments`, `revolving_history`, `debt_interest_log`, `debt_repayments`) |
 | `origin_ref_id` | 원본 행 id |
 | `origin_seq` | 할부 회차 번호. 할부에만 값이 있다 |
 | `origin_seq_total` | 실제로 청구되는 총 회차 수. 조기 완납이면 개월수보다 작다 |
@@ -52,7 +54,10 @@
 |---|---|---|
 | 할부 | `할부` | 대시보드가 `installmentsDue` 로 따로 센다 |
 | 리볼빙 수수료 | `리볼빙` | 수수료는 다음 달 이월 잔액에 얹히는 발생액이다 |
-| 부채 이자 | `해당없음` | 이자가 부채 잔액에 자본화된다. 실제 상환은 사용자가 따로 입력한다 |
+| 부채 이자 | `해당없음` | 이자가 부채 잔액에 자본화된다. 실제 상환이 따로 기록된다 |
+
+**예외: 부채 상환(`debt_repayment`)은 지출로 센다.** 이자와 달리 실제로 통장에서 돈이
+나가는 사건이다. 이자 쪽을 뺀 것이 곧 "상환만 센다" 는 뜻이다(#287).
 
 앞의 둘은 `EXPENSE_CASE` 의 `payment_style` 조건이 이미 걸러내고, 부채 이자는
 `origin` 으로 따로 제외한다(`src/utils/aggregation.js`).
@@ -104,6 +109,20 @@
   `PUT /api/debts/:id` 는 금리를 건드리지 않는다
 - `debt_interest_log.rate_at_time` 은 **감사 기록**이지 조회 원천이 아니다. 이자를 기록한
   시점에만 남아서 임의의 과거 날짜에 어떤 금리였는지 알 수 없다
+
+### 잔액 타임라인 — 이자와 상환을 합친다 (#287)
+
+`debts.balance` 를 직접 고치면 잔액은 바뀌지만 **언제 얼마를 갚았는지가 남지 않는다.**
+이자 계산은 잔액 이력에 의존하므로(특히 복리) 상환 이력이 없으면 과거 이자를 재계산할 수 없다.
+
+`debt_interest_log`(이자 발생)와 `debt_repayments`(상환)를 시점순으로 합치면 잔액
+타임라인이 되고, 그것이 `services/interest/creditLine.accrueInterest()` 의 입력이다.
+두 테이블이 `balance_before` / `balance_after` 를 같은 모양으로 남기는 이유가 이것이다.
+같은 날짜에 둘 다 있으면 **이자가 먼저**다 — 이자가 붙고 나서 갚는 것이 실제 순서다.
+
+**원금분만 잔액에서 뺀다.** 이자분은 이미 잔액에 편입돼 있던 이자를 갚는 것이라 전액을
+빼면 이중으로 줄어든다. 다만 이 앱은 이자를 잔액에 편입하므로 실무상 대부분 전액이
+원금분이다 — 배분 칸은 사용자가 명세서에서 확인해 넣을 수 있도록 남겨 둔 자리다.
 
 ## 테이블 분리 이유 요약
 

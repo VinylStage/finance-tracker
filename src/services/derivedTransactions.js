@@ -28,8 +28,11 @@ const { localYearMonth } = require('../utils/date');
 //                                          얹히는 발생액이지 그 달의 현금 유출이 아니다.
 //   부채 이자     payment_style='해당없음' → 위 두 규칙에 안 걸려서 aggregation.js 가
 //                                          origin 으로 따로 제외한다. 이자는 잔액에
-//                                          자본화되고 실제 상환은 사용자가 따로
-//                                          거래로 넣는다. 둘 다 세면 이중계산이다.
+//                                          자본화되고 실제 상환은 따로 기록된다.
+//                                          둘 다 세면 이중계산이다.
+//   부채 상환     payment_style='해당없음' → **지출로 센다.** 이자와 달리 실제로
+//                                          통장에서 돈이 나가는 사건이고, 이자 쪽을
+//                                          뺀 것이 바로 "상환만 센다" 는 뜻이다(#287).
 //
 // 즉 파생 거래는 지금은 "기록과 표시" 다. 집계를 파생 거래 기준으로 옮기는 것은
 // 화면 전체가 걸린 별도 결정이라 M7·M11 로 넘긴다.
@@ -436,16 +439,64 @@ function createDebtInterestDerived(db, logId) {
   return { created: 1 };
 }
 
+// 상환 1건이 거래 1건을 만든다(#287).
+//
+// 상환은 실제로 돈이 나가는 사건이라 거래로 남는다. 이자(debt_interest)와 달리
+// **현금 유출이 맞지만**, 집계에 넣을지는 별개다 — 아래 집계 약속 참조.
+//
+// 호출자가 이미 트랜잭션 안에서 부르므로 여기서는 트랜잭션을 열지 않는다.
+function createRepaymentDerived(db, repaymentId) {
+  const row = db.prepare(`
+    SELECT r.*, d.name AS debt_name
+    FROM debt_repayments r
+    LEFT JOIN debts d ON r.debt_id = d.id
+    WHERE r.id = ?
+  `).get(repaymentId);
+  if (!row || !row.amount) return { created: 0 };
+
+  db.prepare(INSERT_SQL).run({
+    date: row.repaid_on,
+    category_id: ensureCategoryId(db, 'debt_repayment'),
+    amount: row.amount,
+    payment_method_id: null,
+    payment_style: '해당없음',
+    merchant: row.debt_name || '대출',
+    memo: row.interest_portion > 0
+      ? `${row.debt_name || '대출'} 상환 · 원금 ${withCommas(row.principal_portion)}원 · 이자 ${withCommas(row.interest_portion)}원`
+      : `${row.debt_name || '대출'} 상환`,
+    installment_id: null,
+    origin: 'debt_repayment',
+    origin_ref_table: 'debt_repayments',
+    origin_ref_id: repaymentId,
+    origin_seq: null,
+    origin_seq_total: null,
+  });
+  return { created: 1 };
+}
+
+// 부채를 지우면 그 부채의 상환이 만든 거래도 전부 지운다.
+function deleteDebtRepaymentDerived(db, debtId) {
+  const ids = db.prepare('SELECT id FROM debt_repayments WHERE debt_id=?')
+    .all(debtId).map((r) => r.id);
+  return deleteDerivedFor(db, 'debt_repayments', ids);
+}
+
 // 부채 한 건이 만든 이자 거래 전부(#270 화면용).
 // 파생 거래는 이자 기록 단위로 달리므로 부채 단위로 보려면 이력을 거쳐야 한다.
 function derivedRowsForDebt(db, debtId) {
+  // 이자와 상환 두 갈래를 합친다. 화면은 "이 부채가 만든 거래" 를 하나로 본다(#287).
   return db.prepare(`
     SELECT t.* FROM transactions t
     JOIN debt_interest_log l ON t.origin_ref_id = l.id
     WHERE t.origin_ref_table = 'debt_interest_log' AND t.origin = 'debt_interest'
       AND l.debt_id = ?
-    ORDER BY t.date ASC, t.id ASC
-  `).all(debtId);
+    UNION ALL
+    SELECT t.* FROM transactions t
+    JOIN debt_repayments r ON t.origin_ref_id = r.id
+    WHERE t.origin_ref_table = 'debt_repayments' AND t.origin = 'debt_repayment'
+      AND r.debt_id = ?
+    ORDER BY date ASC, id ASC
+  `).all(debtId, debtId);
 }
 
 // 부채를 지우면 그 부채의 이자 기록이 만든 거래도 전부 지운다.
@@ -462,4 +513,5 @@ module.exports = {
   planInstallmentDerived, applyInstallmentDerived, planFingerprint,
   buildInstallmentRows, resolveInstallmentPolicy,
   syncRevolvingDerived, createDebtInterestDerived, deleteDebtDerived, derivedRowsForDebt,
+  createRepaymentDerived, deleteDebtRepaymentDerived,
 };

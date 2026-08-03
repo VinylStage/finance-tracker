@@ -6,7 +6,12 @@ const { serverError } = require('../utils/errors');
 const { asInt, numericBody } = require('../utils/validate');
 const {
   createDebtInterestDerived, deleteDebtDerived, derivedRowsForDebt,
+  createRepaymentDerived, deleteDebtRepaymentDerived, deleteDerivedFor,
 } = require('../services/derivedTransactions');
+const {
+  validateRepayment, recordRepayment, listRepayments, deleteRepayment,
+  balanceTimeline,
+} = require('../services/debtRepayment');
 const {
   validateLoanFields, creditLineStatus, settingsFor, strategyFor,
 } = require('../services/interest');
@@ -113,8 +118,10 @@ router.delete('/:id', (req, res) => {
   // 어떤 거래가 이 부채 것이었는지 찾을 방법이 없어져 고아 행이 남는다(#269).
   let deleted = 0;
   const tx = db.transaction(() => {
-    deleted = deleteDebtDerived(db, Number(req.params.id));
+    deleted = deleteDebtDerived(db, Number(req.params.id))
+      + deleteDebtRepaymentDerived(db, Number(req.params.id));
     db.prepare('DELETE FROM debt_interest_log WHERE debt_id=?').run(req.params.id);
+    db.prepare('DELETE FROM debt_repayments WHERE debt_id=?').run(req.params.id);
     db.prepare('DELETE FROM debts WHERE id=?').run(req.params.id);
   });
   tx();
@@ -186,6 +193,72 @@ router.get('/:id/derived', (req, res) => {
   }
 });
 
+// GET /api/debts/:id/repayments — 부분상환 이력(#287)
+router.get('/:id/repayments', (req, res) => {
+  try {
+    res.json({ data: listRepayments(db, Number(req.params.id)) });
+  } catch (e) {
+    serverError(res, e, 'debts');
+  }
+});
+
+// POST /api/debts/:id/repayments — 부분상환 기록(#287)
+//
+// 잔액을 직접 고치는 대신 여기를 거치게 하는 것이 이 이슈의 요점이다. 직접 고치면
+// 언제 얼마를 갚았는지가 남지 않아 과거 이자를 재계산할 수 없다.
+router.post('/:id/repayments', numericBody(['amount', 'principal_portion', 'interest_portion']), (req, res) => {
+  try {
+    const debt = db.prepare('SELECT * FROM debts WHERE id=?').get(req.params.id);
+    if (!debt) return res.status(404).json({ error: '찾는 부채가 없습니다. 이미 삭제됐을 수 있어요.' });
+
+    const payload = {
+      amount: asInt(req.body.amount),
+      repaid_on: req.body.repaid_on,
+      memo: req.body.memo || null,
+      principal_portion: req.body.principal_portion === undefined
+        ? undefined : asInt(req.body.principal_portion),
+      interest_portion: req.body.interest_portion === undefined
+        ? undefined : asInt(req.body.interest_portion),
+    };
+    const invalid = validateRepayment(payload);
+    if (invalid) return res.status(400).json({ error: invalid });
+
+    // 이력·잔액·거래가 한 덩어리다. 중간에 실패하면 잔액만 줄고 기록이 없거나
+    // 그 반대가 된다.
+    let result;
+    let derived = { created: 0 };
+    db.transaction(() => {
+      result = recordRepayment(db, Number(req.params.id), payload);
+      derived = createRepaymentDerived(db, result.id);
+    })();
+
+    res.status(201).json({ ok: true, ...result, derived });
+  } catch (e) {
+    serverError(res, e, 'debts');
+  }
+});
+
+// DELETE /api/debts/:id/repayments/:repaymentId — 상환 기록 삭제
+//
+// 부채 id 를 경로에 넣는 이유는 '/repayments/:id' 로 두면 위의 DELETE '/:id' 가
+// 'repayments' 를 부채 id 로 잡아먹기 때문이다. 세 마디짜리 경로는 그 라우트와
+// 겹치지 않는다.
+router.delete('/:id/repayments/:repaymentId', (req, res) => {
+  try {
+    let removed;
+    let derivedDeleted = 0;
+    db.transaction(() => {
+      derivedDeleted = deleteDerivedFor(db, 'debt_repayments', Number(req.params.repaymentId));
+      removed = deleteRepayment(db, Number(req.params.repaymentId));
+    })();
+
+    if (!removed) return res.status(404).json({ error: '찾는 상환 기록이 없습니다. 이미 삭제됐을 수 있어요.' });
+    res.json({ ok: true, restored: removed.principal_portion, derived: { deleted: derivedDeleted } });
+  } catch (e) {
+    serverError(res, e, 'debts');
+  }
+});
+
 // GET /api/debts/:id/interest-projection?from=&to= — 마이너스통장 이자 계산(#286)
 //
 // **읽기 전용이다. DB 를 바꾸지 않는다.** 이자를 실제로 기록하는 것은 여전히
@@ -215,7 +288,7 @@ router.get('/:id/interest-projection', (req, res) => {
 
     const strategy = strategyFor(settings.loan_type);
     const result = strategy.simulate({
-      balanceTimeline: balanceTimelineFor(db, Number(req.params.id), debt),
+      balanceTimeline: balanceTimeline(db, Number(req.params.id), debt.balance),
       rateTimeline: rateTimeline(db, Number(req.params.id), from, to),
       from,
       to,
@@ -231,27 +304,6 @@ router.get('/:id/interest-projection', (req, res) => {
     serverError(res, e, 'debts');
   }
 });
-
-// 잔액 이력. 지금은 이자 기록의 balance_after 가 유일한 원천이다.
-//
-// #287 이 부분상환 이력을 넣으면 여기에 합쳐진다 — 두 이력을 시간순으로 이으면
-// 잔액 타임라인이 된다. 그때까지는 현재 잔액을 기준선으로 쓴다.
-function balanceTimelineFor(database, debtId, debt) {
-  const logs = database.prepare(`
-    SELECT log_date, balance_after FROM debt_interest_log
-    WHERE debt_id = ? ORDER BY log_date ASC, id ASC
-  `).all(debtId);
-
-  if (!logs.length) {
-    // 이력이 없으면 현재 잔액이 처음부터 유지된 것으로 본다. 근거 없는 과거
-    // 잔액을 지어내지 않는다.
-    return [{ from: '1900-01-01', balance: debt.balance }];
-  }
-  return [
-    { from: '1900-01-01', balance: logs[0].balance_after },
-    ...logs.map((l) => ({ from: l.log_date, balance: l.balance_after })),
-  ];
-}
 
 function isYMD(v) {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);

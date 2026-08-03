@@ -398,9 +398,15 @@ describe('H. 부채 이자', () => {
 });
 
 describe('I. 파생 카테고리', () => {
-  test('I-1. 세 출처가 서로 다른 카테고리를 쓴다', () => {
+  test('I-1. 파생 출처마다 다른 카테고리를 쓴다', () => {
+    // 유형을 늘리면서 카테고리를 돌려쓰면 카테고리별 분석이 무의미해진다.
     const names = Object.values(DERIVED_CATEGORIES).map((c) => c.name);
-    assert.strictEqual(new Set(names).size, 3, '파생 유형이 카테고리를 공유하면 분석이 무의미해진다');
+    assert.strictEqual(new Set(names).size, names.length, '파생 유형이 카테고리를 공유한다');
+    assert.deepStrictEqual(
+      Object.keys(DERIVED_CATEGORIES).sort(),
+      ['debt_interest', 'debt_repayment', 'installment', 'revolving'],
+      '새 파생 출처를 추가했으면 카테고리도 함께 정해야 한다'
+    );
   });
 
   test('I-2. 카테고리를 지워도 다음 생성에서 복구된다', () => {
