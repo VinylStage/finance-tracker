@@ -10,7 +10,7 @@ const {
 
 // 숫자 필드 선언(#211). 라우트 정의에 붙여 두면 어느 필드에 검증을 빠뜨렸는지
 // 소스에서 기계적으로 셀 수 있다.
-const NUMERIC = ['payment_method_id', 'months', 'free_from_sequence'];
+const NUMERIC = ['payment_method_id', 'months', 'free_from_sequence', 'category_id'];
 
 // GET /api/card-policies?payment_method_id=&months=&on=YYYY-MM-DD
 router.get('/', (req, res) => {
@@ -60,7 +60,7 @@ router.get('/effective', (req, res) => {
 // POST 를 날리면 중간에 겹침으로 막혔을 때 앞부분만 들어간 상태가 남는다.
 //
 // '/:id' 보다 먼저 선언해야 한다. 뒤에 두면 'range' 가 id 로 잡힌다.
-router.post('/range', numericBody(['payment_method_id', 'from_month', 'to_month', 'free_from_sequence']), (req, res) => {
+router.post('/range', numericBody(['payment_method_id', 'from_month', 'to_month', 'free_from_sequence', 'category_id']), (req, res) => {
   try {
     const missing = missingFields(req.body, ['payment_method_id', 'from_month', 'to_month', 'policy_type', 'effective_from']);
     if (missing.length) {
@@ -85,13 +85,13 @@ router.post('/range', numericBody(['payment_method_id', 'from_month', 'to_month'
 
     const insert = db.prepare(`
       INSERT INTO card_installment_policies
-        (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from, effective_to, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from, effective_to, memo, category_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     db.transaction(() => {
       for (const p of rows) {
         insert.run(p.payment_method_id, p.months, p.policy_type, p.annual_rate,
-                   p.free_from_sequence, p.effective_from, p.effective_to, p.memo);
+                   p.free_from_sequence, p.effective_from, p.effective_to, p.memo, p.category_id);
       }
     })();
 
@@ -141,10 +141,10 @@ router.post('/', numericBody(NUMERIC), (req, res) => {
 
     const info = db.prepare(`
       INSERT INTO card_installment_policies
-        (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from, effective_to, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (payment_method_id, months, policy_type, annual_rate, free_from_sequence, effective_from, effective_to, memo, category_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(p.payment_method_id, p.months, p.policy_type, p.annual_rate,
-           p.free_from_sequence, p.effective_from, p.effective_to, p.memo);
+           p.free_from_sequence, p.effective_from, p.effective_to, p.memo, p.category_id);
     res.status(201).json({ id: info.lastInsertRowid, ok: true });
   } catch (e) {
     serverError(res, e, 'cardPolicies');
@@ -172,10 +172,10 @@ router.put('/:id', numericBody(NUMERIC), (req, res) => {
     db.prepare(`
       UPDATE card_installment_policies
       SET payment_method_id=?, months=?, policy_type=?, annual_rate=?,
-          free_from_sequence=?, effective_from=?, effective_to=?, memo=?
+          free_from_sequence=?, effective_from=?, effective_to=?, memo=?, category_id=?
       WHERE id=?
     `).run(p.payment_method_id, p.months, p.policy_type, p.annual_rate,
-           p.free_from_sequence, p.effective_from, p.effective_to, p.memo, req.params.id);
+           p.free_from_sequence, p.effective_from, p.effective_to, p.memo, p.category_id, req.params.id);
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'cardPolicies');
@@ -208,6 +208,10 @@ function normalize(body) {
     effective_from: body.effective_from,
     effective_to: body.effective_to || null,
     memo: body.memo || null,
+    // null 을 Number() 에 넣으면 0 이 된다. 존재하지 않는 카테고리를 참조하게
+    // 되므로 빈 값은 전부 NULL(그 카드사의 기본 정책)로 모은다.
+    category_id: body.category_id === undefined || body.category_id === null || body.category_id === ''
+      ? null : Number(body.category_id),
   };
 }
 

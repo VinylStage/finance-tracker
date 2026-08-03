@@ -120,25 +120,68 @@ function validateRange(range) {
 
 // 특정 시점에 유효한 정책을 돌려준다. 없으면 null.
 // 겹침을 등록 단계에서 막으므로 결과는 최대 1건이다.
-function policyAt(db, paymentMethodId, months, date) {
+//
+// categoryId 를 주면 **좁은 것 우선**으로 찾는다(#315).
+//   1) 그 카테고리 전용 예외
+//   2) 없으면 카드사 기본 정책(category_id IS NULL)
+//   3) 둘 다 없으면 null — 호출부가 유이자로 떨어뜨리고 그 사실을 밝힌다
+//
+// categoryId 를 생략하면 기본 정책만 본다. 카테고리를 모르는 호출부가 우연히
+// 예외 정책을 집어가면 안 되기 때문이다.
+function policyAt(db, paymentMethodId, months, date, categoryId = null) {
   const rows = db.prepare(`
     SELECT * FROM card_installment_policies
     WHERE payment_method_id = ? AND months = ?
   `).all(paymentMethodId, months);
-  return rows.find((p) => isEffectiveOn(p, date)) || null;
+
+  const effective = rows.filter((p) => isEffectiveOn(p, date));
+
+  if (categoryId != null) {
+    const exact = effective.find((p) => p.category_id === categoryId);
+    if (exact) return exact;
+  }
+  return effective.find((p) => p.category_id == null) || null;
 }
 
-// 등록·수정 시 같은 (결제수단, 개월수) 안에서 기간이 겹치는 정책이 있는가.
+// 그 정책이 어느 경로로 뽑혔는지까지 알려준다. 화면이 "이 카드의 기본 정책을
+// 적용했습니다" 와 "온라인쇼핑 전용 정책을 적용했습니다" 를 구분해 말해야 한다.
+function resolvePolicy(db, paymentMethodId, months, date, categoryId = null) {
+  const rows = db.prepare(`
+    SELECT * FROM card_installment_policies
+    WHERE payment_method_id = ? AND months = ?
+  `).all(paymentMethodId, months);
+  const effective = rows.filter((p) => isEffectiveOn(p, date));
+
+  if (categoryId != null) {
+    const exact = effective.find((p) => p.category_id === categoryId);
+    if (exact) return { policy: exact, source: 'category' };
+  }
+  const base = effective.find((p) => p.category_id == null);
+  if (base) return { policy: base, source: 'base' };
+  return { policy: null, source: 'none' };
+}
+
+// 등록·수정 시 기간이 겹치는 정책이 있는가.
 // excludeId 는 수정 시 자기 자신을 제외하기 위한 것이다.
+//
+// 겹침 판정은 **같은 카테고리 범위 안에서만** 한다. 기본 정책과 카테고리 예외는
+// 같은 기간에 공존하는 것이 정상이다 — 예외가 기본을 덮는 구조이기 때문이다.
 function findOverlapping(db, policy, excludeId = null) {
   const rows = db.prepare(`
     SELECT * FROM card_installment_policies
     WHERE payment_method_id = ? AND months = ?
   `).all(policy.payment_method_id, policy.months);
-  return rows.find((r) => r.id !== excludeId && overlaps(r, policy)) || null;
+
+  const sameScope = (r) => {
+    const a = r.category_id == null ? null : r.category_id;
+    const b = policy.category_id == null ? null : policy.category_id;
+    return a === b;
+  };
+
+  return rows.find((r) => r.id !== excludeId && sameScope(r) && overlaps(r, policy)) || null;
 }
 
 module.exports = {
-  isEffectiveOn, overlaps, validatePolicy, policyAt, findOverlapping,
+  isEffectiveOn, overlaps, validatePolicy, policyAt, resolvePolicy, findOverlapping,
   expandRange, validateRange, RANGE_MONTH_MIN, RANGE_MONTH_MAX,
 };
