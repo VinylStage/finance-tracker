@@ -6,6 +6,9 @@ import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import DerivedTransactions from '../components/DerivedTransactions';
 import { anchorId } from '../lib/derivedOrigin';
+import DebtRateHistory from '../components/DebtRateHistory';
+import DebtInterestProjection from '../components/DebtInterestProjection';
+import { LOAN_TYPE_OPTIONS, loanTypeFields, loanTypeHint, creditUsageRatio } from '../lib/loanType';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 
@@ -215,21 +218,24 @@ export default function Debts() {
                   >
                     <td className="px-4 py-3 text-ink">{d.name}</td>
                     <td className="px-4 py-3"><TypeBadge type={d.type} /></td>
-                    <td className="px-4 py-3 text-right text-loss-text font-medium tabular-nums">{fmt(d.balance)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <span className="text-loss-text font-medium">{fmt(d.balance)}</span>
+                      {d.credit_line && <CreditLineStatus creditLine={d.credit_line} />}
+                    </td>
                     <td className="px-4 py-3 text-right text-body tabular-nums">{d.annual_rate}%</td>
                     <td className="px-4 py-3 text-right text-caption tabular-nums">{fmt(d.monthly_interest)}</td>
                     <td className="px-4 py-3 text-caption text-xs hidden md:table-cell">{d.memo || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 justify-end flex-wrap">
-                        {d.type === '마이너스통장' && (
-                          <>
-                            <button
-                              onClick={() => setInterestTarget(d)}
-                              className="text-caption hover:text-brand-text transition-colors text-xs"
-                            >
-                              이자 추가
-                            </button>
-                          </>
+                        {/* 계산과 관련된 판정은 loan_type 을 본다(#329). 용도(type)를
+                            '학자금' 으로 바꿨다고 마이너스통장 기능이 사라지면 안 된다. */}
+                        {d.loan_type === 'credit_line' && (
+                          <button
+                            onClick={() => setInterestTarget(d)}
+                            className="text-caption hover:text-brand-text transition-colors text-xs"
+                          >
+                            이자 추가
+                          </button>
                         )}
                         <button
                           onClick={() => setRepayTarget(d)}
@@ -270,6 +276,8 @@ export default function Debts() {
                             기록과 거래가 떨어져 있으면 사용자는 둘이 이어져
                             있다는 것을 알 수 없다. */}
                         <DerivedTransactions kind="debt" id={d.id} />
+                        <DebtRateHistory debtId={d.id} onChanged={reload} />
+                        <DebtInterestProjection debt={d} />
                       </td>
                     </tr>
                   )}
@@ -304,6 +312,34 @@ function InterestLog({ rows }) {
 
 // 부분상환 이력(#287). 이자 이력과 같은 모양으로 둔다 — 두 이력이 같은 잔액
 // 타임라인을 이루므로 화면에서도 나란히 읽혀야 한다.
+// 한도 사용 상태(#329).
+//
+// 초과를 색만으로 알리지 않는다 — 아이콘과 텍스트를 함께 쓴다(#191, WCAG 1.4.1).
+// 초과해도 막지 않는다. 연체 이자로 한도를 넘는 상태가 실제로 있고, 그때 앱이
+// 사실을 못 보여주면 기록할 방법이 없어진다(#285 결정).
+function CreditLineStatus({ creditLine }) {
+  const ratio = creditUsageRatio(creditLine);
+  return (
+    <span className="block mt-0.5">
+      <span className="block h-1 w-full max-w-[7rem] ml-auto rounded-bar bg-surface-sunken overflow-hidden">
+        <span
+          aria-hidden="true"
+          className={`block h-full ${creditLine.over_limit ? 'bg-loss-fill' : 'bg-brand-fill'}`}
+          style={{ width: `${ratio}%` }}
+        />
+      </span>
+      {creditLine.over_limit ? (
+        <span className="text-[11px] text-loss-text inline-flex items-center gap-1 mt-0.5">
+          <Icon name="error" size={11} />
+          한도 {fmt(Math.abs(creditLine.available))} 초과
+        </span>
+      ) : (
+        <span className="text-[11px] text-caption">여유 {fmt(creditLine.available)}</span>
+      )}
+    </span>
+  );
+}
+
 function RepaymentLog({ rows, onDelete }) {
   if (!rows) return null;
   if (!rows.length) {
@@ -410,18 +446,34 @@ function DebtForm({ initial, onSave, onCancel }) {
     balance: initial ? String(initial.balance) : '',
     annual_rate: initial ? String(initial.annual_rate) : '',
     type: initial?.type || '일반',
+    loan_type: initial?.loan_type || 'general',
+    credit_limit: initial?.credit_limit != null ? String(initial.credit_limit) : '',
+    interest_day: initial?.interest_day != null ? String(initial.interest_day) : '',
     memo: initial?.memo || '',
   });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const visible = loanTypeFields(form.loan_type);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({
-      ...form,
+    const payload = {
+      name: form.name,
+      type: form.type,
+      memo: form.memo,
+      loan_type: form.loan_type,
       balance: Number(form.balance),
-      annual_rate: form.annual_rate ? Number(form.annual_rate) : 0,
-    });
+      // 유형에 의미 없는 값은 보내지 않는다. 유형을 바꾸기 전에 적어둔 값이
+      // 남아 있으면 서버가 엉뚱한 조합을 저장한다.
+      credit_limit: visible.credit_limit && form.credit_limit !== '' ? Number(form.credit_limit) : null,
+      interest_day: visible.interest_day && form.interest_day !== '' ? Number(form.interest_day) : null,
+    };
+    // 금리는 등록할 때만 받는다. 수정에서 보내면 이력과 어긋난다 — 서버도
+    // PUT 에서는 금리를 건드리지 않는다(#285).
+    if (!initial) {
+      payload.annual_rate = form.annual_rate ? Number(form.annual_rate) : 0;
+    }
+    onSave(payload);
   };
 
   const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
@@ -445,9 +497,40 @@ function DebtForm({ initial, onSave, onCancel }) {
           <input id="debt-balance" type="number" className={inp} value={form.balance} onChange={e => set('balance', e.target.value)} required />
         </div>
         <div>
-          <label htmlFor="debt-annual-rate" className="block text-xs text-caption mb-1">연이율 (%)</label>
-          <input id="debt-annual-rate" type="number" step="0.01" className={inp} placeholder="0" value={form.annual_rate} onChange={e => set('annual_rate', e.target.value)} />
+          <label htmlFor="debt-loan-type" className="block text-xs text-caption mb-1">이자 계산 방식</label>
+          <select id="debt-loan-type" className={inp} value={form.loan_type} onChange={e => set('loan_type', e.target.value)}>
+            {LOAN_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <p className="text-[11px] text-caption mt-1">{loanTypeHint(form.loan_type)}</p>
         </div>
+        {visible.credit_limit && (
+          <div>
+            <label htmlFor="debt-credit-limit" className="block text-xs text-caption mb-1">한도 (원) *</label>
+            <input id="debt-credit-limit" type="number" min="1" className={inp} required value={form.credit_limit} onChange={e => set('credit_limit', e.target.value)} />
+          </div>
+        )}
+        {visible.interest_day && (
+          <div>
+            <label htmlFor="debt-interest-day" className="block text-xs text-caption mb-1">이자 결제일</label>
+            <input id="debt-interest-day" type="number" min="1" max="31" className={inp} placeholder="예: 25" value={form.interest_day} onChange={e => set('interest_day', e.target.value)} />
+          </div>
+        )}
+        {/* 금리는 등록할 때만 여기서 받는다. 이후 변경은 시점이 붙어야 해서
+            금리 이력 화면으로 들어간다(#285). */}
+        {!initial ? (
+          <div>
+            <label htmlFor="debt-annual-rate" className="block text-xs text-caption mb-1">연이율 (%)</label>
+            <input id="debt-annual-rate" type="number" step="0.01" className={inp} placeholder="0" value={form.annual_rate} onChange={e => set('annual_rate', e.target.value)} />
+          </div>
+        ) : (
+          <div>
+            <span className="block text-xs text-caption mb-1">연이율 (%)</span>
+            <p className="text-sm text-body py-2">
+              연 {initial.annual_rate}%
+              <span className="text-caption text-xs"> · 금리 변경은 아래 「금리 이력」에서</span>
+            </p>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <label htmlFor="debt-memo" className="block text-xs text-caption mb-1">메모</label>
           <input id="debt-memo" type="text" className={inp} value={form.memo} onChange={e => set('memo', e.target.value)} />
