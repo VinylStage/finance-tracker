@@ -13,17 +13,25 @@ function fmt(n) {
 // 어디서 왔는지 확인할 자리가 없다.
 //
 // 펼쳤을 때만 부른다. 항목마다 미리 부르면 목록 한 번 여는 데 요청이 항목 수만큼 난다.
-export default function DerivedTransactions({ kind, id }) {
+export default function DerivedTransactions({ kind, id, reloadKey = 0, onLoaded }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let alive = true;
     api.get(derivedEndpoint(kind, id))
-      .then((res) => { if (alive) setRows(res.data || []); })
+      .then((res) => {
+        if (!alive) return;
+        setRows(res.data || []);
+        // 부모가 "만들기" 와 "다시 계산" 중 무엇을 보여줄지 정하려면 건수가 필요하다.
+        onLoaded?.((res.data || []).length);
+      })
       .catch((err) => { if (alive) setError(err.message); });
     return () => { alive = false; };
-  }, [kind, id]);
+    // onLoaded 는 의존성에 넣지 않는다. 부모가 인라인 함수를 넘기면 매 렌더마다
+    // 다시 조회한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, id, reloadKey]);
 
   if (error) return <p role="alert" className="text-xs text-loss-text py-2">{error}</p>;
   if (rows === null) return <p className="text-xs text-caption py-2">불러오는 중...</p>;

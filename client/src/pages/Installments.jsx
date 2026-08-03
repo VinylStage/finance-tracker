@@ -6,6 +6,7 @@ import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import DerivedTransactions from '../components/DerivedTransactions';
 import DuplicateCandidates from '../components/DuplicateCandidates';
+import InstallmentRegenerate from '../components/InstallmentRegenerate';
 import { useHashTarget } from '../hooks/useHashTarget';
 import { anchorId } from '../lib/derivedOrigin';
 
@@ -22,6 +23,9 @@ export default function Installments() {
   const [filter, setFilter] = useState('진행중');
   const [showForm, setShowForm] = useState(false);
   const [openId, setOpenId] = useState(null);
+  // 청구 내역을 만든 뒤 목록을 다시 부르기 위한 값. 할부 id 별로 센다.
+  const [derivedReload, setDerivedReload] = useState({});
+  const [derivedCount, setDerivedCount] = useState({});
   const { confirm, alert } = useConfirm();
 
   const { loading, error, reload } = useLoader(async () => {
@@ -180,7 +184,19 @@ export default function Installments() {
                 {openId === it.id && (
                   <tr className="border-b border-line-faint bg-surface-page/30">
                     <td colSpan={8} className="px-4">
-                      <DerivedTransactions kind="installment" id={it.id} />
+                      <DerivedTransactions
+                        kind="installment"
+                        id={it.id}
+                        reloadKey={derivedReload[it.id] || 0}
+                        onLoaded={(n) => setDerivedCount((prev) => (prev[it.id] === n ? prev : { ...prev, [it.id]: n }))}
+                      />
+                      {/* 마이그레이션이 기존 할부에 청구 내역을 자동으로 만들지
+                          않는다(ADR 0008). 사용자가 프리뷰를 보고 실행하는 자리다. */}
+                      <InstallmentRegenerate
+                        installment={it}
+                        hasDerived={(derivedCount[it.id] || 0) > 0}
+                        onDone={() => setDerivedReload((prev) => ({ ...prev, [it.id]: (prev[it.id] || 0) + 1 }))}
+                      />
                     </td>
                   </tr>
                 )}
