@@ -35,6 +35,15 @@ const ORIGIN_SPEC = {
     // 화면까지만 보낸다 — 있지도 않은 자리로 보내는 링크보다 낫다.
     anchor: null,
   },
+  debt_repayment: {
+    icon: 'savings',
+    noun: '대출 상환',
+    where: '대출 상환 기록',
+    screen: '부채',
+    path: '/assets/debts',
+    // 이자와 같은 이유. 상환 기록 id 라 부채를 특정할 수 없다.
+    anchor: null,
+  },
 };
 
 export function isDerived(tx) {

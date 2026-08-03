@@ -19,6 +19,8 @@ const POLICY = [
   { origin: 'installment', editable: false },
   { origin: 'revolving', editable: false },
   { origin: 'debt_interest', editable: false },
+  // 상환액은 사용자가 넣은 값이지만 이자 계산의 입력이라 거래내역에서 못 고친다(#287).
+  { origin: 'debt_repayment', editable: false },
 ];
 
 let dir, db;
