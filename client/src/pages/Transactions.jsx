@@ -8,6 +8,8 @@ import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
+import TransactionCalendar from '../components/TransactionCalendar';
+import { bucketByDay } from '../lib/dailyBuckets';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -19,6 +21,68 @@ const CURRENT_MONTH = `${CURRENT_YEAR}-${String(today.getMonth() + 1).padStart(2
 
 const EMPTY_FILTERS = { merchant: '', memo: '', minAmount: '', maxAmount: '', paymentMethodId: '' };
 const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
+
+// 달력뷰의 뷰 모드와 보고 있는 달은 **이 화면의 상태**다. 대시보드의 기간
+// 필터(#272)와 공유하지 않는다 — 거래내역에서 7월을 보다가 대시보드로 돌아갔을 때
+// 보던 달이 바뀌어 있으면 안 된다. 키에 tx 접두를 붙여 다른 화면과 겹치지 않게 한다.
+const VIEW_KEY = 'txView';
+const MONTH_KEY = 'txMonth';
+
+// URL 이 정본이지만, 화면을 떠났다 돌아오면 URL 은 초기화된다(네비게이션 링크가
+// 쿼리를 들고 가지 않는다). 그때 마지막으로 보던 뷰를 되살리려고 세션에도 남긴다.
+// 세션 저장소라 탭을 닫으면 사라진다 — 영구 설정이 아니라 "방금 보던 상태"다.
+const STORE_KEY = 'tx.view';
+
+function readStore() {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(STORE_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function readViewParams() {
+  if (typeof window === 'undefined') return { view: 'list', month: CURRENT_MONTH };
+  const q = new URLSearchParams(window.location.search);
+  // URL 에 명시된 값이 세션 기억보다 우선한다 — 링크를 받아 연 사람이 그 링크대로 봐야 한다.
+  if (q.has(VIEW_KEY)) {
+    return {
+      view: q.get(VIEW_KEY) === 'calendar' ? 'calendar' : 'list',
+      month: /^\d{4}-\d{2}$/.test(q.get(MONTH_KEY) || '') ? q.get(MONTH_KEY) : CURRENT_MONTH,
+    };
+  }
+  const saved = readStore();
+  if (saved && saved.view === 'calendar' && /^\d{4}-\d{2}$/.test(saved.month || '')) {
+    return { view: 'calendar', month: saved.month };
+  }
+  return { view: 'list', month: CURRENT_MONTH };
+}
+
+// 뒤로가기가 뷰 전환까지 되짚지 않도록 replaceState 를 쓴다. 뷰 토글은 탐색이
+// 아니라 표시 방식 변경이다.
+function writeViewParams(view, month) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(STORE_KEY, JSON.stringify({ view, month }));
+  } catch {
+    // 세션 저장소를 못 쓰는 환경이어도 URL 동기화는 계속돼야 한다.
+  }
+  const url = new URL(window.location.href);
+  if (view === 'calendar') {
+    url.searchParams.set(VIEW_KEY, 'calendar');
+    url.searchParams.set(MONTH_KEY, month);
+  } else {
+    url.searchParams.delete(VIEW_KEY);
+    url.searchParams.delete(MONTH_KEY);
+  }
+  window.history.replaceState(null, '', url);
+}
+
+function shiftMonth(month, delta) {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 // FND-02(감사): 이전엔 화면이 최대 5000건을 요청해도 서버가 500건으로 잘라
 // 검색·월별합계·연도탭이 최신 500건 범위 안에서만 맞았다. 검색·집계를 전부
@@ -51,6 +115,10 @@ export default function Transactions() {
   const [monthItems, setMonthItems] = useState({}); // { [month]: { data, total } } — 펼친 달만 보유
   const [autoExpandYear, setAutoExpandYear] = useState(null); // 마지막으로 기본펼침을 적용한 연도
   const [dataVersion, setDataVersion] = useState(0); // 저장/삭제 후 월별요약·항목 재조회 트리거
+  const [viewMode, setViewMode] = useState(() => readViewParams().view);
+  const [calendarMonth, setCalendarMonth] = useState(() => readViewParams().month);
+  const [calendarItems, setCalendarItems] = useState(null); // { data, total } — 달력뷰가 보는 달
+  const [selectedDay, setSelectedDay] = useState(null);
   const { confirm, alert } = useConfirm();
 
   const { loading, error, reload } = useLoader(async () => {
@@ -128,6 +196,37 @@ export default function Transactions() {
     })();
     return () => { cancelled = true; };
   }, [expandedMonths, filters, categoryFilter, dataVersion]);
+
+  // 달력뷰가 보는 달의 거래. 목록뷰의 monthItems 와 별도로 둔다 — 두 뷰가 서로
+  // 다른 달을 볼 수 있고, 한쪽 상태가 다른 쪽을 덮어쓰면 안 된다.
+  useEffect(() => {
+    if (viewMode !== 'calendar') return;
+    let cancelled = false;
+    const p = buildFilterParams(filters, categoryFilter);
+    p.set('from', `${calendarMonth}-01`);
+    p.set('to', `${calendarMonth}-31`);
+    p.set('limit', '500');
+    setCalendarItems(null);
+    api.get(`/api/transactions?${p}`).then((res) => {
+      if (!cancelled) setCalendarItems(res);
+    });
+    return () => { cancelled = true; };
+  }, [viewMode, calendarMonth, filters, categoryFilter, dataVersion]);
+
+  useEffect(() => { writeViewParams(viewMode, calendarMonth); }, [viewMode, calendarMonth]);
+
+  // 달을 옮기면 그 달에 없는 날짜가 선택된 채 남는다.
+  useEffect(() => { setSelectedDay(null); }, [calendarMonth]);
+
+  const calendarBuckets = useMemo(
+    () => bucketByDay(calendarItems?.data || []),
+    [calendarItems]
+  );
+
+  const selectedDayItems = useMemo(
+    () => (selectedDay ? (calendarItems?.data || []).filter((t) => t.date === selectedDay) : []),
+    [selectedDay, calendarItems]
+  );
 
   const toggleMonth = (month) => {
     setExpandedMonths(prev => {
@@ -329,6 +428,69 @@ export default function Transactions() {
         />
       ) : (
         <>
+          <div className="flex justify-end gap-1" role="group" aria-label="보기 방식">
+            {[['list', '목록'], ['calendar', '달력']].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                className={`text-xs px-3 py-1 rounded-chip border transition-colors ${
+                  viewMode === mode
+                    ? 'bg-brand-tint border-brand-tint-strong text-brand-text'
+                    : 'border-line text-caption hover:bg-surface-page'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {viewMode === 'calendar' ? (
+            <div className="bg-surface shadow-card rounded-card border border-line p-4">
+              <TransactionCalendar
+                year={Number(calendarMonth.slice(0, 4))}
+                month={Number(calendarMonth.slice(5, 7))}
+                buckets={calendarBuckets}
+                selectedDay={selectedDay}
+                onPrev={() => setCalendarMonth(m => shiftMonth(m, -1))}
+                onNext={() => setCalendarMonth(m => shiftMonth(m, 1))}
+                onSelectDay={(day) => setSelectedDay(d => (d === day ? null : day))}
+              />
+
+              {calendarItems === null ? (
+                <div className="text-caption text-sm text-center py-6">불러오는 중...</div>
+              ) : calendarItems.data.length === 0 ? (
+                <div className="text-caption text-sm text-center py-6">
+                  이 달에는 거래가 없어요.
+                </div>
+              ) : selectedDay ? (
+                <div className="border-t border-line pt-3 mt-3">
+                  <div className="text-sm font-semibold text-ink mb-2">
+                    {Number(selectedDay.slice(5, 7))}월 {Number(selectedDay.slice(8, 10))}일
+                    <span className="text-xs text-caption ml-2">{selectedDayItems.length}건</span>
+                  </div>
+                  <TransactionList
+                    items={selectedDayItems}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    bare
+                  />
+                </div>
+              ) : (
+                <div className="text-caption text-sm text-center py-4 border-t border-line mt-3">
+                  날짜를 누르면 그날 거래가 나와요.
+                </div>
+              )}
+
+              {calendarItems && calendarItems.total > calendarItems.data.length && (
+                <div className="text-xs text-caption pt-2">
+                  이 달 거래 {calendarItems.total}건 중 {calendarItems.data.length}건까지 반영됩니다.
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <div className="flex gap-1 border-b border-line">
             {years.map(y => (
               <button
@@ -394,6 +556,8 @@ export default function Transactions() {
               );
             })}
           </div>
+          </>
+          )}
         </>
       )}
     </div>

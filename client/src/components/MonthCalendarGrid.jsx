@@ -8,7 +8,10 @@ import React from 'react';
 //
 // 월 이동 컨트롤은 여기 두지 않는다. 화면마다 기간 상태를 다르게 갖기 때문이다
 // — 히트맵은 자체 연·월(#273), 거래내역 달력뷰는 그 화면 상태(#305).
-export default function MonthCalendarGrid({ year, month, renderCell, cellProps }) {
+// cellBaseClassName 은 모든 칸(빈 칸 포함)에 붙는 기본 클래스다. 기본값이
+// aspect-square 인 것은 히트맵처럼 좁은 폭에서 정사각형이 맞기 때문이고, 전체 폭
+// 달력에서는 정사각형이 과하게 높아져 호출부가 바꿀 수 있게 열어 둔다.
+export default function MonthCalendarGrid({ year, month, renderCell, cellProps, cellBaseClassName = 'aspect-square' }) {
   // month 는 1~12 로 받는다. Date 의 0번째 날은 전달 마지막 날이므로 이 호출이
   // 그 달의 일수가 된다.
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -49,7 +52,7 @@ export default function MonthCalendarGrid({ year, month, renderCell, cellProps }
             <div
               key={index}
               {...rest}
-              className={`aspect-square ${day !== null && className ? className : ''}`}
+              className={`${cellBaseClassName} ${day !== null && className ? className : ''}`}
             >
               {day !== null && renderCell ? renderCell(day) : null}
             </div>
