@@ -27,6 +27,8 @@ const EXPECTED = [
   { file: 'accounts.js', method: 'POST', routePath: '/', fields: ['opening_balance', 'credit_limit'] },
   { file: 'accounts.js', method: 'PUT', routePath: '/:id', fields: ['opening_balance', 'credit_limit', 'is_active'] },
   { file: 'cardPolicies.js', method: 'POST', routePath: '/range', fields: ['payment_method_id', 'from_month', 'to_month', 'free_from_sequence'] },
+  { file: 'cardProducts.js', method: 'POST', routePath: '/', fields: ['payment_method_id', 'annual_fee'] },
+  { file: 'cardProducts.js', method: 'PUT', routePath: '/:id', fields: ['payment_method_id', 'annual_fee'] },
   { file: 'categories.js', method: 'POST', routePath: '/', fields: ['monthly_budget'] },
   { file: 'categories.js', method: 'PUT', routePath: '/:id', fields: ['monthly_budget', 'is_active'] },
   { file: 'debts.js', method: 'POST', routePath: '/', fields: ['balance', 'credit_limit', 'compounds', 'interest_day'] },

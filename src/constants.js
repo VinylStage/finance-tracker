@@ -103,11 +103,19 @@ const LOAN_TYPE_DEFAULTS = {
 // 그대로 남는다. interval 과 조합해 "2개월마다" 같은 주기를 표현한다.
 const RECURRING_FREQS = ['daily', 'monthly', 'yearly'];
 
+// card_products.card_type 허용값의 정본(#306).
+//
+// 신용/체크는 카드상품에 고정된 속성이다 — 한 상품이 둘 다일 수 없고 도중에
+// 바뀌지도 않는다. 그래서 토글도 이력 테이블도 두지 않는다.
+//
+// 이 값이 M11 의 결제 시점 분리를 가른다: 신용은 이연(결제일에 인출), 체크는
+// 즉시 차감이다. 여기서는 기록만 하고 계산은 그쪽 이슈의 몫이다.
+const CARD_TYPES = ['신용', '체크'];
+
 module.exports = {
   PAYMENT_STYLES, MAJOR_TYPES, INSTALLMENT_POLICY_TYPES,
   TRANSACTION_ORIGINS, LOCKED_ORIGINS,
   DERIVED_CATEGORIES, INSTALLMENT_SCHEDULE_FIELDS,
-  AUDIT_ACTORS, AUDIT_OPS, RECURRING_FREQS,
-  AUDIT_ACTORS, AUDIT_OPS,
+  AUDIT_ACTORS, AUDIT_OPS, RECURRING_FREQS, CARD_TYPES,
   LOAN_TYPES, LOAN_TYPE_DEFAULTS,
 };
