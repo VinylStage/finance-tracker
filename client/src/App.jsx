@@ -1,6 +1,7 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, Redirect, Route, Switch, useLocation } from 'wouter';
 import { NAV_GROUPS, groupForPath } from './lib/nav';
+import CommandPalette from './components/CommandPalette';
 import BottomTabBar from './components/BottomTabBar';
 import WelcomeGate from './components/WelcomeGate';
 import Icon from './components/Icon';
@@ -36,6 +37,20 @@ export default function App() {
   const [location] = useLocation();
   const group = groupForPath(location);
 
+  // 화면 검색(#281). 단축키는 데스크톱의 지름길일 뿐이고, 헤더 버튼이 정식
+  // 진입점이다 — 모바일에는 Cmd+K 가 없다.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     // pb-16 은 모바일 하단 탭바에 콘텐츠가 가리지 않게 하기 위한 여백이다.
     <div className="min-h-screen bg-surface-page pb-16 md:pb-0">
@@ -51,12 +66,25 @@ export default function App() {
             </NavLink>
           ))}
         </div>
+        {/* 아이콘 대신 글자를 쓴다. icons/paths.js 에 돋보기가 없고 그 파일은 수정
+            금지인 데다, "기능을 못 찾겠다" 는 요청에는 돋보기보다 '검색' 글자가
+            눈에 띈다. */}
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          aria-label="화면 검색 열기"
+          title="화면 검색 (⌘K)"
+          className="ml-auto shrink-0 inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs text-caption hover:text-ink hover:bg-surface-page transition-colors"
+        >
+          검색
+          <kbd className="hidden sm:inline text-[10px] border border-line rounded px-1">⌘K</kbd>
+        </button>
         <Link
           href="/guide"
           aria-label="가이드"
           title="가이드"
           aria-current={location === '/guide' ? 'page' : undefined}
-          className={`ml-auto shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
+          className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors ${
             location === '/guide'
               ? 'bg-brand-tint text-brand-text'
               : 'text-caption hover:text-ink hover:bg-surface-page'
@@ -65,6 +93,8 @@ export default function App() {
           <Icon name="help" size={18} />
         </Link>
       </nav>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       {group?.children && (
         <div className="bg-surface border-b border-line px-4 py-2 flex items-center gap-1 overflow-x-auto">
