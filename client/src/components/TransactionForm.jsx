@@ -64,7 +64,11 @@ export default function TransactionForm({ initial, categories, paymentMethods, c
   }, []);
 
   const majorTypes = [...new Set(categories.map(c => c.major_type))];
-  const paymentGroups = buildPaymentOptions(paymentMethods, cardProducts);
+  // 수정 중인 거래가 가리키는 카드는 비활성이어도 선택지에 남긴다. 빼면 선택이
+  // 비고, 그대로 저장하면 그 지정이 지워진다(#410).
+  const paymentGroups = buildPaymentOptions(paymentMethods, cardProducts, {
+    keepCardProductId: form.card_product_id || null,
+  });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 

@@ -77,13 +77,28 @@ function isEligible(tx) {
  * @param {Array} input.cards         { id, product_name, benefits: [...], thresholdMet }
  * @returns {{comparable: boolean, reason?: string, totalGap: number, byCard: Array, details: Array}}
  */
+// 추천 후보인가. 더 안 쓰기로 한 카드(#410)는 "이걸 썼어야 한다" 로 권할 수
+// 없다. is_active 가 없는 호출부(예전 테스트, 계산기 단독 사용)는 전부 후보로 본다.
+function isCandidate(card) {
+  return card.is_active === undefined || card.is_active === null || !!card.is_active;
+}
+
 function compareCards({ transactions, cards } = {}) {
   const list = Array.isArray(transactions) ? transactions : [];
   const cardList = Array.isArray(cards) ? cards : [];
 
-  if (cardList.length < 2) {
+  // **cards 는 두 가지로 쓰인다.**
+  //   조회용   그 거래가 실제로 어느 카드로 얼마를 받았나  → 비활성도 있어야 한다
+  //   후보용   그 거래를 어느 카드로 썼어야 했나           → 활성만
+  // 하나로 뭉뚱그리면 둘 중 하나가 틀린다. 비활성을 빼면 그 카드로 결제한
+  // 과거 거래가 "혜택 0" 으로 잡혀 차액이 부풀고, 넣으면 못 쓰는 카드를 권한다.
+  const candidates = cardList.filter(isCandidate);
+
+  // 비교는 고를 수 있는 카드가 둘 이상일 때만 성립한다.
+  if (candidates.length < 2) {
     return { comparable: false, reason: 'single-card', totalGap: 0, byCard: [], details: [] };
   }
+  const candidateIds = new Set(candidates.map((c) => c.id));
 
   const eligible = list.filter(isEligible);
   if (eligible.length === 0) {
@@ -123,8 +138,12 @@ function compareCards({ transactions, cards } = {}) {
       return { cardId: card.id, productName: card.product_name, ...r };
     });
 
+    // 실제로 쓴 카드는 **비활성이어도 찾아야 한다.** 그 카드로 결제한 것은
+    // 사실이고, 빼면 그 거래가 "혜택 0" 이 되어 차액이 부풀려진다.
     const actual = perCard.find((p) => p.cardId === tx.card_product_id) || null;
-    const best = perCard.reduce((a, b) => (b.benefit > a.benefit ? b : a), perCard[0]);
+    // 반면 "썼어야 할 카드" 는 지금 고를 수 있는 것 중에서만 고른다.
+    const bestPool = perCard.filter((p) => candidateIds.has(p.cardId));
+    const best = bestPool.reduce((a, b) => (b.benefit > a.benefit ? b : a), bestPool[0]);
 
     // 실제로 쓴 카드만 한도를 소진한다. 가정은 소진시키지 않는다 —
     // 가정끼리 서로의 한도를 깎으면 계산이 뒤엉킨다.

@@ -134,7 +134,9 @@ export default function Transactions() {
       api.get('/api/transactions/years'),
       api.get('/api/categories'),
       api.get('/api/payment-methods'),
-      api.get('/api/card-products'),
+      // 비활성 카드까지 받는다. 과거 거래가 그 카드를 가리킬 수 있고, 목록에
+      // 없으면 수정 화면이 선택을 비워 저장 시 지정이 지워진다(#410).
+      api.get('/api/card-products?include_inactive=1'),
     ]);
     setYears(yrs.data || []);
     setCategories(cats);

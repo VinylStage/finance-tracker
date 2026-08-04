@@ -62,7 +62,7 @@ function planRemap(db, criteria = {}) {
   }
 
   const target = db.prepare(`
-    SELECT cp.id, cp.payment_method_id, cp.issuer, cp.product_name,
+    SELECT cp.id, cp.payment_method_id, cp.issuer, cp.product_name, cp.is_active,
            p.name AS payment_method_name
     FROM card_products cp
     LEFT JOIN payment_methods p ON p.id = cp.payment_method_id
@@ -70,6 +70,11 @@ function planRemap(db, criteria = {}) {
   `).get(targetId);
   if (!target) {
     return { error: '선택한 카드를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 골라 주세요.' };
+  }
+  // 더 안 쓰기로 한 카드로는 옮기지 않는다. 옮겨 놓으면 그 카드는 선택지에도
+  // 전략 계산에도 안 나오는데 과거 지출만 그쪽에 쌓인다.
+  if (!target.is_active) {
+    return { error: '더 이상 쓰지 않는 카드예요. 다시 쓰기로 바꾼 뒤에 옮겨 주세요.' };
   }
 
   // 형식이 틀린 날짜는 조용히 무시하면 안 된다. SQLite 의 문자열 비교라

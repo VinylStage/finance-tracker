@@ -119,16 +119,38 @@ describe('B. 신용/체크 구분', () => {
 });
 
 describe('C. 미상 — NULL', () => {
-  test('C-1. 카드를 지워도 거래는 남고 미상으로 돌아간다', async () => {
+  // 전에는 "지우면 미상으로 돌아간다" 였다. 그게 NULL 의 뜻을 둘로 만들어
+  // 지운 카드의 지출이 남은 카드로 넘어가는 원인이었다(#410). 이제 지우기는
+  // 비활성화이고, 지정은 그대로 남는다.
+  test('C-1. 카드를 지우면 목록에서 빠지지만 행은 남는다', async () => {
     const list = await json('/api/card-products');
+    const before = list.body.data.length;
     const target = list.body.data[0];
+
     const res = await json(`/api/card-products/${target.id}`, { method: 'DELETE' });
     assert.equal(res.status, 200);
     assert.equal(res.body.ok, true);
-    assert.equal(typeof res.body.unassigned, 'number');
+    assert.equal(res.body.deactivated, true);
+    assert.equal(typeof res.body.kept, 'number');
 
     const after = await json('/api/card-products');
-    assert.equal(after.body.data.length, 1);
+    assert.equal(after.body.data.length, before - 1, '기본 목록에서는 빠져야 한다');
+
+    const all = await json('/api/card-products?include_inactive=1');
+    assert.equal(all.body.data.length, before, '행 자체는 남아 있어야 한다');
+    assert.equal(all.body.data.find((c) => c.id === target.id).is_active, 0);
+  });
+
+  test('C-1b. 다시 쓰기로 하면 목록에 돌아온다', async () => {
+    const all = await json('/api/card-products?include_inactive=1');
+    const inactive = all.body.data.find((c) => !c.is_active);
+
+    const res = await json(`/api/card-products/${inactive.id}/reactivate`, { method: 'POST' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.reactivated, true);
+
+    const after = await json('/api/card-products');
+    assert.ok(after.body.data.some((c) => c.id === inactive.id));
   });
 
   test('C-2. 미지정 신용카드 거래 수를 셀 수 있다', async () => {
