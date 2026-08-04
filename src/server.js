@@ -6,6 +6,7 @@ const { securityHeaders } = require('./utils/securityHeaders');
 const { auditContext, bindAuditDb } = require('./utils/auditContext');
 const db = require('./db/init');
 const { runCatchup, setLastCatchupSummary } = require('./services/recurringCatchup');
+const { purgeAuditLog, setLastPurgeSummary } = require('./services/auditRetention');
 const { serverError } = require('./utils/errors');
 const app = express();
 
@@ -48,6 +49,25 @@ app.use('/api/audit',        require('./routes/audit'));
 app.use('/api/card-products', require('./routes/cardProducts'));
 app.use('/api/card-benefits', require('./routes/cardBenefits'));
 app.use('/api/data-integrity', require('./routes/dataIntegrity'));
+
+// 감사로그 정리(#367). 기동 시 1회, **catch-up 보다 먼저** 돈다.
+//
+// 순서가 중요하다. 정리는 보존 기간이 지난 행만 지우므로 catch-up 이 방금 만든
+// 로그는 어차피 대상이 아니지만, 순서를 뒤집으면 "같은 기동에서 만든 것을
+// 지울 수도 있다" 는 걱정을 코드로 배제할 수 없다. 먼저 돌려 그 여지를 없앤다.
+//
+// 사전 확인 없이 돌리되 결과를 알린다 — ADR 0008 의 #279 경계 사례와 같은
+// 형태다. 실패해도 서버는 떠야 한다.
+try {
+  const purge = purgeAuditLog(db);
+  setLastPurgeSummary(purge);
+  if (purge.deleted > 0) {
+    console.log(`[audit-retention] ${purge.days}일 지난 감사로그 ${purge.deleted}건 정리 (기준 ${purge.cutoff})`);
+  }
+} catch (e) {
+  setLastPurgeSummary({ deleted: 0, cutoff: null, days: 0, ran: false, error: '감사로그 정리에 실패했습니다.' });
+  console.error('[audit-retention] 실패:', e.message);
+}
 
 // 반복거래 따라잡기(#279). 기동 시 1회, 라우트 등록 뒤에 돈다.
 //
