@@ -12,6 +12,14 @@
 set -uo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# 스테이징 이상 검사를 먼저 돌린다(#347 후속). 심링크·대용량 파일이 섞이면
+# 여기서 막는다 — .gitignore 는 이미 추적 중인 파일에는 적용되지 않아 별도
+# 장치가 필요하다.
+if [ -x "$REPO_ROOT/.githooks/staging-guard" ]; then
+  "$REPO_ROOT/.githooks/staging-guard" || exit 1
+fi
+
 PATHS_FILE="$REPO_ROOT/.confirm-chain-paths"
 
 # 감시 대상 설정이 없으면 이 저장소는 게이트 미적용이다.
