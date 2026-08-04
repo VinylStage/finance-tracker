@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
 import { supportsProjection } from '../lib/loanType';
+import { formatWon } from '../lib/format';
 
 // 기간 이자 계산 결과(#329).
 //
@@ -12,9 +13,6 @@ import { supportsProjection } from '../lib/loanType';
 // 이유는 숫자만 보면 왜 그 값인지 알 수 없기 때문이다 — 상환을 언제 했는지, 금리가
 // 언제 바뀌었는지가 금액의 근거다.
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 이번 달 1일 ~ 오늘. 기본값을 넓게 잡으면 첫 조회부터 느리고, 좁게 잡으면
 // 아무것도 안 나온다.
@@ -98,9 +96,9 @@ export default function DebtInterestProjection({ debt }) {
       {result && (
         <div className="mt-2 space-y-2">
           <p className="text-xs text-ink">
-            이 기간 이자 <span className="tabular-nums font-medium">{fmt(result.total_interest)}</span>
+            이 기간 이자 <span className="tabular-nums font-medium">{formatWon(result.total_interest)}</span>
             {result.capitalized > 0 && (
-              <span className="text-caption"> · 잔액에 더해진 이자 {fmt(result.capitalized)}</span>
+              <span className="text-caption"> · 잔액에 더해진 이자 {formatWon(result.capitalized)}</span>
             )}
           </p>
 
@@ -110,9 +108,9 @@ export default function DebtInterestProjection({ debt }) {
                 <li key={p.date} className="py-1.5">
                   <div className="flex items-center justify-between gap-2 text-xs">
                     <span className="text-caption whitespace-nowrap">{p.date}</span>
-                    <span className="text-ink tabular-nums">{fmt(p.interest)}</span>
+                    <span className="text-ink tabular-nums">{formatWon(p.interest)}</span>
                     <span className="text-caption tabular-nums whitespace-nowrap">
-                      {fmt(p.balance_before)} → {fmt(p.balance_after)}
+                      {formatWon(p.balance_before)} → {formatWon(p.balance_after)}
                     </span>
                   </div>
                   {/* 구간이 왜 갈렸는지가 금액의 근거다 — 상환·금리 변경 시점. */}
@@ -120,7 +118,7 @@ export default function DebtInterestProjection({ debt }) {
                     <ul className="mt-0.5 pl-2">
                       {p.segments.map((s) => (
                         <li key={s.from} className="text-[11px] text-caption tabular-nums">
-                          {s.from}~ {s.days}일 · 잔액 {fmt(s.balance)} · 연 {s.annual_rate}% → {fmt(s.interest)}
+                          {s.from}~ {s.days}일 · 잔액 {formatWon(s.balance)} · 연 {s.annual_rate}% → {formatWon(s.interest)}
                         </li>
                       ))}
                     </ul>
@@ -135,7 +133,7 @@ export default function DebtInterestProjection({ debt }) {
 
           {result.accrued_since_last_posting > 0 && (
             <p className="text-[11px] text-caption">
-              아직 청구되지 않은 이자 {fmt(result.accrued_since_last_posting)}
+              아직 청구되지 않은 이자 {formatWon(result.accrued_since_last_posting)}
             </p>
           )}
         </div>

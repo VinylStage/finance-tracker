@@ -7,10 +7,8 @@ import LoadError from '../components/LoadError';
 import DerivedTransactions from '../components/DerivedTransactions';
 import { useHashTarget } from '../hooks/useHashTarget';
 import { anchorId } from '../lib/derivedOrigin';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 export default function Revolving() {
   const [items, setItems] = useState([]);
@@ -89,7 +87,7 @@ export default function Revolving() {
           {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <p className="text-sm text-caption">
-          현재 이월잔액: <span className="text-ink font-semibold">{fmt(currentBalance)}</span>
+          현재 이월잔액: <span className="text-ink font-semibold">{formatWon(currentBalance)}</span>
         </p>
       </div>
 
@@ -123,11 +121,11 @@ export default function Revolving() {
                 >
                   <td className="px-4 py-3 text-ink whitespace-nowrap">{r.month}</td>
                   <td className="px-4 py-3 text-caption text-xs hidden sm:table-cell">{r.payment_method_name || '—'}</td>
-                  <td className="px-4 py-3 text-right text-body tabular-nums">{fmt(r.carried_balance)}</td>
-                  <td className="px-4 py-3 text-right text-body tabular-nums">{fmt(r.new_charge)}</td>
-                  <td className="px-4 py-3 text-right text-ink tabular-nums">{fmt(r.paid_amount)}</td>
-                  <td className="px-4 py-3 text-right text-loss-text tabular-nums">{fmt(r.interest)}</td>
-                  <td className="px-4 py-3 text-right text-brand-text font-medium tabular-nums">{fmt(r.next_carried_balance)}</td>
+                  <td className="px-4 py-3 text-right text-body tabular-nums">{formatWon(r.carried_balance)}</td>
+                  <td className="px-4 py-3 text-right text-body tabular-nums">{formatWon(r.new_charge)}</td>
+                  <td className="px-4 py-3 text-right text-ink tabular-nums">{formatWon(r.paid_amount)}</td>
+                  <td className="px-4 py-3 text-right text-loss-text tabular-nums">{formatWon(r.interest)}</td>
+                  <td className="px-4 py-3 text-right text-brand-text font-medium tabular-nums">{formatWon(r.next_carried_balance)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 justify-end">
                       <button

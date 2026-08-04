@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { localYMD, localYearMonth } from '../lib/date';
 import { remainingBudget, toSpentMap } from '../lib/quickEntry';
+import { formatWon } from '../lib/format';
 
 // 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
 // 프런트(ESM/Vite)와 빌드 도구가 분리되어 있어 값을 공유하지 못하므로 수동 동기화 필요(#90).
@@ -113,7 +114,6 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
 
   const selectedCategory = categories.find(c => String(c.id) === String(form.category_id));
   const budgetHint = remainingBudget(selectedCategory, spentMap);
-  const fmtWon = (n) => Number(n || 0).toLocaleString('ko-KR') + '원';
 
   const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
 
@@ -159,11 +159,11 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           {budgetHint.show && (
             <p className="mt-1.5 text-[11px] tabular-nums">
               {budgetHint.level === 'over' ? (
-                <span className="text-loss-text">이번달 예산 {fmtWon(budgetHint.over)} 초과</span>
+                <span className="text-loss-text">이번달 예산 {formatWon(budgetHint.over)} 초과</span>
               ) : budgetHint.level === 'caution' ? (
-                <span className="text-warn-text">이번달 {fmtWon(budgetHint.remaining)} 남음 · 주의</span>
+                <span className="text-warn-text">이번달 {formatWon(budgetHint.remaining)} 남음 · 주의</span>
               ) : (
-                <span className="text-caption">이번달 {fmtWon(budgetHint.remaining)} 남음</span>
+                <span className="text-caption">이번달 {formatWon(budgetHint.remaining)} 남음</span>
               )}
             </p>
           )}

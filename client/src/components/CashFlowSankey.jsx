@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { cashFlow, REST_KEY, SOURCE_COLOR } from '../lib/cashFlow';
+import { formatWon } from '../lib/format';
 
 // 자금흐름 Sankey — 데스크톱 전용(#241).
 //
@@ -41,9 +42,6 @@ const LABEL_X = 14;       // 오른쪽 노드에서 라벨까지
 const LABEL_GUTTER = 190; // 라벨이 쓸 오른쪽 여백. '255,046원 · 36%' 가 들어간다
 const PAD_Y = 4;
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 왼쪽 노드 오른쪽 끝에서 오른쪽 노드 왼쪽 끝까지 잇는 리본.
 // 위·아래 경계선을 각각 3차 베지어로 그리고 닫는다.
@@ -122,8 +120,8 @@ export default function CashFlowSankey({ rows, income, height = 260 }) {
   });
 
   const totalLabel = flow.overspent > 0
-    ? `수입 ${fmt(flow.income)} · ${fmt(flow.overspent)} 초과`
-    : `수입 ${fmt(flow.income)}`;
+    ? `수입 ${formatWon(flow.income)} · ${formatWon(flow.overspent)} 초과`
+    : `수입 ${formatWon(flow.income)}`;
 
   return (
     <div className="w-full" ref={hostRef}>
@@ -164,7 +162,7 @@ export default function CashFlowSankey({ rows, income, height = 260 }) {
               className="fill-caption"
               style={{ fontSize: 11 }}
             >
-              {fmt(t.value)} · {Math.round(t.share * 100)}%
+              {formatWon(t.value)} · {Math.round(t.share * 100)}%
             </text>
           </g>
         ))}

@@ -15,10 +15,8 @@ import { defaultTxDate } from '../lib/defaultTxDate';
 import UndoSnackbar from '../components/UndoSnackbar';
 import { formFromTransaction } from '../lib/recurringForm';
 import { putRecurringDraft } from '../lib/recurringDraft';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 const today = new Date();
 const CURRENT_YEAR = String(today.getFullYear());
@@ -568,8 +566,8 @@ export default function Transactions() {
                       <span className="text-caption ml-2 text-xs">{expanded ? '▲' : '▼'}</span>
                     </span>
                     <span className="text-xs text-caption">
-                      수입 <span className="text-brand-text font-medium">{fmt(g.income)}</span>
-                      {' / '}지출 <span className="text-loss-text font-medium">{fmt(g.expense)}</span>
+                      수입 <span className="text-brand-text font-medium">{formatWon(g.income)}</span>
+                      {' / '}지출 <span className="text-loss-text font-medium">{formatWon(g.expense)}</span>
                       {' / '}{g.count}건
                     </span>
                   </button>

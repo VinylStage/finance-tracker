@@ -4,10 +4,8 @@ import {
 } from 'recharts';
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 function shortFmt(n) {
   const v = Number(n || 0);
@@ -73,7 +71,7 @@ export default function Simulator() {
           <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-body">가정값 입력</h2>
-              <span className="text-xs text-caption">현재 가용현금: <span className="text-body font-medium">{fmt(startingBalance)}</span></span>
+              <span className="text-xs text-caption">현재 가용현금: <span className="text-body font-medium">{formatWon(startingBalance)}</span></span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div>
@@ -102,11 +100,11 @@ export default function Simulator() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-surface shadow-card rounded-card p-5 border border-line">
               <p className="text-caption text-sm mb-1">현재 가용현금</p>
-              <p className="text-2xl font-bold text-ink">{fmt(startingBalance)}</p>
+              <p className="text-2xl font-bold text-ink">{formatWon(startingBalance)}</p>
             </div>
             <div className="bg-surface shadow-card rounded-card p-5 border border-line">
               <p className="text-caption text-sm mb-1">{form.months}개월 후 예상잔액</p>
-              <p className={`text-2xl font-bold ${finalBalance >= 0 ? 'text-brand-text' : 'text-loss-text'}`}>{fmt(finalBalance)}</p>
+              <p className={`text-2xl font-bold ${finalBalance >= 0 ? 'text-brand-text' : 'text-loss-text'}`}>{formatWon(finalBalance)}</p>
             </div>
           </div>
 
@@ -117,7 +115,7 @@ export default function Simulator() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={Math.ceil(projection.length / 12)} />
                 <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
-                <Tooltip formatter={(v) => fmt(v)} />
+                <Tooltip formatter={(v) => formatWon(v)} />
                 <Line type="monotone" dataKey="balance" name="예상잔액" stroke="var(--color-brand-fill)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -135,7 +133,7 @@ export default function Simulator() {
                 {projection.map((r, i) => (
                   <tr key={r.month} className={`border-b border-line-faint hover:bg-surface-page transition-colors ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}>
                     <td className="px-4 py-3 text-body">{r.label}</td>
-                    <td className={`px-4 py-3 text-right font-medium tabular-nums ${r.balance >= 0 ? 'text-ink' : 'text-loss-text'}`}>{fmt(r.balance)}</td>
+                    <td className={`px-4 py-3 text-right font-medium tabular-nums ${r.balance >= 0 ? 'text-ink' : 'text-loss-text'}`}>{formatWon(r.balance)}</td>
                   </tr>
                 ))}
               </tbody>

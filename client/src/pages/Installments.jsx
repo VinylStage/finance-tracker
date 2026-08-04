@@ -11,10 +11,8 @@ import InstallmentBillingHint from '../components/InstallmentBillingHint';
 import InstallmentMonthsPicker from '../components/InstallmentMonthsPicker';
 import { useHashTarget } from '../hooks/useHashTarget';
 import { anchorId } from '../lib/derivedOrigin';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 const STATUS_FILTERS = ['진행중', '완료', '전체'];
 
@@ -137,7 +135,7 @@ export default function Installments() {
           ))}
         </div>
         <p className="text-sm text-caption">
-          이번달 청구 합계: <span className="text-ink font-semibold">{fmt(thisMonthTotal)}</span>
+          이번달 청구 합계: <span className="text-ink font-semibold">{formatWon(thisMonthTotal)}</span>
         </p>
       </div>
 
@@ -170,8 +168,8 @@ export default function Installments() {
                   className={`border-b border-line-faint hover:bg-surface-page transition-colors scroll-mt-6 ${i % 2 === 0 ? '' : 'bg-surface-page/50'} ${openId === it.id ? 'bg-brand-tint/40' : ''}`}
                 >
                   <td className="px-4 py-3 text-ink">{it.merchant}</td>
-                  <td className="px-4 py-3 text-right text-body tabular-nums">{fmt(it.total_amount)}</td>
-                  <td className="px-4 py-3 text-right text-ink tabular-nums">{fmt(it.monthly_amount)}</td>
+                  <td className="px-4 py-3 text-right text-body tabular-nums">{formatWon(it.total_amount)}</td>
+                  <td className="px-4 py-3 text-right text-ink tabular-nums">{formatWon(it.monthly_amount)}</td>
                   <td className="px-4 py-3 text-center text-caption">{it.billed_months}/{it.months}</td>
                   <td className="px-4 py-3 text-center text-caption">
                     {it.remaining_months > 0 ? `${it.remaining_months}개월` : '-'}

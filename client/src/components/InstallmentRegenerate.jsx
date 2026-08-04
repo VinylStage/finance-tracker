@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../lib/api';
 import { useConfirm } from './ConfirmProvider';
 import Icon from './Icon';
+import { formatWon } from '../lib/format';
 
 // 할부 청구 내역(파생 거래) 생성·재계산(#269).
 //
@@ -17,13 +18,10 @@ import Icon from './Icon';
 //
 // 프리뷰가 보여야 할 것(ADR 0008): 건수, 전 → 후, 부작용, 되돌릴 수 있는가.
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 function signed(n) {
   if (n === 0) return '변화 없음';
-  return `${n > 0 ? '+' : '−'}${fmt(Math.abs(n))}`;
+  return `${n > 0 ? '+' : '−'}${formatWon(Math.abs(n))}`;
 }
 
 // 되돌리는 방법을 사실대로 적는다. M12(#300) 전까지는 실행취소가 없다.
@@ -115,7 +113,7 @@ export default function InstallmentRegenerate({ installment, hasDerived, onDone 
         <dd className="text-ink tabular-nums">{plan.create_count}건</dd>
         <dt className="text-caption">합계</dt>
         <dd className="text-ink tabular-nums">
-          {fmt(plan.before_total)} → {fmt(plan.after_total)}
+          {formatWon(plan.before_total)} → {formatWon(plan.after_total)}
           <span className="text-caption"> ({signed(plan.delta)})</span>
         </dd>
         <dt className="text-caption">적용 정책</dt>
@@ -136,7 +134,7 @@ export default function InstallmentRegenerate({ installment, hasDerived, onDone 
           <ul className="mt-1 space-y-0.5">
             {pastAffected.slice(0, 5).map((m) => (
               <li key={m.billing_month} className="text-[11px] text-body tabular-nums">
-                {m.billing_month} · {fmt(m.before)} → {fmt(m.after)}
+                {m.billing_month} · {formatWon(m.before)} → {formatWon(m.after)}
               </li>
             ))}
             {pastAffected.length > 5 && (

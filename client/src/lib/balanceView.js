@@ -7,16 +7,12 @@
 // accountStatus 가 돌려주는 값은 **상태 키이지 화면 문구가 아니다.** 문구는
 // 화면이 정한다 — 같은 상태라도 목록과 상세에서 다르게 말해야 할 수 있다.
 
-export function formatWon(n) {
-  if (n === null || n === undefined || isNaN(n)) {
-    return '0원';
-  }
-  // 로케일을 반드시 명시한다. 생략하면 실행 환경의 로케일을 따라가고,
-  // de-DE 같은 환경에서 1.234.567 로 나온다 — 이 앱은 원화 표기 하나만 쓴다.
-  // 저장소의 다른 포매터도 전부 'ko-KR' 을 명시하고 있다(TransactionList 등).
-  const num = Math.round(Number(n));
-  return `${num.toLocaleString('ko-KR')}원`;
-}
+// 금액 표기는 lib/format.js 가 정본이다(#236). 여기 있던 구현을 그리로 옮겼다 —
+// 같은 이름의 함수가 두 곳에 서로 다른 반올림 규칙으로 존재하고 있었다.
+//
+// 재수출로 남기는 이유는 이 모듈에서 가져다 쓰는 화면(Accounts, BalanceProjection)의
+// import 경로를 건드리지 않기 위해서다. 잔액 화면 입장에서는 표시 계층의 일부다.
+export { formatWon } from './format';
 
 export function unpaidSummary(cardUnpaid) {
   if (!cardUnpaid) {

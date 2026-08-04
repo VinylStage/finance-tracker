@@ -17,13 +17,11 @@ import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
 import Icon from '../components/Icon';
 import AnchorNav from '../components/AnchorNav';
 import CardPolicySection from '../components/CardPolicySection';
+import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 export default function Settings() {
   const [categories, setCategories] = useState([]);
@@ -611,7 +609,7 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
               <tr key={r.id} className={`border-b border-line-faint ${!r.is_active ? 'opacity-50' : ''}`}>
                 <td className="px-3 py-2 text-ink">{r.merchant}</td>
                 <td className="px-3 py-2 text-caption text-xs">{r.category_name}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmt(r.amount)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatWon(r.amount)}</td>
                 <td className="px-3 py-2 text-right text-xs text-caption">{describeSchedule(r)}</td>
                 <td className="px-3 py-2 text-right">
                   <button onClick={() => startEdit(r)} className="text-brand-text hover:text-brand-text text-xs mr-2">수정</button>

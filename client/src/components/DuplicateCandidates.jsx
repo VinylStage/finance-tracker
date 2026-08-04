@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useConfirm } from './ConfirmProvider';
 import Icon from './Icon';
+import { formatWon } from '../lib/format';
 
 // 할부 전환으로 생긴 중복 의심 거래(#269 잔여).
 //
@@ -11,9 +12,6 @@ import Icon from './Icon';
 // **자동으로 지우지 않는다.** 이 저장소는 실거래 2,212건 유실 사고가 있었다.
 // 후보를 보여주고 사용자가 하나씩 고른다(ADR 0008 프리뷰 → 확인).
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 확신도를 사용자 말로 옮긴다. 내부 값(exact/likely/review)을 노출하지 않는다(#231).
 //
@@ -63,7 +61,7 @@ export default function DuplicateCandidates() {
       const plan = preview.data;
 
       const ok = await confirm(
-        `${plan.rows.length}건, 합계 ${fmt(plan.total)}을 지울까요? 되돌릴 수 없어요.`,
+        `${plan.rows.length}건, 합계 ${formatWon(plan.total)}을 지울까요? 되돌릴 수 없어요.`,
         { tone: 'danger', confirmLabel: '지우기' }
       );
       if (!ok) return;
@@ -144,7 +142,7 @@ export default function DuplicateCandidates() {
               <input
                 type="checkbox"
                 className="mt-1 cursor-pointer"
-                aria-label={`${c.transaction.date} ${c.transaction.merchant || ''} ${fmt(c.transaction.amount)} 선택`}
+                aria-label={`${c.transaction.date} ${c.transaction.merchant || ''} ${formatWon(c.transaction.amount)} 선택`}
                 checked={selected.has(c.transaction.id)}
                 onChange={() => toggle(c.transaction.id)}
               />
@@ -154,7 +152,7 @@ export default function DuplicateCandidates() {
                   {' · '}
                   {c.transaction.merchant || '가맹점 없음'}
                   {' · '}
-                  <span className="tabular-nums">{fmt(c.transaction.amount)}</span>
+                  <span className="tabular-nums">{formatWon(c.transaction.amount)}</span>
                 </p>
                 <p className={`text-xs mt-0.5 inline-flex items-center gap-1 ${label.tone}`}>
                   <Icon name={label.icon} size={12} />

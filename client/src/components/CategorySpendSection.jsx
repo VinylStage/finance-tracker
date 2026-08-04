@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { capTopCategories, shareOf, sliceColor, OTHERS_LABEL } from '../lib/categoryChart';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 파이 조각에 마우스를 올렸을 때 뜨는 툴팁. '기타' 조각이면 어떤 카테고리가
 // 묶였는지 목록으로 펼쳐 준다 — 캡핑 때문에 사라진 정보를 여기서 되돌려준다.
@@ -14,13 +12,13 @@ function SliceTooltip({ active, payload, others }) {
   return (
     <div className="bg-surface border border-line rounded-card shadow-card px-3 py-2 text-xs">
       <p className="font-medium text-ink">{row.category}</p>
-      <p className="text-body tabular-nums">{fmt(row.total)}</p>
+      <p className="text-body tabular-nums">{formatWon(row.total)}</p>
       {row.isOthers && others.length > 0 && (
         <ul className="mt-1.5 pt-1.5 border-t border-line-faint space-y-0.5 text-caption">
           {others.map((o) => (
             <li key={o.category} className="flex justify-between gap-3">
               <span>{o.category}</span>
-              <span className="tabular-nums">{fmt(o.total)}</span>
+              <span className="tabular-nums">{formatWon(o.total)}</span>
             </li>
           ))}
         </ul>
@@ -72,7 +70,7 @@ export default function CategorySpendSection({ rows }) {
                     {c.isOthers ? `${OTHERS_LABEL} (${others.length}개)` : c.category}
                   </span>
                   <span className="shrink-0 text-ink font-medium tabular-nums">
-                    {fmt(c.total)}
+                    {formatWon(c.total)}
                     <span className="ml-1.5 text-caption">{Math.round(share * 100)}%</span>
                   </span>
                 </div>

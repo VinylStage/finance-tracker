@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { formatWon } from '../lib/format';
 
 // 할부 입력 폼의 월별 청구액 자동계산(#316).
 //
@@ -22,9 +23,6 @@ import { api } from '../lib/api';
 // 보고 앱이 틀렸다고 판단한다.
 // ─────────────────────────────────────────────────────────────────────────
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 입력 중에 매 글자마다 부르지 않는다. 총액은 한 자씩 늘어나므로
 // 디바운스가 없으면 1,200,000 하나 치는 데 일곱 번 부른다.
@@ -101,24 +99,24 @@ export default function InstallmentBillingHint({
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
         <dt className="text-caption">1회차</dt>
         <dd className="text-ink tabular-nums">
-          {fmt(first.total)}
+          {formatWon(first.total)}
           {first.interest > 0 && (
-            <span className="text-caption"> (원금 {fmt(first.principal)} + 수수료 {fmt(first.interest)})</span>
+            <span className="text-caption"> (원금 {formatWon(first.principal)} + 수수료 {formatWon(first.interest)})</span>
           )}
         </dd>
 
         {second && (varies.principal || varies.interest) && (
           <>
             <dt className="text-caption">2회차</dt>
-            <dd className="text-ink tabular-nums">{fmt(second.total)}</dd>
+            <dd className="text-ink tabular-nums">{formatWon(second.total)}</dd>
           </>
         )}
 
         <dt className="text-caption">총 수수료</dt>
-        <dd className="text-ink tabular-nums">{fmt(totals.interest)}</dd>
+        <dd className="text-ink tabular-nums">{formatWon(totals.interest)}</dd>
 
         <dt className="text-caption">총 상환액</dt>
-        <dd className="text-ink tabular-nums">{fmt(totals.total)}</dd>
+        <dd className="text-ink tabular-nums">{formatWon(totals.total)}</dd>
       </dl>
 
       {(varies.principal || varies.interest) && (
@@ -134,9 +132,9 @@ export default function InstallmentBillingHint({
       {(monthlyDiffers || feeDiffers) && (
         <p className="text-[11px] text-brand-text">
           입력한 값이 계산과 달라요 — 계산값은
-          {monthlyDiffers && ` 월납부액 ${fmt(monthly_amount)}`}
+          {monthlyDiffers && ` 월납부액 ${formatWon(monthly_amount)}`}
           {monthlyDiffers && feeDiffers && ','}
-          {feeDiffers && ` 월 수수료 ${fmt(fee_per_month)}`}
+          {feeDiffers && ` 월 수수료 ${formatWon(fee_per_month)}`}
           . 입력한 값을 그대로 저장해요.
         </p>
       )}
