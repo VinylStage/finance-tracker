@@ -15,6 +15,8 @@ const {
 const {
   findDuplicateCandidates, planResolve, dismiss, undismiss,
 } = require('../services/installmentDuplicates');
+const { estimateBilling, billingBasis } = require('../services/installmentBilling');
+const { resolvePolicy } = require('../services/cardPolicy');
 
 // 프리뷰 관련 오류를 상태코드로 옮긴다(ADR 0008).
 //
@@ -218,6 +220,46 @@ router.post('/duplicates/resolve', (req, res) => {
 router.post('/duplicates/restore', (req, res) => {
   try {
     res.json({ ok: true, restored: undismiss(db, (req.body || {}).ids) });
+  } catch (e) {
+    serverError(res, e, 'installments');
+  }
+});
+
+// POST /api/installments/billing-estimate — 총액·개월수·정책으로 월별 청구액 계산(#316)
+//
+// **DB 를 바꾸지 않는다.** 입력 폼이 저장 전에 기본값을 채우려고 부르는 자리다.
+// 조회지만 POST 인 이유는 본문이 여러 필드이기 때문이고, 같은 이유로 `:id` 를
+// 쓰지 않는다 — 아직 저장되지 않은 값을 계산하는 것이라 대상 할부가 없다.
+//
+// `/:id` 패턴보다 위에 둔다. 아래에 두면 `:id` 가 'billing-estimate' 를 삼킨다.
+router.post('/billing-estimate', numericBody(['total_amount', 'months', 'payment_method_id']), (req, res) => {
+  try {
+    const {
+      total_amount, months, payment_method_id, purchase_date, start_billing_month,
+    } = req.body || {};
+
+    if (!total_amount || !months || !start_billing_month) {
+      return res.status(400).json({ error: '총액, 개월수, 첫 청구월은 필수입니다.' });
+    }
+    if (months < 2) {
+      return res.status(400).json({ error: 'months must be >= 2 (2개월 미만은 일시불로 처리)' });
+    }
+
+    // 정책은 구매 시점 기준으로 뽑는다. derivedTransactions 와 같은 기준이어야
+    // 화면에 보여준 값과 나중에 실제로 생성되는 거래가 어긋나지 않는다.
+    const asOf = purchase_date || localYMD();
+    const { policy, source } = payment_method_id
+      ? resolvePolicy(db, payment_method_id, months, asOf)
+      : { policy: null, source: 'none' };
+
+    const estimate = estimateBilling({
+      totalAmount: total_amount,
+      months,
+      policy,
+      startBillingMonth: start_billing_month,
+    });
+
+    res.json({ data: { ...estimate, basis: billingBasis(policy, source) } });
   } catch (e) {
     serverError(res, e, 'installments');
   }
