@@ -3,10 +3,8 @@ import CategoryBadge from './CategoryBadge';
 import DerivedBadge from './DerivedBadge';
 import { AMOUNT_MARK } from '../lib/categoryStyle';
 import { isDerived } from '../lib/derivedOrigin';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 export default function TransactionList({ items, onEdit, onDelete, onMakeRecurring, bare = false, selectedIds, onToggleSelect, onToggleSelectAll }) {
   const lastCheckedIndexRef = useRef(null);
@@ -102,7 +100,7 @@ export default function TransactionList({ items, onEdit, onDelete, onMakeRecurri
                 <span aria-hidden="true" className="mr-0.5 text-[10px] align-middle">
                   {tx.major_type === '수입' ? AMOUNT_MARK.income.arrow : AMOUNT_MARK.expense.arrow}
                 </span>
-                {tx.major_type === '수입' ? AMOUNT_MARK.income.sign : AMOUNT_MARK.expense.sign}{fmt(tx.amount)}
+                {tx.major_type === '수입' ? AMOUNT_MARK.income.sign : AMOUNT_MARK.expense.sign}{formatWon(tx.amount)}
               </td>
               <td className="px-4 py-3 text-caption text-xs" role="cell" data-label="결제수단">
                 {tx.payment_method_name || '—'}

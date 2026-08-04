@@ -7,10 +7,8 @@ import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
 import SavingsGoalBar from '../components/SavingsGoalBar';
 import Icon from '../components/Icon';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 export default function Savings() {
   const today = localYMD();
@@ -55,7 +53,7 @@ export default function Savings() {
     if (!await confirm(`"${item.name}" 만기 처리하시겠습니까? 원금 회수 + 이자가 거래 내역에 자동 기록됩니다.`)) return;
     try {
       const body = await api.raw(`/api/savings/${item.id}/mature`, { method: 'POST' });
-      await alert(`만기 처리 완료\n원금: ${fmt(body.principal)}\n이자: ${fmt(body.interest)}\n총 수령액: ${fmt(body.payout)}`);
+      await alert(`만기 처리 완료\n원금: ${formatWon(body.principal)}\n이자: ${formatWon(body.interest)}\n총 수령액: ${formatWon(body.payout)}`);
       reload();
     } catch (err) {
       await alert(err.message || '처리 실패');
@@ -112,13 +110,13 @@ export default function Savings() {
               {items.map((s, i) => (
                 <tr key={s.id} className={`border-b border-line-faint hover:bg-surface-page transition-colors ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}>
                   <td className="px-4 py-3 text-ink">{s.name}</td>
-                  <td className="px-4 py-3 text-right text-body tabular-nums">{fmt(s.monthly_contribution)}</td>
+                  <td className="px-4 py-3 text-right text-body tabular-nums">{formatWon(s.monthly_contribution)}</td>
                   <td className="px-4 py-3 text-caption text-xs hidden sm:table-cell">{s.start_date}</td>
                   <td className="px-4 py-3 text-caption text-xs hidden sm:table-cell">{s.maturity_date || '—'}</td>
                   <td className="px-4 py-3">
                     <SavingsGoalBar product={s} today={today} />
                   </td>
-                  <td className="px-4 py-3 text-right text-brand-text font-medium tabular-nums">{s.expected_payout ? fmt(s.expected_payout) : '—'}</td>
+                  <td className="px-4 py-3 text-right text-brand-text font-medium tabular-nums">{s.expected_payout ? formatWon(s.expected_payout) : '—'}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`text-xs font-medium ${s.status === '진행중' ? 'text-brand-text' : 'text-caption'}`}>{s.status}</span>
                   </td>

@@ -27,12 +27,10 @@ import { monthRange as heatMonthRange, bucketToDaily } from '../lib/heatmapPerio
 import { bucketByDay } from '../lib/dailyBuckets';
 import CashFlowBars from '../components/CashFlowBars';
 import CashFlowSankey from '../components/CashFlowSankey';
+import { formatWon } from '../lib/format';
 
 const PERIODS = ['일', '주', '월', '연'];
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 function shortFmt(n) {
   const v = Number(n || 0);
@@ -129,7 +127,7 @@ function CategoryComparison() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="category" tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
               <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip formatter={(v) => fmt(v)} />
+              <Tooltip formatter={(v) => formatWon(v)} />
               {/* 막대마다 색을 바꾸지 않는다. 카테고리는 X축 라벨이 구분하고,
                   색은 "이 막대가 무엇인지" 가 아니라 "지출 데이터" 라는 한 가지만
                   말한다. 카테고리별 색은 개수가 늘면 반드시 무너진다. */}
@@ -140,7 +138,7 @@ function CategoryComparison() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="category" tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
               <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip formatter={(v) => fmt(v)} />
+              <Tooltip formatter={(v) => formatWon(v)} />
               <Line type="monotone" dataKey="total" name="지출" stroke="var(--color-brand-fill)" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           )}
@@ -201,7 +199,7 @@ function RecurringDueSection({ onConfirmed }) {
               <span className="text-caption text-xs ml-2">{r.category_name} · 매월 {r.day_of_month}일</span>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="font-medium tabular-nums text-body">{fmt(r.amount)}</span>
+              <span className="font-medium tabular-nums text-body">{formatWon(r.amount)}</span>
               <button
                 onClick={() => handleConfirm(r.id)}
                 disabled={busyId === r.id}
@@ -448,12 +446,12 @@ export default function Dashboard() {
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="이번달 수입" value={fmt(data.income)} color="text-brand-text" />
-        <StatCard label="이번달 지출" value={fmt(data.expense)} color="text-loss-text" />
+        <StatCard label="이번달 수입" value={formatWon(data.income)} color="text-brand-text" />
+        <StatCard label="이번달 지출" value={formatWon(data.expense)} color="text-loss-text" />
         <StatCard
           label="가용 현금"
-          value={fmt(data.available)}
-          sub={`할부 청구 예정 ${fmt(data.installmentsDue)} 제외`}
+          value={formatWon(data.available)}
+          sub={`할부 청구 예정 ${formatWon(data.installmentsDue)} 제외`}
           color={data.available >= 0 ? 'text-brand-text' : 'text-loss-text'}
         />
       </div>
@@ -498,7 +496,7 @@ export default function Dashboard() {
                       <span className="text-caption">{b.name}</span>
                       <span className={`font-medium ${tone.text}`}>
                         {mark && <span aria-hidden="true" className="mr-1">{mark}</span>}
-                        {budgetLabel(s, fmt)}
+                        {budgetLabel(s, formatWon)}
                       </span>
                     </div>
                     {/* 초과분은 막대 밖 별도 세그먼트(사선 해치)로 뺀다.
@@ -527,7 +525,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     <div className="mt-1 text-[10px] text-caption tabular-nums">
-                      {fmt(b.spent)} / {fmt(b.monthly_budget)}
+                      {formatWon(b.spent)} / {formatWon(b.monthly_budget)}
                     </div>
                   </div>
                 );
@@ -564,7 +562,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap gap-4 mb-4 text-xs">
             <span className="text-caption">전월 대비</span>
             <span className="text-body">
-              수입 <span className="text-brand-text font-medium">{fmt(monthComparison.income.curr)}</span>
+              수입 <span className="text-brand-text font-medium">{formatWon(monthComparison.income.curr)}</span>
               {monthComparison.income.pct !== null && (
                 <span className={monthComparison.income.pct >= 0 ? 'text-brand-text' : 'text-loss-text'}>
                   {' '}({monthComparison.income.pct >= 0 ? '+' : ''}{monthComparison.income.pct}%)
@@ -572,7 +570,7 @@ export default function Dashboard() {
               )}
             </span>
             <span className="text-body">
-              지출 <span className="text-loss-text font-medium">{fmt(monthComparison.expense.curr)}</span>
+              지출 <span className="text-loss-text font-medium">{formatWon(monthComparison.expense.curr)}</span>
               {monthComparison.expense.pct !== null && (
                 <span className={monthComparison.expense.pct <= 0 ? 'text-brand-text' : 'text-loss-text'}>
                   {' '}({monthComparison.expense.pct >= 0 ? '+' : ''}{monthComparison.expense.pct}%)
@@ -587,7 +585,7 @@ export default function Dashboard() {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
             <XAxis dataKey={flowXKey} tickFormatter={flowTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
-            <Tooltip formatter={(v) => fmt(v)} labelFormatter={flowTick} />
+            <Tooltip formatter={(v) => formatWon(v)} labelFormatter={flowTick} />
             <Bar dataKey="expense" name="지출" fill="var(--color-loss-fill)" radius={[3, 3, 0, 0]} />
             <Line type="monotone" dataKey="income" name="수입" stroke="var(--color-brand-fill)" strokeWidth={2} dot={{ r: 3 }} />
           </ComposedChart>
@@ -634,7 +632,7 @@ export default function Dashboard() {
               </defs>
               <XAxis dataKey="date" tickFormatter={(v) => v.slice(5).replace('-', '/')} tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={4} />
               <YAxis tickFormatter={shortFmt} tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={36} />
-              <Tooltip formatter={(v) => fmt(v)} />
+              <Tooltip formatter={(v) => formatWon(v)} />
               <Area type="monotone" dataKey="expense" name="지출" stroke="var(--color-loss-fill)" fill="url(#dailyExpenseGrad)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -649,7 +647,7 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="month" tickFormatter={(v) => `${Number(v.slice(5, 7))}월`} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(v) => `${Number(v.slice(5, 7))}월`} />
+              <Tooltip formatter={(v) => formatWon(v)} labelFormatter={(v) => `${Number(v.slice(5, 7))}월`} />
               <Line type="monotone" dataKey="net" name="누적 수지" stroke="var(--color-brand-fill)" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -667,7 +665,7 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="month" tickFormatter={(v) => `${Number(v.slice(5, 7))}월`} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(v) => `${Number(v.slice(5, 7))}월`} />
+              <Tooltip formatter={(v) => formatWon(v)} labelFormatter={(v) => `${Number(v.slice(5, 7))}월`} />
               <Area type="monotone" dataKey="debt" name="총 부채" stroke="var(--color-loss-fill)" fill="url(#debtGrad)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -688,7 +686,7 @@ export default function Dashboard() {
                     <span className="w-5 h-5 rounded-full bg-surface-sunken text-caption text-xs flex items-center justify-center font-medium">{i + 1}</span>
                     {m.merchant}
                   </span>
-                  <span className="text-ink font-medium tabular-nums">{fmt(m.total)}</span>
+                  <span className="text-ink font-medium tabular-nums">{formatWon(m.total)}</span>
                 </div>
               ))}
             </div>
@@ -706,7 +704,7 @@ export default function Dashboard() {
                     <span className="w-5 h-5 rounded-full bg-surface-sunken text-caption text-xs flex items-center justify-center font-medium">{i + 1}</span>
                     {c.category}
                   </span>
-                  <span className="text-ink font-medium tabular-nums">{fmt(c.total)}</span>
+                  <span className="text-ink font-medium tabular-nums">{formatWon(c.total)}</span>
                 </div>
               ))}
             </div>

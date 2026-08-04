@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { derivedEndpoint } from '../lib/derivedOrigin';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 이 항목이 만든 거래들(#270).
 //
@@ -49,14 +47,14 @@ export default function DerivedTransactions({ kind, id, reloadKey = 0, onLoaded 
   return (
     <div className="py-2">
       <h4 className="text-xs font-medium text-caption mb-1">
-        이 항목이 만든 거래 {rows.length}건 · 합계 {fmt(total)}
+        이 항목이 만든 거래 {rows.length}건 · 합계 {formatWon(total)}
       </h4>
       <ul className="divide-y divide-line-faint">
         {rows.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-3 py-1.5 text-xs">
             <span className="text-caption whitespace-nowrap">{r.date}</span>
             <span className="text-body truncate flex-1">{r.memo || r.merchant}</span>
-            <span className="text-ink tabular-nums whitespace-nowrap">{fmt(r.amount)}</span>
+            <span className="text-ink tabular-nums whitespace-nowrap">{formatWon(r.amount)}</span>
           </li>
         ))}
       </ul>

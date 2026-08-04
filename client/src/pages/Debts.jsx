@@ -11,12 +11,10 @@ import DebtInterestProjection from '../components/DebtInterestProjection';
 import { LOAN_TYPE_OPTIONS, loanTypeFields, loanTypeHint, creditUsageRatio } from '../lib/loanType';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
+import { formatWon } from '../lib/format';
 
 const DEBT_TYPES = ['일반', '마이너스통장', '학자금', '전세자금'];
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 function TypeBadge({ type }) {
   const isMinus = type === '마이너스통장';
@@ -102,7 +100,7 @@ export default function Debts() {
 
   const handleDeleteRepayment = async (debtId, repayment) => {
     const ok = await confirm(
-      `${fmt(repayment.amount)} 상환 기록을 지울까요? 원금 ${fmt(repayment.principal_portion)}이 잔액으로 되돌아갑니다.`,
+      `${formatWon(repayment.amount)} 상환 기록을 지울까요? 원금 ${formatWon(repayment.principal_portion)}이 잔액으로 되돌아갑니다.`,
       { tone: 'danger', confirmLabel: '지우기' }
     );
     if (!ok) return;
@@ -153,11 +151,11 @@ export default function Debts() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-surface shadow-card rounded-card p-5 border border-line">
           <p className="text-caption text-sm mb-1">총 부채</p>
-          <p className="text-2xl font-bold text-loss-text">{fmt(totalBalance)}</p>
+          <p className="text-2xl font-bold text-loss-text">{formatWon(totalBalance)}</p>
         </div>
         <div className="bg-surface shadow-card rounded-card p-5 border border-line">
           <p className="text-caption text-sm mb-1">월이자 합계</p>
-          <p className="text-2xl font-bold text-ink">{fmt(totalInterest)}</p>
+          <p className="text-2xl font-bold text-ink">{formatWon(totalInterest)}</p>
         </div>
       </div>
 
@@ -219,11 +217,11 @@ export default function Debts() {
                     <td className="px-4 py-3 text-ink">{d.name}</td>
                     <td className="px-4 py-3"><TypeBadge type={d.type} /></td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      <span className="text-loss-text font-medium">{fmt(d.balance)}</span>
+                      <span className="text-loss-text font-medium">{formatWon(d.balance)}</span>
                       {d.credit_line && <CreditLineStatus creditLine={d.credit_line} />}
                     </td>
                     <td className="px-4 py-3 text-right text-body tabular-nums">{d.annual_rate}%</td>
-                    <td className="px-4 py-3 text-right text-caption tabular-nums">{fmt(d.monthly_interest)}</td>
+                    <td className="px-4 py-3 text-right text-caption tabular-nums">{formatWon(d.monthly_interest)}</td>
                     <td className="px-4 py-3 text-caption text-xs hidden md:table-cell">{d.memo || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 justify-end flex-wrap">
@@ -301,8 +299,8 @@ function InterestLog({ rows }) {
         <div key={r.id} className="flex items-center justify-between text-xs text-body bg-surface rounded-control px-3 py-2 border border-line">
           <span className="text-caption">{r.log_date}</span>
           <span>금리 {r.rate_at_time}%</span>
-          <span className="text-loss-text font-medium">+{fmt(r.interest_amount)}</span>
-          <span className="text-caption tabular-nums">{fmt(r.balance_before)} → {fmt(r.balance_after)}</span>
+          <span className="text-loss-text font-medium">+{formatWon(r.interest_amount)}</span>
+          <span className="text-caption tabular-nums">{formatWon(r.balance_before)} → {formatWon(r.balance_after)}</span>
           <span className="text-caption truncate max-w-[120px]">{r.memo || '—'}</span>
         </div>
       ))}
@@ -331,10 +329,10 @@ function CreditLineStatus({ creditLine }) {
       {creditLine.over_limit ? (
         <span className="text-[11px] text-loss-text inline-flex items-center gap-1 mt-0.5">
           <Icon name="error" size={11} />
-          한도 {fmt(Math.abs(creditLine.available))} 초과
+          한도 {formatWon(Math.abs(creditLine.available))} 초과
         </span>
       ) : (
-        <span className="text-[11px] text-caption">여유 {fmt(creditLine.available)}</span>
+        <span className="text-[11px] text-caption">여유 {formatWon(creditLine.available)}</span>
       )}
     </span>
   );
@@ -360,11 +358,11 @@ function RepaymentLog({ rows, onDelete }) {
           <li key={r.id} className="flex items-center justify-between gap-3 py-1.5 text-xs">
             <span className="text-caption whitespace-nowrap">{r.repaid_on}</span>
             <span className="text-body truncate flex-1">
-              원금 {fmt(r.principal_portion)}
-              {r.interest_portion > 0 && ` · 이자 ${fmt(r.interest_portion)}`}
+              원금 {formatWon(r.principal_portion)}
+              {r.interest_portion > 0 && ` · 이자 ${formatWon(r.interest_portion)}`}
               {r.memo && ` · ${r.memo}`}
             </span>
-            <span className="text-ink tabular-nums whitespace-nowrap">{fmt(r.amount)}</span>
+            <span className="text-ink tabular-nums whitespace-nowrap">{formatWon(r.amount)}</span>
             <button
               type="button"
               onClick={() => onDelete(r)}
@@ -427,7 +425,7 @@ function RepaymentForm({ debt, onSave, onCancel }) {
         </div>
       </div>
       <p className="text-xs text-caption">
-        원금 {fmt(principal)}만큼 잔액이 줄고, 거래내역에 상환 1건이 만들어져요.
+        원금 {formatWon(principal)}만큼 잔액이 줄고, 거래내역에 상환 1건이 만들어져요.
         명세서에 원금·이자가 나뉘어 있으면 이자분을 적어 주세요.
       </p>
       <div className="flex gap-3 pt-1">
