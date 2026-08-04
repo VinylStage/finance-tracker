@@ -30,18 +30,22 @@ export default function Settings() {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [appSettings, setAppSettings] = useState({ initial_balance: 0, monthly_income: 0 });
   const [recurringRules, setRecurringRules] = useState([]);
+  // 결제수단을 계좌에 잇는 선택지(#376).
+  const [accounts, setAccounts] = useState([]);
 
   const { loading, error, reload } = useLoader(async () => {
-    const [cats, pms, settings, rules] = await Promise.all([
+    const [cats, pms, settings, rules, accts] = await Promise.all([
       api.get('/api/categories'),
       api.get('/api/payment-methods'),
       api.get('/api/settings'),
       api.get('/api/recurring-rules?include_inactive=1'),
+      api.get('/api/accounts'),
     ]);
     setCategories(cats);
     setPaymentMethods(pms);
     setAppSettings(settings);
     setRecurringRules(rules);
+    setAccounts(accts.data || []);
   }, []);
 
   if (loading) return <div className="text-caption text-center py-20">로딩 중...</div>;
@@ -72,7 +76,7 @@ export default function Settings() {
             <CategorySection categories={categories} onChanged={reload} />
           </Anchor>
           <Anchor id="payment">
-            <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
+            <PaymentMethodSection paymentMethods={paymentMethods} accounts={accounts} onChanged={reload} />
           </Anchor>
           {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
           <Anchor id="card-policy">
@@ -626,9 +630,12 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
   );
 }
 
-function PaymentMethodSection({ paymentMethods, onChanged }) {
+// 결제수단을 계좌에 잇는다(#376). 이 연결이 없으면 그 결제수단의 거래가 계좌
+// 잔액에 잡히지 않는다 — 컬럼은 있었지만 지정할 화면이 없어 잔액이 늘
+// 기준값 그대로였다.
+function PaymentMethodSection({ paymentMethods, accounts, onChanged }) {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', type: '신용' });
+  const [form, setForm] = useState({ name: '', type: '신용', account_id: '' });
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -638,7 +645,7 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
     e.preventDefault();
     try {
       await api.post('/api/payment-methods', form);
-      setForm({ name: '', type: '신용' });
+      setForm({ name: '', type: '신용', account_id: '' });
       setShowForm(false);
       onChanged();
     } catch (err) {
@@ -658,7 +665,9 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
 
   const handleEditStart = (pm) => {
     setEditing(pm.id);
-    setEditForm({ name: pm.name, type: pm.type });
+    // account_id 를 함께 담는다. 안 담으면 편집 저장이 기존 연결을 그대로
+    // 되돌려 보내긴 하지만, 화면에서 계좌를 바꿀 수 없게 된다.
+    setEditForm({ name: pm.name, type: pm.type, account_id: pm.account_id ?? '' });
   };
 
   const handleEditCancel = () => {
@@ -722,8 +731,20 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
               {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+          <div>
+            <label htmlFor="pm-account" className="block text-xs text-caption mb-1">연결 계좌</label>
+            <select id="pm-account" className={inp} value={form.account_id} onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}>
+              <option value="">연결 안 함</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
           <button type="submit" className="btn-primary text-sm px-4 py-2 rounded-control transition-colors">추가</button>
         </form>
+      )}
+      {accounts.length === 0 && (
+        <p className="text-xs text-caption">
+          계좌를 먼저 등록하면 결제수단을 계좌에 이을 수 있어요. 이어야 그 결제수단의 거래가 통장 잔액에 반영돼요.
+        </p>
       )}
       <div className="flex flex-wrap gap-2">
         {filteredPaymentMethods.map(p => (
@@ -744,6 +765,15 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
                   onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}
                 >
                   {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <select
+                  aria-label={`${p.name} 연결 계좌 수정`}
+                  className="bg-surface border border-line-strong rounded px-2 py-1 text-xs"
+                  value={editForm.account_id}
+                  onChange={e => setEditForm(f => ({ ...f, account_id: e.target.value }))}
+                >
+                  <option value="">계좌 없음</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
                 <button onClick={() => handleEditSave(p)} className="text-xs text-brand-text hover:text-brand-text mr-1">저장</button>
                 <button onClick={handleEditCancel} className="text-xs text-caption hover:text-body">취소</button>
