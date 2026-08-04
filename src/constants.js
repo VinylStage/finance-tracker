@@ -19,6 +19,18 @@ const INSTALLMENT_POLICY_TYPES = ['무이자', '부분무이자', '유이자'];
 // 가져온 실제 결제라 사용자 소유로 본다.
 const TRANSACTION_ORIGINS = ['manual', 'installment', 'revolving', 'debt_interest', 'debt_repayment', 'recurring'];
 
+// transactions.settlement 허용값의 정본(#289). PAYMENT_STYLES 와 같은 이유로
+// DB CHECK 를 걸지 않는다 — 값이 늘 때(리볼빙 #293) 테이블 재생성이 필요하고
+// 감사 트리거까지 다시 만들어야 한다.
+//
+// 'immediate'  체크카드·현금·이체. 통장이 즉시 줄어든다
+// 'deferred'   신용카드 사용. 통장은 그대로고 카드 미결제액이 는다
+// 'settlement' 카드대금 인출. 통장이 줄고 미결제액이 준다
+//
+// 기본값은 'immediate' 다. 구분이 없던 시절의 거래는 전부 여기 남는다.
+const SETTLEMENTS = ['immediate', 'deferred', 'settlement'];
+const DEFAULT_SETTLEMENT = 'immediate';
+
 // 거래내역 화면에서 수정·삭제할 수 없는 출처(#268).
 //
 // origin != 'manual' 을 일괄로 잠그지 않는 이유가 있다. M9 반복거래는 파생
@@ -124,6 +136,7 @@ const BENEFIT_TYPES = ['할인', '적립'];
 module.exports = {
   PAYMENT_STYLES, MAJOR_TYPES, INSTALLMENT_POLICY_TYPES,
   TRANSACTION_ORIGINS, LOCKED_ORIGINS,
+  SETTLEMENTS, DEFAULT_SETTLEMENT,
   DERIVED_CATEGORIES, INSTALLMENT_SCHEDULE_FIELDS,
   AUDIT_ACTORS, AUDIT_OPS, RECURRING_FREQS, CARD_TYPES, BENEFIT_TYPES,
   LOAN_TYPES, LOAN_TYPE_DEFAULTS,
