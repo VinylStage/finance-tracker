@@ -36,7 +36,7 @@ const EXPECTED = [
   { file: 'debts.js', method: 'POST', routePath: '/', fields: ['balance', 'credit_limit', 'compounds', 'interest_day'] },
   { file: 'debts.js', method: 'POST', routePath: '/:id/interest', fields: ['interest_amount'] },
   { file: 'debts.js', method: 'POST', routePath: '/:id/repayments', fields: ['amount', 'principal_portion', 'interest_portion'] },
-  { file: 'installments.js', method: 'POST', routePath: '/billing-estimate', fields: ['total_amount', 'months', 'payment_method_id'] },
+  { file: 'installments.js', method: 'POST', routePath: '/billing-estimate', fields: ['total_amount', 'months', 'payment_method_id', 'category_id'] },
   { file: 'installments.js', method: 'POST', routePath: '/', fields: ['total_amount', 'months', 'monthly_amount', 'fee_per_month', 'payment_method_id'] },
   { file: 'paymentMethods.js', method: 'PUT', routePath: '/:id', fields: ['is_active'] },
   { file: 'recurringRules.js', method: 'PUT', routePath: '/:id', fields: ['is_active'] },

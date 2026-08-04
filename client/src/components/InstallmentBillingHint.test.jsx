@@ -63,6 +63,31 @@ describe('계산 호출', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('카테고리를 함께 넘긴다', async () => {
+    // 카테고리 예외 정책이 반영되지 않으면 화면에서 무이자를 봤는데 저장하니
+    // 수수료가 붙는다.
+    post.mockResolvedValue({ data: estimate() });
+    render(<InstallmentBillingHint {...PROPS} categoryId="7" />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][1]).toMatchObject({ category_id: 7 });
+  });
+
+  it('카테고리를 안 고르면 넘기지 않는다', async () => {
+    post.mockResolvedValue({ data: estimate() });
+    render(<InstallmentBillingHint {...PROPS} categoryId="" />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][1].category_id).toBeUndefined();
+  });
+
+  it('카테고리가 바뀌면 다시 계산한다', async () => {
+    post.mockResolvedValue({ data: estimate() });
+    const { rerender } = render(<InstallmentBillingHint {...PROPS} categoryId="7" />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    rerender(<InstallmentBillingHint {...PROPS} categoryId="9" />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls[1][1]).toMatchObject({ category_id: 9 });
+  });
+
   it('결과를 부모에게 넘겨 폼을 채우게 한다', async () => {
     post.mockResolvedValue({ data: estimate() });
     const onEstimate = vi.fn();

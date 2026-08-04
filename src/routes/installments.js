@@ -232,10 +232,10 @@ router.post('/duplicates/restore', (req, res) => {
 // 쓰지 않는다 — 아직 저장되지 않은 값을 계산하는 것이라 대상 할부가 없다.
 //
 // `/:id` 패턴보다 위에 둔다. 아래에 두면 `:id` 가 'billing-estimate' 를 삼킨다.
-router.post('/billing-estimate', numericBody(['total_amount', 'months', 'payment_method_id']), (req, res) => {
+router.post('/billing-estimate', numericBody(['total_amount', 'months', 'payment_method_id', 'category_id']), (req, res) => {
   try {
     const {
-      total_amount, months, payment_method_id, purchase_date, start_billing_month,
+      total_amount, months, payment_method_id, purchase_date, start_billing_month, category_id,
     } = req.body || {};
 
     if (!total_amount || !months || !start_billing_month) {
@@ -248,8 +248,10 @@ router.post('/billing-estimate', numericBody(['total_amount', 'months', 'payment
     // 정책은 구매 시점 기준으로 뽑는다. derivedTransactions 와 같은 기준이어야
     // 화면에 보여준 값과 나중에 실제로 생성되는 거래가 어긋나지 않는다.
     const asOf = purchase_date || localYMD();
+    // 카테고리까지 넘긴다. 저장 시점의 resolveInstallmentPolicy 와 같은 기준이어야
+    // 화면에 보여준 값과 실제로 생성되는 거래가 어긋나지 않는다(#316).
     const { policy, source } = payment_method_id
-      ? resolvePolicy(db, payment_method_id, months, asOf)
+      ? resolvePolicy(db, payment_method_id, months, asOf, category_id || null)
       : { policy: null, source: 'none' };
 
     const estimate = estimateBilling({
