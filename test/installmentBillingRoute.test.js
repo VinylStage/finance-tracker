@@ -160,6 +160,82 @@ describe('C. 정책이 있을 때', () => {
   });
 });
 
+describe('C2. 카테고리 예외 정책', () => {
+  let catPmId;
+  let exceptCatId;
+  let plainCatId;
+
+  before(async () => {
+    const pm = await post('/api/payment-methods', { name: '카테고리예외카드', type: '신용' });
+    catPmId = pm.body.id;
+    const cats = (await json('/api/categories')).body;
+    const spend = (cats.data || cats).filter((c) => c.major_type !== '수입');
+    exceptCatId = spend[0].id;
+    plainCatId = spend[1].id;
+
+    // 기본: 6개월 유이자 / 예외: 같은 카드·같은 개월수인데 무이자
+    await post('/api/card-policies', {
+      payment_method_id: catPmId, months: 6, policy_type: '유이자',
+      annual_rate: 19.9, effective_from: '2026-01-01',
+    });
+    await post('/api/card-policies', {
+      payment_method_id: catPmId, months: 6, policy_type: '무이자',
+      annual_rate: 0, effective_from: '2026-01-01', category_id: exceptCatId,
+    });
+  });
+
+  test('C2-1. 예외 카테고리를 넘기면 무이자로 계산된다', async () => {
+    const r = await post('/api/installments/billing-estimate', {
+      ...REQ, payment_method_id: catPmId, category_id: exceptCatId,
+    });
+    assert.strictEqual(r.body.data.basis.policy_type, '무이자');
+    assert.strictEqual(r.body.data.basis.source, 'category');
+    assert.strictEqual(r.body.data.totals.interest, 0);
+  });
+
+  test('C2-2. 예외 없는 카테고리는 기본 정책으로 떨어진다', async () => {
+    const r = await post('/api/installments/billing-estimate', {
+      ...REQ, payment_method_id: catPmId, category_id: plainCatId,
+    });
+    assert.strictEqual(r.body.data.basis.source, 'base');
+    assert.ok(r.body.data.totals.interest > 0);
+  });
+
+  test('C2-3. 카테고리를 안 넘기면 기본 정책만 본다', async () => {
+    // 빈 값을 아무 카테고리로 채우면 엉뚱한 예외가 걸린다.
+    const r = await post('/api/installments/billing-estimate', {
+      ...REQ, payment_method_id: catPmId,
+    });
+    assert.strictEqual(r.body.data.basis.source, 'base');
+    assert.ok(r.body.data.totals.interest > 0);
+  });
+
+  test('C2-4. 미리보기와 저장 후 생성값이 카테고리 예외에서도 일치한다', async () => {
+    // 이 배선의 존재 이유다. 계산 기준이 갈라지면 화면에서 무이자를 봤는데
+    // 저장하니 수수료가 붙는 상황이 된다.
+    const est = await post('/api/installments/billing-estimate', {
+      ...REQ, payment_method_id: catPmId, category_id: exceptCatId,
+    });
+    const rows = est.body.data.rows;
+
+    const created = await post('/api/installments', {
+      ...REQ, merchant: '카테고리일치확인', payment_method_id: catPmId,
+      category_id: exceptCatId, monthly_amount: est.body.data.monthly_amount,
+    });
+    assert.strictEqual(created.status, 201, JSON.stringify(created.body));
+
+    const derived = await json(`/api/installments/${created.body.id}/derived`);
+    const actual = derived.body.data.sort((a, b) => a.origin_seq - b.origin_seq);
+    assert.strictEqual(actual.length, rows.length);
+    for (let i = 0; i < rows.length; i += 1) {
+      assert.strictEqual(
+        actual[i].amount, rows[i].total,
+        `${i + 1}회차 — 미리보기 ${rows[i].total} vs 생성 ${actual[i].amount}`
+      );
+    }
+  });
+});
+
 describe('D. 저장된 할부와 값이 어긋나지 않는다', () => {
   // 화면에서 본 값과 실제로 생성된 청구 내역이 다르면 계산을 보여준 의미가 없다.
   test('D-1. 계산한 회차별 금액이 생성된 파생 거래와 같다', async () => {

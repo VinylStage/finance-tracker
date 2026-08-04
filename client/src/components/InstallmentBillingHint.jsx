@@ -32,7 +32,7 @@ const DEBOUNCE_MS = 400;
 
 export default function InstallmentBillingHint({
   totalAmount, months, paymentMethodId, purchaseDate, startBillingMonth,
-  monthlyAmount, feePerMonth, onEstimate,
+  categoryId, monthlyAmount, feePerMonth, onEstimate,
 }) {
   const [estimate, setEstimate] = useState(null);
   const [error, setError] = useState(null);
@@ -57,6 +57,8 @@ export default function InstallmentBillingHint({
           payment_method_id: paymentMethodId ? Number(paymentMethodId) : undefined,
           purchase_date: purchaseDate || undefined,
           start_billing_month: startBillingMonth,
+          // 카테고리 예외 정책까지 반영해야 저장 후 생성될 값과 일치한다(#316).
+          category_id: categoryId ? Number(categoryId) : undefined,
         });
         setError(null);
         setEstimate(res.data);
@@ -71,7 +73,7 @@ export default function InstallmentBillingHint({
     return () => clearTimeout(timer.current);
     // onEstimate 는 매 렌더 새 함수라 의존성에 넣으면 무한 루프가 된다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, total, m, paymentMethodId, purchaseDate, startBillingMonth]);
+  }, [ready, total, m, paymentMethodId, purchaseDate, startBillingMonth, categoryId]);
 
   if (error) {
     return (

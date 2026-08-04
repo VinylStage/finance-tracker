@@ -365,6 +365,7 @@ function InstallmentForm({ paymentMethods, categories, onSave, onCancel }) {
         paymentMethodId={form.payment_method_id}
         purchaseDate={form.purchase_date}
         startBillingMonth={form.start_billing_month}
+        categoryId={form.category_id}
         monthlyAmount={form.monthly_amount}
         feePerMonth={form.fee_per_month}
         onEstimate={applyEstimate}
