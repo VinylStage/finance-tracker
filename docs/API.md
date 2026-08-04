@@ -1194,7 +1194,8 @@
   - `date` (필수): 거래 날짜 (YYYY-MM-DD 형식)
   - `category_id` (필수): 카테고리 ID
   - `amount` (필수): 금액
-  - `payment_method_id` (선택): 결제 수단 ID
+  - `payment_method_id` (선택): 결제 수단 ID (카드사 단위)
+  - `card_product_id` (선택): 카드 상품 ID. 어느 카드로 결제했는지(#302)
   - `payment_style` (선택, 기본값: 일시불): 결제 방식
   - `merchant` (선택): 가맹점
   - `memo` (선택): 메모
@@ -1207,8 +1208,15 @@
   ```
 
 - **에러 케이스**
-  - 400: 필수 필드 누락
+  - 400: 필수 필드 누락 / `card_product_id` 가 없는 카드 /
+    `card_product_id` 와 `payment_method_id` 가 맞는 짝이 아님
   - 500: 서버 내부 에러
+
+- **비고**: `card_product_id` 를 보내면 그 카드가 달린 카드사와 맞는지 확인한다.
+  화면은 둘을 한 선택지로 고르지만 API 는 따로 받으므로, 여기서 막지 않으면
+  "삼성카드로 결제한 하나 A카드" 가 저장되고 카드 전략 계산이 그걸 그대로 믿는다.
+
+  보내지 않으면 NULL 이다 — **"미상"** 은 전용 값이 아니라 NULL 이다(#306).
 
 ### PUT /:id
 
@@ -1217,7 +1225,10 @@
   - `date`: 거래 날짜 (YYYY-MM-DD 형식)
   - `category_id`: 카테고리 ID
   - `amount`: 금액
-  - `payment_method_id`: 결제 수단 ID
+  - `payment_method_id`: 결제 수단 ID (카드사 단위)
+  - `card_product_id`: 카드 상품 ID. **보내지 않으면 지워진다** —
+    `payment_method_id` 와 같은 규칙이다. COALESCE 를 쓰면 null 을 보내도 옛 값이
+    남아 "카드사는 알지만 어느 카드인지 모른다"(#306 의 미상)로 되돌릴 길이 없어진다
   - `payment_style`: 결제 방식
   - `merchant`: 가맹점
   - `memo`: 메모

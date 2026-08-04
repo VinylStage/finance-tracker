@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { localYMD, localYearMonth } from '../lib/date';
 import { remainingBudget, toSpentMap } from '../lib/quickEntry';
 import { formatWon } from '../lib/format';
+import { buildPaymentOptions, optionValue, parseSelection } from '../lib/paymentOptions';
 
 // 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
 // 프런트(ESM/Vite)와 빌드 도구가 분리되어 있어 값을 공유하지 못하므로 수동 동기화 필요(#90).
@@ -18,13 +19,17 @@ const CONFIDENCE_STYLE = {
 // 수정 모드(initial 있음)에서는 그 거래의 날짜가 이기므로 영향이 없다.
 //
 // **기본값일 뿐이다.** 사용자가 폼에서 날짜를 고치면 그 값이 유지된다.
-export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel, defaultDate }) {
+// cardProducts 는 기본값이 빈 배열이다. 카드를 한 장도 등록하지 않은 상태가
+// 정상이고(#302 1단계 이전의 모든 거래가 그렇다), 그때 결제수단 선택은 지금과
+// 똑같이 카드사 목록으로 보인다.
+export default function TransactionForm({ initial, categories, paymentMethods, cardProducts = [], onSave, onCancel, defaultDate }) {
   const today = localYMD();
   const [form, setForm] = useState({
     date: defaultDate || today,
     category_id: '',
     amount: '',
     payment_method_id: '',
+    card_product_id: '',
     payment_style: '일시불',
     merchant: '',
     memo: '',
@@ -33,6 +38,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       category_id: String(initial.category_id),
       amount: String(initial.amount),
       payment_method_id: String(initial.payment_method_id || ''),
+      card_product_id: String(initial.card_product_id || ''),
       payment_style: initial.payment_style,
       merchant: initial.merchant || '',
       memo: initial.memo || '',
@@ -58,6 +64,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
   }, []);
 
   const majorTypes = [...new Set(categories.map(c => c.major_type))];
+  const paymentGroups = buildPaymentOptions(paymentMethods, cardProducts);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -109,7 +116,19 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       amount: Number(form.amount),
       category_id: Number(form.category_id),
       payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
+      card_product_id: form.card_product_id ? Number(form.card_product_id) : null,
     });
+  };
+
+  // 카드사와 카드상품은 한 선택지에서 함께 정해진다 — 둘을 따로 고르게 하면
+  // 어긋난 짝이 저장될 수 있고, 사용자가 보기에도 같은 질문을 두 번 받는다.
+  const handlePaymentChange = (value) => {
+    const { payment_method_id, card_product_id } = parseSelection(value, cardProducts);
+    setForm(f => ({
+      ...f,
+      payment_method_id: payment_method_id === null ? '' : String(payment_method_id),
+      card_product_id: card_product_id === null ? '' : String(card_product_id),
+    }));
   };
 
   const selectedCategory = categories.find(c => String(c.id) === String(form.category_id));
@@ -171,10 +190,18 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
 
         <div>
           <label htmlFor="tx-payment-method" className="block text-xs text-caption mb-1">결제수단</label>
-          <select id="tx-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
+          <select
+            id="tx-payment-method" className={inp}
+            value={optionValue(form)}
+            onChange={e => handlePaymentChange(e.target.value)}
+          >
             <option value="">선택...</option>
-            {paymentMethods.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+            {paymentGroups.map(g => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
