@@ -19,6 +19,7 @@ export const NAV_GROUPS = [
     children: [
       { label: '기간비교', path: '/analysis/comparison' },
       { label: '시뮬레이터', path: '/analysis/simulator' },
+      { label: '카드', path: '/analysis/cards' },
     ],
   },
   {
