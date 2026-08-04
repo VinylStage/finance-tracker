@@ -1207,7 +1207,9 @@ function DangerZoneSection() {
     setDeleting(true);
     setMessage('');
     try {
-      const data = await api.del('/api/transactions', { all: true });
+      // 서버가 확인 토큰을 요구한다(#363). 위의 입력 문구·대화상자와 별개로,
+      // API 를 직접 부르는 경로까지 막기 위한 것이다.
+      const data = await api.del('/api/transactions', { all: true, confirm: 'DELETE_ALL' });
       if (data.ok) {
         setMessage(`${data.deleted}건이 삭제되었습니다.`);
         setConfirmText('');
