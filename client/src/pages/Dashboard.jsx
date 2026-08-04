@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ResponsiveContainer, Tooltip,
   AreaChart, Area, LineChart, Line, BarChart, Bar, ComposedChart,
@@ -18,6 +18,12 @@ import {
 } from '../lib/budget';
 import CategorySpendSection from '../components/CategorySpendSection';
 import SpendHeatmap from '../components/SpendHeatmap';
+import YearHeatmap from '../components/YearHeatmap';
+import HeatmapPeriodPicker from '../components/HeatmapPeriodPicker';
+// 이 파일에 이미 monthRange(offset) 이 있다 — 이번 달 기준 상대 오프셋을 받는
+// 다른 함수다. 이름이 겹치므로 별칭을 준다.
+import { monthRange as heatMonthRange, bucketToDaily } from '../lib/heatmapPeriod';
+import { bucketByDay } from '../lib/dailyBuckets';
 import CashFlowBars from '../components/CashFlowBars';
 
 const PERIODS = ['일', '주', '월', '연'];
@@ -308,10 +314,44 @@ function periodConfig(period, data) {
   }
 }
 
+// 히트맵의 연·월은 **이 그래프 전용 상태**다(#273 A안). 대시보드의 기간 필터와
+// 공유하지 않는다 — 전역을 따라가면 "왜 내가 고른 기간이 아닌 게 보이지" 가 된다.
+//
+// URL 키에 heat 접두를 붙여 다른 화면·컨트롤과 겹치지 않게 한다.
+const HEAT_KEYS = { mode: 'heatMode', year: 'heatYear', month: 'heatMonth' };
+
+function readHeatPeriod() {
+  const now = new Date();
+  const fallback = { mode: 'month', year: now.getFullYear(), month: now.getMonth() + 1 };
+  if (typeof window === 'undefined') return fallback;
+
+  const q = new URLSearchParams(window.location.search);
+  const mode = q.get(HEAT_KEYS.mode) === 'year' ? 'year' : 'month';
+  const year = Number(q.get(HEAT_KEYS.year));
+  const month = Number(q.get(HEAT_KEYS.month));
+  return {
+    mode,
+    year: Number.isInteger(year) && year > 1900 ? year : fallback.year,
+    month: Number.isInteger(month) && month >= 1 && month <= 12 ? month : fallback.month,
+  };
+}
+
+// 뷰 전환은 탐색이 아니라 표시 방식 변경이라 뒤로가기 이력을 쌓지 않는다.
+function writeHeatPeriod({ mode, year, month }) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  url.searchParams.set(HEAT_KEYS.mode, mode);
+  url.searchParams.set(HEAT_KEYS.year, String(year));
+  url.searchParams.set(HEAT_KEYS.month, String(month));
+  window.history.replaceState(null, '', url);
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [totalDebt, setTotalDebt] = useState(0);
   const [period, setPeriod] = useState('월');
+  const [heatPeriod, setHeatPeriod] = useState(readHeatPeriod);
+  const [heatBuckets, setHeatBuckets] = useState(null);
 
   const { loading, error, reload } = useLoader(async () => {
     const [d, debts] = await Promise.all([
@@ -321,6 +361,27 @@ export default function Dashboard() {
     setData(d);
     setTotalDebt(debts.total_balance || 0);
   }, []);
+
+  // 선택한 기간의 거래를 따로 조회한다. 기존 dailyTrend 는 최근 30일 고정이라
+  // 임의의 달·해를 그릴 수 없다.
+  useEffect(() => {
+    let cancelled = false;
+    const { mode, year, month } = heatPeriod;
+    const range = mode === 'year'
+      ? { from: `${year}-01-01`, to: `${year}-12-31` }
+      : heatMonthRange(year, month);
+
+    setHeatBuckets(null);
+    const p = new URLSearchParams({ from: range.from, to: range.to, limit: '500' });
+    api.get(`/api/transactions?${p}`).then((res) => {
+      if (!cancelled) setHeatBuckets(bucketByDay(res.data || []));
+    }).catch(() => {
+      if (!cancelled) setHeatBuckets({});
+    });
+    return () => { cancelled = true; };
+  }, [heatPeriod]);
+
+  useEffect(() => { writeHeatPeriod(heatPeriod); }, [heatPeriod]);
 
   const netWorthTrend = useMemo(() => {
     if (!data?.monthlyTrend) return [];
@@ -521,13 +582,30 @@ export default function Dashboard() {
         {/* 일별 지출 강도 히트맵 */}
         <div className="mt-5">
           <h3 className="text-xs font-medium text-caption mb-2">일별 지출 강도</h3>
-          <SpendHeatmap
-            year={heatYear}
-            month={heatMonth}
-            dailyTotals={heatDailyTotals}
-            monthlyBudgetTotal={heatBudgetTotal}
-            recentDailyAverage={heatDailyAverage}
+          <HeatmapPeriodPicker
+            mode={heatPeriod.mode}
+            year={heatPeriod.year}
+            month={heatPeriod.month}
+            onChange={setHeatPeriod}
           />
+          {heatBuckets === null ? (
+            <div className="text-caption text-meta text-center py-6">불러오는 중...</div>
+          ) : heatPeriod.mode === 'year' ? (
+            <YearHeatmap
+              year={heatPeriod.year}
+              buckets={heatBuckets}
+              monthlyBudgetTotal={heatBudgetTotal}
+              recentDailyAverage={heatDailyAverage}
+            />
+          ) : (
+            <SpendHeatmap
+              year={heatPeriod.year}
+              month={heatPeriod.month}
+              dailyTotals={bucketToDaily(heatBuckets, heatPeriod.year, heatPeriod.month)}
+              monthlyBudgetTotal={heatBudgetTotal}
+              recentDailyAverage={heatDailyAverage}
+            />
+          )}
         </div>
 
         <div className="mt-5">
