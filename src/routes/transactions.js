@@ -398,6 +398,8 @@ function validateTxBody(body) {
   if (asInt(body.amount) === null) return 'amount must be an integer';
   if (body.payment_method_id !== undefined && body.payment_method_id !== null &&
       asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
+  if (body.card_product_id !== undefined && body.card_product_id !== null &&
+      asInt(body.card_product_id) === null) return 'card_product_id must be an integer';
   // date 형식 검증 (ISO 8601 YYYY-MM-DD)
   if (body.date && !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return 'date must be in YYYY-MM-DD format';
   if (body.payment_style !== undefined && body.payment_style !== null &&
@@ -417,20 +419,41 @@ function validateTxBody(body) {
   return null;
 }
 
+// 카드상품과 카드사가 어긋나지 않게 막는다(#302 2단계). 화면은 둘을 한 선택지로
+// 고르지만 API 는 따로 받으므로, 여기서 확인하지 않으면 "삼성카드로 결제한 하나
+// A카드" 같은 거래가 저장된다 — 카드 전략 계산이 그걸 그대로 믿는다.
+//
+// DB 를 봐야 해서 validateTxBody 와 분리했다(그쪽은 순수 함수다).
+// 문제가 있으면 메시지 문자열, 없으면 null 을 반환한다.
+function validateCardProduct(body) {
+  if (body.card_product_id === undefined || body.card_product_id === null) return null;
+
+  const product = db.prepare('SELECT payment_method_id FROM card_products WHERE id=?')
+    .get(asInt(body.card_product_id));
+  if (!product) return '선택한 카드를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 골라 주세요.';
+
+  const methodId = body.payment_method_id != null ? asInt(body.payment_method_id) : null;
+  if (methodId !== product.payment_method_id) {
+    return '카드와 카드사가 맞지 않습니다. 결제수단을 다시 골라 주세요.';
+  }
+  return null;
+}
+
 // POST /api/transactions
 router.post('/', (req, res) => {
   try {
-    const err = validateTxBody(req.body);
+    const err = validateTxBody(req.body) || validateCardProduct(req.body);
     if (err) return res.status(400).json({ error: err });
     const {
-      date, category_id, amount, payment_method_id, payment_style = '일시불', merchant, memo,
+      date, category_id, amount, payment_method_id, card_product_id, payment_style = '일시불', merchant, memo,
       settlement = DEFAULT_SETTLEMENT, account_id, billing_month,
     } = req.body;
     // 기본값이 immediate 라 안 보내던 클라이언트의 동작이 그대로다(#289).
     const result = db.prepare(`
-      INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant, memo, settlement, account_id, billing_month)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo, settlement, account_id, billing_month)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
+           card_product_id != null ? asInt(card_product_id) : null,
            payment_style, merchant || null, memo || null,
            settlement, account_id != null ? asInt(account_id) : null, billing_month || null);
     res.status(201).json({ id: result.lastInsertRowid });
@@ -442,7 +465,7 @@ router.post('/', (req, res) => {
 // PUT /api/transactions/:id
 router.put('/:id', (req, res) => {
   try {
-    const err = validateTxBody(req.body);
+    const err = validateTxBody(req.body) || validateCardProduct(req.body);
     if (err) return res.status(400).json({ error: err });
 
     // 파생 거래는 거래내역에서 고칠 수 없다(#268). 원본을 고쳐야 계산과 맞는다.
@@ -451,20 +474,26 @@ router.put('/:id', (req, res) => {
     if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
 
     const {
-      date, category_id, amount, payment_method_id, payment_style, merchant, memo,
+      date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo,
       settlement, account_id, billing_month,
     } = req.body;
     // settlement 는 **보낸 경우에만** 바꾼다. PUT 이 전체 교체라 생략하면
     // 기본값으로 덮이는데, 그러면 deferred 였던 거래를 메모만 고쳐도 잔액이
     // 조용히 달라진다(#289). 나머지 둘도 같은 이유로 COALESCE 를 쓴다.
+    //
+    // card_product_id 는 COALESCE 를 쓰지 않는다. 카드사와 짝이라 payment_method_id
+    // 와 같은 규칙을 따라야 하고(카드사를 바꾸면 카드도 다시 정해져야 한다),
+    // 무엇보다 "카드사는 알지만 어느 카드인지 모른다"(#306 의 미상) 로 되돌릴 길이
+    // 없어진다 — COALESCE 면 null 을 보내도 옛 값이 남는다.
     const result = db.prepare(`
-      UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?,
+      UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?, card_product_id=?,
         payment_style=?, merchant=?, memo=?,
         settlement=COALESCE(?, settlement),
         account_id=COALESCE(?, account_id),
         billing_month=COALESCE(?, billing_month)
       WHERE id=?
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
+           card_product_id != null ? asInt(card_product_id) : null,
            payment_style || '일시불', merchant || null, memo || null,
            settlement || null, account_id != null ? asInt(account_id) : null, billing_month || null,
            req.params.id);

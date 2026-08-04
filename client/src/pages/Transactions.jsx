@@ -108,6 +108,7 @@ export default function Transactions() {
   const [years, setYears] = useState([]);
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [cardProducts, setCardProducts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -127,14 +128,18 @@ export default function Transactions() {
   const { confirm, alert } = useConfirm();
 
   const { loading, error, reload } = useLoader(async () => {
-    const [yrs, cats, pms] = await Promise.all([
+    // 카드상품은 결제수단 선택지의 일부다(#302). 보조 정보가 아니라서 화면
+    // 로더에 함께 태운다 — 조용히 실패하면 카드가 목록에서 통째로 빠진다.
+    const [yrs, cats, pms, cards] = await Promise.all([
       api.get('/api/transactions/years'),
       api.get('/api/categories'),
       api.get('/api/payment-methods'),
+      api.get('/api/card-products'),
     ]);
     setYears(yrs.data || []);
     setCategories(cats);
     setPaymentMethods(pms);
+    setCardProducts(cards.data || []);
   }, []);
 
   useEffect(() => {
@@ -442,6 +447,7 @@ export default function Transactions() {
             defaultDate={formDefaultDate}
             categories={categories}
             paymentMethods={paymentMethods}
+            cardProducts={cardProducts}
             onSave={handleSave}
             onCancel={() => { setShowForm(false); setEditItem(null); }}
           />
