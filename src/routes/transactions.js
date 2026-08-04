@@ -280,8 +280,19 @@ router.get('/period-comparison', (req, res) => {
 // body: { ids: number[] } 선택 항목 삭제 | { all: true } 전체 초기화
 router.delete('/', (req, res) => {
   try {
-    const { ids, all } = req.body || {};
+    const { ids, all, confirm } = req.body || {};
     if (all === true) {
+      // 확인 토큰을 요구한다(#363). 같은 일(거래 전체 삭제)을 하는
+      // POST /api/data/import?mode=overwrite 가 이미 DELETE_ALL 을 요구하는데
+      // 이쪽만 무방비였다 — 화면의 확인 대화상자는 API 를 직접 부르면 우회된다.
+      // 이 저장소는 실거래 2,212건 유실 사고를 겪었고, ADR 0008 이 그 뒤에
+      // 세운 원칙이 "프리뷰 + 확인 없이 실행하지 않는다" 다.
+      if (confirm !== 'DELETE_ALL') {
+        return res.status(400).json({
+          error: '전체 삭제는 추가 확인이 필요합니다. 화면의 안내를 따라 다시 시도해 주세요.',
+        });
+      }
+
       // 전체 삭제가 파생 거래까지 지우면 원본(할부·리볼빙·부채)과 어긋난다(#268).
       // 감사 FND-01 이 실증한 바로 그 경로라 여기서 반드시 막는다.
       const locked = countLockedAll(db);
