@@ -141,7 +141,7 @@ export default function CardProductSection({ paymentMethods }) {
     const ok = await confirm(`'${p.product_name}' 을 지울까요? 등록한 혜택도 함께 지워져요.`);
     if (!ok) return;
     try {
-      await api.delete(`/api/card-products/${p.id}`);
+      await api.del(`/api/card-products/${p.id}`);
       await load();
     } catch (err) {
       await alert(err.message);
