@@ -46,6 +46,7 @@ app.use('/api/card-policies', require('./routes/cardPolicies'));
 app.use('/api/accounts',     require('./routes/accounts'));
 app.use('/api/audit',        require('./routes/audit'));
 app.use('/api/card-products', require('./routes/cardProducts'));
+app.use('/api/card-benefits', require('./routes/cardBenefits'));
 app.use('/api/data-integrity', require('./routes/dataIntegrity'));
 
 // 반복거래 따라잡기(#279). 기동 시 1회, 라우트 등록 뒤에 돈다.
