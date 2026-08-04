@@ -1,5 +1,5 @@
 import { Link } from 'wouter';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
@@ -7,6 +7,11 @@ import LoadError from '../components/LoadError';
 import CategoryBadge from '../components/CategoryBadge';
 import { TrustPanel, LastExportNote } from '../components/TrustPanel';
 import { recordExport } from '../lib/backupStatus';
+import { takeRecurringDraft } from '../lib/recurringDraft';
+import {
+  EMPTY_RULE_FORM, ruleToForm, formToBody, validateForm,
+  describeSchedule, endOfMonthNote, todayYMD,
+} from '../lib/recurringForm';
 import { resetOnboarding } from '../lib/onboarding';
 import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
 import Icon from '../components/Icon';
@@ -409,41 +414,51 @@ function CategorySection({ categories, onChanged }) {
   );
 }
 
-const EMPTY_RULE_FORM = { category_id: '', merchant: '', amount: '', day_of_month: '1', payment_method_id: '', payment_style: '일시불', memo: '' };
 
 function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_RULE_FORM);
   const [showInactive, setShowInactive] = useState(false);
+  const [fromTransaction, setFromTransaction] = useState(false);
   const { confirm, alert } = useConfirm();
 
-  const startAdd = () => { setEditingId(null); setForm(EMPTY_RULE_FORM); setShowForm(true); };
+  // 거래내역에서 넘어온 초안이 있으면 그것으로 폼을 연다(#280). 한 번 읽고
+  // 지우므로, 그냥 설정을 열었을 때 지난 초안이 떠 있지 않다.
+  useEffect(() => {
+    const draft = takeRecurringDraft();
+    if (!draft) return;
+    setEditingId(null);
+    setForm(draft);
+    setFromTransaction(true);
+    setShowForm(true);
+  }, []);
+
+  const startAdd = () => {
+    setEditingId(null);
+    setFromTransaction(false);
+    setForm({ ...EMPTY_RULE_FORM, starts_on: todayYMD() });
+    setShowForm(true);
+  };
   const startEdit = (r) => {
     setEditingId(r.id);
-    setForm({
-      category_id: String(r.category_id), merchant: r.merchant, amount: String(r.amount),
-      day_of_month: String(r.day_of_month), payment_method_id: r.payment_method_id ? String(r.payment_method_id) : '',
-      payment_style: r.payment_style, memo: r.memo || '',
-    });
+    setFromTransaction(false);
+    setForm(ruleToForm(r));
     setShowForm(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const body = {
-      ...form,
-      category_id: Number(form.category_id),
-      amount: Number(form.amount),
-      day_of_month: Number(form.day_of_month),
-      payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
-    };
+    // 눌러 보고 나서 거부당하는 것보다 미리 알려주는 편이 낫다.
+    const invalid = validateForm(form);
+    if (invalid) { await alert(invalid); return; }
+    const body = formToBody(form);
     try {
       if (editingId) await api.put(`/api/recurring-rules/${editingId}`, body);
       else await api.post('/api/recurring-rules', body);
       setShowForm(false);
       setEditingId(null);
-      setForm(EMPTY_RULE_FORM);
+      setForm({ ...EMPTY_RULE_FORM, starts_on: todayYMD() });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -491,6 +506,11 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
         매달 금액이 완전히 고정된 지출(구독료 등)만 등록하세요. 통신비처럼 매달 금액이 달라지는 항목은 계속 직접 입력해야 합니다.
         등록해도 자동으로 거래가 생기지 않고, 대시보드의 "이번 달 반복 거래 확인"에서 매달 확인 후 생성합니다.
       </p>
+      {showForm && fromTransaction && (
+        <p className="text-xs text-brand-text bg-brand-tint border border-brand-tint-strong rounded-control px-3 py-2">
+          거래내역에서 값을 가져왔어요. 날짜는 복사하지 않았으니 시작일과 주기를 정해 주세요.
+        </p>
+      )}
       {showForm && (
         <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end bg-surface-page rounded-control p-3">
           <div>
@@ -509,8 +529,42 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
             <input id="rule-amount" type="number" className={inp} placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="rule-day-of-month" className="block text-xs text-caption mb-1">매월 며칠</label>
-            <input id="rule-day-of-month" type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
+            <label htmlFor="rule-freq" className="block text-xs text-caption mb-1">주기</label>
+            <select id="rule-freq" className={inp} value={form.freq} onChange={e => setForm(f => ({ ...f, freq: e.target.value }))}>
+              <option value="daily">일</option>
+              <option value="monthly">월</option>
+              <option value="yearly">연</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="rule-interval" className="block text-xs text-caption mb-1">간격</label>
+            <input id="rule-interval" type="number" min="1" className={`${inp} w-20`} value={form.interval} onChange={e => setForm(f => ({ ...f, interval: e.target.value }))} required />
+          </div>
+          {/* 주기에 따라 필요한 입력이 다르다. 일 단위에 발생일은 의미가 없다 —
+              안 쓰는 입력을 남겨 두면 사용자가 정한 값이 안 쓰인다. */}
+          {form.freq === 'yearly' && (
+            <div>
+              <label htmlFor="rule-month-of-year" className="block text-xs text-caption mb-1">몇 월</label>
+              <select id="rule-month-of-year" className={inp} value={form.month_of_year} onChange={e => setForm(f => ({ ...f, month_of_year: e.target.value }))} required>
+                <option value="">선택...</option>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
+              </select>
+            </div>
+          )}
+          {form.freq !== 'daily' && (
+            <div>
+              <label htmlFor="rule-day-of-month" className="block text-xs text-caption mb-1">며칠</label>
+              <input id="rule-day-of-month" type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
+            </div>
+          )}
+          <div>
+            <label htmlFor="rule-starts-on" className="block text-xs text-caption mb-1">시작일</label>
+            <input id="rule-starts-on" type="date" className={inp} value={form.starts_on} onChange={e => setForm(f => ({ ...f, starts_on: e.target.value }))} required />
+          </div>
+          <div>
+            <label htmlFor="rule-ends-on" className="block text-xs text-caption mb-1">종료일</label>
+            <input id="rule-ends-on" type="date" className={inp} value={form.ends_on} onChange={e => setForm(f => ({ ...f, ends_on: e.target.value }))} />
+            <p className="text-xs text-caption mt-1">비우면 무기한</p>
           </div>
           <div>
             <label htmlFor="rule-payment-method" className="block text-xs text-caption mb-1">결제수단</label>
@@ -529,6 +583,10 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
           <button type="submit" className="btn-primary text-sm px-4 py-2 rounded-control transition-colors">
             {editingId ? '저장' : '추가'}
           </button>
+          {/* 안 알려주면 2월에 날짜가 다른 것을 버그로 읽는다(#278 A안). */}
+          {endOfMonthNote(form) && (
+            <p className="w-full text-xs text-caption">{endOfMonthNote(form)}</p>
+          )}
         </form>
       )}
       <div className="max-h-72 overflow-y-auto">
@@ -538,7 +596,7 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
               <th className="text-left px-3 py-2 text-caption font-medium">가맹점</th>
               <th className="text-left px-3 py-2 text-caption font-medium">카테고리</th>
               <th className="text-right px-3 py-2 text-caption font-medium">금액</th>
-              <th className="text-right px-3 py-2 text-caption font-medium">매월</th>
+              <th className="text-right px-3 py-2 text-caption font-medium">일정</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
@@ -550,7 +608,7 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
                 <td className="px-3 py-2 text-ink">{r.merchant}</td>
                 <td className="px-3 py-2 text-caption text-xs">{r.category_name}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmt(r.amount)}</td>
-                <td className="px-3 py-2 text-right text-xs text-caption">{r.day_of_month}일</td>
+                <td className="px-3 py-2 text-right text-xs text-caption">{describeSchedule(r)}</td>
                 <td className="px-3 py-2 text-right">
                   <button onClick={() => startEdit(r)} className="text-brand-text hover:text-brand-text text-xs mr-2">수정</button>
                   {r.is_active ? (

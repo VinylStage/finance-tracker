@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
+import CatchupNotice from '../components/CatchupNotice';
 import {
   budgetStatus,
   budgetLabel,
@@ -456,6 +457,9 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* 자동으로 생긴 것을 먼저 알리고, 그다음 확인이 필요한 것을 낸다.
+          순서가 반대면 사용자가 "이건 왜 벌써 생겼지" 를 나중에 만난다. */}
+      <CatchupNotice />
       <RecurringDueSection onConfirmed={reload} />
 
       {/* 자금 흐름 — 요약 카드 바로 다음이다. "얼마 벌고 얼마 썼나" 를 본 직후
