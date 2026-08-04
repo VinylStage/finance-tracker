@@ -5,9 +5,10 @@ import {
   XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { api } from '../lib/api';
-import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
+import PeriodFilter from '../components/PeriodFilter';
+import { usePeriod } from '../hooks/usePeriod';
 import CatchupNotice from '../components/CatchupNotice';
 import {
   budgetStatus,
@@ -21,8 +22,8 @@ import CategorySpendSection from '../components/CategorySpendSection';
 import SpendHeatmap from '../components/SpendHeatmap';
 import YearHeatmap from '../components/YearHeatmap';
 import HeatmapPeriodPicker from '../components/HeatmapPeriodPicker';
-// 이 파일에 이미 monthRange(offset) 이 있다 — 이번 달 기준 상대 오프셋을 받는
-// 다른 함수다. 이름이 겹치므로 별칭을 준다.
+// 히트맵 전용 월 범위다. 화면 전역 기간(usePeriod)과 다른 축이라 별칭으로 구분한다 —
+// 히트맵은 "어느 달의 달력을 그리는가" 이고 전역 기간은 "어느 구간을 집계하는가" 다.
 import { monthRange as heatMonthRange, bucketToDaily } from '../lib/heatmapPeriod';
 import { bucketByDay } from '../lib/dailyBuckets';
 import CashFlowBars from '../components/CashFlowBars';
@@ -38,32 +39,19 @@ function shortFmt(n) {
   return v.toLocaleString('ko-KR');
 }
 
-function pad2(n) { return String(n).padStart(2, '0'); }
-
-function monthRange(offset) {
-  const today = new Date();
-  const d = new Date(today.getFullYear(), today.getMonth() + offset, 1);
-  const from = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const isCurrent = offset === 0;
-  const to = isCurrent
-    ? localYMD(today)
-    : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(lastDay)}`;
-  return { from, to };
-}
-
+// 자체 기간 모드를 공용 필터로 갈아끼운다(#272).
+//
+// 여기 있던 monthRange(0) 은 이번 달을 **1일 ~ 오늘**로 잡았다. 공용 필터는
+// **1일 ~ 말일**이다. 기간은 "어느 구간을 보는가" 이지 "언제까지 데이터가
+// 있는가" 가 아니다 — 오늘로 끊으면 20일에 빠질 할부금이 "이번 달" 에서
+// 사라진다. 월중 시점까지만 보려면 화면이 asOf 로 따로 자른다(computeBalance
+// 가 이미 그렇게 한다).
 function CategoryComparison() {
-  const [periodMode, setPeriodMode] = useState('this');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  const { period, setPeriod } = usePeriod();
   const [chartType, setChartType] = useState('bar');
   const [rows, setRows] = useState([]);
 
-  const range = useMemo(() => {
-    if (periodMode === 'this') return monthRange(0);
-    if (periodMode === 'last') return monthRange(-1);
-    return { from: customFrom, to: customTo };
-  }, [periodMode, customFrom, customTo]);
+  const range = useMemo(() => ({ from: period.from, to: period.to }), [period.from, period.to]);
 
   const { loading, error, reload } = useLoader(async () => {
     if (!range.from || !range.to) { setRows([]); return; }
@@ -78,19 +66,6 @@ function CategoryComparison() {
       title="카테고리별 지출 비교"
       caption={
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex gap-1">
-            {[['this', '이번달'], ['last', '지난달'], ['custom', '기간지정']].map(([mode, label]) => (
-              <button
-                key={mode}
-                onClick={() => setPeriodMode(mode)}
-                className={`text-xs px-2.5 py-1 rounded-control transition-colors ${
-                  periodMode === mode ? 'bg-brand-tint text-brand-text font-medium' : 'text-caption hover:text-body hover:bg-surface-page'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
           <div className="flex gap-1 border-l border-line pl-3">
             {[['bar', '막대'], ['line', '라인']].map(([type, label]) => (
               <button
@@ -107,13 +82,7 @@ function CategoryComparison() {
         </div>
       }
     >
-      {periodMode === 'custom' && (
-        <div className="flex items-center gap-2 mb-4 text-xs">
-          <input type="date" aria-label="기간 시작일" className="bg-surface border border-line-strong rounded-control px-2 py-1 text-body" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
-          <span className="text-caption">~</span>
-          <input type="date" aria-label="기간 종료일" className="bg-surface border border-line-strong rounded-control px-2 py-1 text-body" value={customTo} onChange={e => setCustomTo(e.target.value)} />
-        </div>
-      )}
+      <PeriodFilter period={period} onChange={setPeriod} className="mb-4" />
       {loading ? (
         <div className="text-caption text-sm text-center py-10">로딩 중...</div>
       ) : error ? (
