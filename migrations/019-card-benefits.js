@@ -1,5 +1,4 @@
 'use strict';
-const { rebuildAuditTriggers } = require('./017-audit-triggers');
 
 // 카드 혜택과 청구 주기(#274).
 //
@@ -47,10 +46,9 @@ function up(db) {
       ON card_benefits(card_product_id);
   `);
 
-  // 새 테이블에는 감사 트리거가 저절로 붙지 않는다. 017 이 만들 때 있던 표만
-  // 대상이었기 때문이다. test/audit-coverage.test.js 가 이 누락을 잡아낸다 —
-  // 018 에 이어 두 번째로 걸렸다.
-  rebuildAuditTriggers(db);
+  // card_benefits 는 새 테이블이라 감사 트리거가 저절로 붙지 않는다 — 017 이
+  // 만들 때 있던 표만 대상이었다. 그 재생성은 여기서 하지 않는다.
+  // runMigrations 가 체인을 다 적용한 뒤 한 번에 책임진다(#346).
 }
 
 module.exports = { up };

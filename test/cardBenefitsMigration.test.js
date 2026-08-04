@@ -12,6 +12,7 @@ const path = require('node:path');
 // 그대로 남는지, 감사 트리거가 새 표까지 덮는지를 여기서 고정한다.
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
+const { rebuildAuditTriggers } = require('../migrations/017-audit-triggers');
 
 // 019 가 기대는 것만 명시적으로 올린다. 마이그레이션 전체를 도는 대신 이렇게 두면
 // **019 가 무엇에 의존하는지가 테스트에 적혀 있다** — 나중에 다른 마이그레이션이
@@ -55,9 +56,15 @@ function beforeSubject() {
 }
 
 // 019 까지 적용한 DB.
+//
+// 마지막에 트리거를 재생성하는 것이 **러너가 하는 일**이다(#346). 019 가 직접
+// 부르던 것을 runMigrations 로 옮겼으므로, 이 파일도 그 마지막 단계를 재현해야
+// 프로덕션과 같은 상태가 된다. 마이그레이션 체인 전체를 도는 대신 이렇게 두는
+// 이유는 그대로다 — 019 가 무엇에 의존하는지가 테스트에 적혀 있어야 한다.
 function afterSubject() {
   const db = beforeSubject();
   up(db, SUBJECT);
+  rebuildAuditTriggers(db);
   return db;
 }
 
@@ -171,7 +178,8 @@ describe('C. 딸린 관계', () => {
 
 describe('D. 감사 캡처', () => {
   test('D-1. card_benefits 에도 트리거가 붙는다', () => {
-    // 새 표는 017 이 만들 때 없었으므로 저절로 안 붙는다. 019 가 다시 만들어야 한다.
+    // 새 표는 017 이 만들 때 없었으므로 저절로 안 붙는다. 체인을 다 적용한 뒤
+    // 러너가 재생성해야 덮인다(#346).
     const db = afterSubject();
     const names = db.prepare(
       `SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'audit_card_benefits_%'`
