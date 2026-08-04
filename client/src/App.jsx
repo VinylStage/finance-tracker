@@ -14,6 +14,7 @@ const Revolving = lazy(() => import('./pages/Revolving'));
 const Debts = lazy(() => import('./pages/Debts'));
 const Simulator = lazy(() => import('./pages/Simulator'));
 const Savings = lazy(() => import('./pages/Savings'));
+const CardStrategy = lazy(() => import('./pages/CardStrategy'));
 const Accounts = lazy(() => import('./pages/Accounts'));
 const Settings = lazy(() => import('./pages/Settings'));
 const AuditLog = lazy(() => import('./pages/AuditLog'));
@@ -116,6 +117,7 @@ export default function App() {
             </Route>
             <Route path="/analysis/comparison" component={Comparison} />
             <Route path="/analysis/simulator" component={Simulator} />
+            <Route path="/analysis/cards" component={CardStrategy} />
             <Route path="/assets">
               <Redirect to="/assets/installments" />
             </Route>
