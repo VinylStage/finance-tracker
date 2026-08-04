@@ -6,6 +6,8 @@ const { serverError } = require('../utils/errors');
 const { numericBody, missingFields } = require('../utils/validate');
 const { CARD_TYPES } = require('../constants');
 const { billingMonthInfo } = require('../services/cardBilling');
+const { planRemap, applyRemap, countUnassigned } = require('../services/cardRemap');
+const { setAuditLabel } = require('../utils/auditContext');
 
 // 보유 카드(카드상품) CRUD(#306).
 //
@@ -95,13 +97,74 @@ router.get('/', (req, res) => {
 // 알 수 있어야 하고, 카드 전략 계산이 무엇을 제외했는지 화면이 밝혀야 한다.
 router.get('/unassigned-count', (_req, res) => {
   try {
-    const row = db.prepare(`
-      SELECT COUNT(*) AS cnt
-      FROM transactions t
-      LEFT JOIN payment_methods p ON p.id = t.payment_method_id
-      WHERE t.card_product_id IS NULL AND p.type = '신용'
-    `).get();
-    res.json({ unassigned: row.cnt });
+    res.json({ unassigned: countUnassigned(db) });
+  } catch (e) {
+    serverError(res, e, 'cardProducts');
+  }
+});
+
+// POST /api/card-products/remap/preview — 무엇이 몇 건 바뀌는지 계산한다.
+//
+// **DB 를 바꾸지 않는다**(ADR 0008). 조건을 고칠 때마다 화면이 이 엔드포인트를
+// 다시 부르므로, 여기서 쓰기가 한 번이라도 일어나면 사용자가 범위를 좁혀 보는
+// 동안 데이터가 계속 바뀐다.
+router.post('/remap/preview', numericBody(['card_product_id', 'min_amount', 'max_amount']), (req, res) => {
+  try {
+    const plan = planRemap(db, req.body || {});
+    if (plan.error) return res.status(400).json({ error: plan.error });
+
+    res.json({
+      target: plan.target,
+      count: plan.count,
+      already_assigned: plan.already_assigned,
+      samples: plan.samples,
+      preview_token: plan.fingerprint,
+      remaining_unassigned: countUnassigned(db),
+      // 실행취소로 되돌릴 수 있는지 알린다(ADR 0008 의 프리뷰 요건). 감사
+      // 트리거가 UPDATE 를 행마다 잡고 한 action_id 로 묶으므로 되돌아간다.
+      undoable: true,
+    });
+  } catch (e) {
+    serverError(res, e, 'cardProducts');
+  }
+});
+
+// POST /api/card-products/remap — 확인한 뒤에만 쓴다.
+//
+// 프리뷰 지문을 요구한다. 화면에서만 막고 엔드포인트가 열려 있으면 원칙이
+// 반쪽이 된다(ADR 0008 의 "지켜지지 않을 수 있는 지점").
+router.post('/remap', numericBody(['card_product_id', 'min_amount', 'max_amount']), (req, res) => {
+  try {
+    const { preview_token } = req.body || {};
+    const plan = planRemap(db, req.body || {});
+    if (plan.error) return res.status(400).json({ error: plan.error });
+
+    if (!preview_token) {
+      return res.status(428).json({
+        error: '무엇이 바뀌는지 먼저 확인해 주세요. 미리보기를 거쳐야 옮길 수 있어요.',
+        preview_required: true,
+      });
+    }
+    if (preview_token !== plan.fingerprint) {
+      return res.status(409).json({
+        error: '미리보기를 본 뒤 대상이 달라졌어요. 다시 확인하고 옮겨 주세요.',
+        preview_stale: true,
+      });
+    }
+
+    // 라벨이 없으면 감사 이력에 "무엇을 했는지" 가 안 남는다. 260건짜리 작업이
+    // 이름 없이 묶여 있으면 되돌릴지 판단할 근거가 없다(#298).
+    setAuditLabel(`카드 재매핑 → ${plan.target.product_name}`);
+    const updated = applyRemap(db, plan);
+
+    // 실행 후 결과를 다시 알린다(ADR 0008). 남은 미상 건수는 사용자가 언제
+    // 끝났는지 아는 유일한 지표다 — 부분 완료가 정상 상태이기 때문이다.
+    res.json({
+      ok: true,
+      updated,
+      remaining_unassigned: countUnassigned(db),
+      target: plan.target,
+    });
   } catch (e) {
     serverError(res, e, 'cardProducts');
   }
