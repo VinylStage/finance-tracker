@@ -18,13 +18,11 @@ function fresh() {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-undo-'));
   db = new Database(path.join(dir, 'test.db'));
+  // audit_log 는 **소유한 마이그레이션이 만든다.** 손으로 적은 사본은 010 이
+  // 컬럼을 늘려도 따라가지 않아, 실행취소가 실제 스키마에서 도는지를 더 이상
+  // 검증하지 못하게 된다.
+  require('../migrations/010-add-audit-log').up(db);
   db.exec(`
-    CREATE TABLE audit_log (
-      id INTEGER PRIMARY KEY, ts TEXT NOT NULL, actor TEXT NOT NULL,
-      action_id TEXT NOT NULL, action_label TEXT, op TEXT NOT NULL,
-      table_name TEXT NOT NULL, row_id INTEGER,
-      before_json TEXT, after_json TEXT, undone_at TEXT, undo_of TEXT
-    );
     CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT NOT NULL, major_type TEXT);
   `);
 }
