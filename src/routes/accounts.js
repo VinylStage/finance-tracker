@@ -4,7 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { numericBody, missingFields } = require('../utils/validate');
-const { computeBalance, availableAmount } = require('../services/accountBalance');
+const { computeBalance, availableAmount, cardUnpaid } = require('../services/accountBalance');
 
 // 계좌(통장) CRUD 와 잔액 조회(#288).
 //
@@ -43,18 +43,30 @@ function normalize(body) {
 //
 // 방향(입금/출금)은 카테고리 대분류로 가른다 — '수입' 이면 들어온 돈, 나머지는
 // 나간 돈이다. transactions 에 방향 컬럼이 따로 없기 때문이다.
+//
+// **거래에 계좌가 직접 적혀 있으면 그 값이 이긴다(#289).** 결제수단의 계좌는
+// 폴백이다 — 결제수단이 나중에 다른 계좌로 옮겨져도 과거 거래는 제자리에 남는다.
+//
+// JOIN 이 LEFT 인 이유: 계좌만 적히고 결제수단이 없는 거래가 INNER JOIN 에서는
+// 통째로 빠진다. 지금은 그런 거래가 없지만, account_id 를 쓰기 시작하면 생긴다.
 function balanceOf(account) {
   const rows = db.prepare(`
-    SELECT t.date, t.amount,
+    SELECT t.date, t.amount, t.settlement, t.billing_month,
            CASE WHEN c.major_type = '수입' THEN 'in' ELSE 'out' END AS direction
     FROM transactions t
-    JOIN payment_methods p ON p.id = t.payment_method_id
+    LEFT JOIN payment_methods p ON p.id = t.payment_method_id
     LEFT JOIN categories c ON c.id = t.category_id
-    WHERE p.account_id = ?
+    WHERE COALESCE(t.account_id, p.account_id) = ?
   `).all(account.id);
 
   const result = computeBalance(account, rows);
-  return { ...result, available: availableAmount(account, result.balance) };
+  return {
+    ...result,
+    available: availableAmount(account, result.balance),
+    // 카드 미결제액은 잔액과 **별개 축**이다. 통장에 있는 돈과 나갈 예정인 돈을
+    // 한 숫자로 합치면 사용자가 어느 쪽을 보는지 알 수 없다(#291).
+    card_unpaid: cardUnpaid(rows),
+  };
 }
 
 router.get('/', (req, res) => {
