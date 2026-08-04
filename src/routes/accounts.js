@@ -4,7 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { numericBody, missingFields } = require('../utils/validate');
-const { computeBalance, availableAmount, cardUnpaid } = require('../services/accountBalance');
+const { computeBalance, availableAmount, cardUnpaid, projectBalance } = require('../services/accountBalance');
 
 // 계좌(통장) CRUD 와 잔액 조회(#288).
 //
@@ -66,6 +66,10 @@ function balanceOf(account) {
     // 카드 미결제액은 잔액과 **별개 축**이다. 통장에 있는 돈과 나갈 예정인 돈을
     // 한 숫자로 합치면 사용자가 어느 쪽을 보는지 알 수 없다(#291).
     card_unpaid: cardUnpaid(rows),
+    // 예정된 인출만 반영한 앞으로의 잔액(#291). 앞으로의 지출은 알 수 없으므로
+    // 반영 범위를 projection.includes 로 같이 내려보낸다 — 화면이 그걸
+    // 사용자에게 말해야 한다. 예측을 단정적으로 제시하면 그대로 믿고 손해를 본다.
+    projection: projectBalance(account, rows),
   };
 }
 
