@@ -15,6 +15,16 @@
 | debt_interest_log | 부채 이자 로그 기록 | id, debt_id, log_date, rate_at_time, interest_amount, balance_before, balance_after, memo, created_at |
 | app_settings | 애플리케이션 설정 정보 저장 | key, value |
 | savings_products | 저축 상품 정보 저장 | id, name, monthly_contribution, start_date, maturity_date, expected_payout, category_id, status |
+| recurring_rules | 반복 거래 규칙 | id, category_id, merchant, amount, day_of_month, freq, interval, starts_on, ends_on, month_of_year, last_run_on, payment_method_id, payment_style, memo, is_active |
+| recurring_occurrences | 반복 규칙의 발생일별 처리 기록 | id, rule_id, occurred_on, status, transaction_id, created_at |
+| recurring_rule_months | 월 단위 처리 기록(구형). 013 이 발생일 단위로 옮겼고 롤백 여지로 남겨 둠 | id, rule_id, year_month, status, transaction_id |
+| audit_log | 모든 쓰기의 전후 값 | id, ts, actor, action_id, action_label, table_name, row_id, op, before_json, after_json, undone_at |
+| _audit_context | 트리거가 읽을 현재 요청 컨텍스트(단일 행) | id, actor, action_id, action_label |
+| accounts | 통장·계좌 | id, name, type, opening_balance, credit_limit, is_active |
+| card_products | 카드 상품. payment_methods 아래에 붙는다 | id, payment_method_id, issuer, product_name, card_type, annual_fee, prev_month_threshold, billing_cycle_day, statement_close_day, memo |
+| card_benefits | 카드별 할인·적립 조건 | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo |
+| card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
+| duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | id, key, dismissed_at |
 
 ## 테이블 관계
 
@@ -27,6 +37,11 @@
 - `debt_rate_history.debt_id` → `debts.id` (1:N)
 - `debt_repayments.debt_id` → `debts.id` (1:N)
 - `savings_products.category_id` → `categories.id` (1:N)
+- `recurring_occurrences.rule_id` → `recurring_rules.id` (1:N, ON DELETE CASCADE)
+- `recurring_occurrences.transaction_id` → `transactions.id` (1:1)
+- `card_products.payment_method_id` → `payment_methods.id` (1:N — **UNIQUE 가 아니다**)
+- `card_benefits.card_product_id` → `card_products.id` (1:N, ON DELETE CASCADE)
+- `transactions.card_product_id` → `card_products.id` (1:N)
 
 ## 파생 거래 (#268, #269)
 
@@ -129,3 +144,74 @@
 - `transactions`: 일반적인 거래 내역을 저장
 - `installments`: 분할 결제 정보를 독립적으로 관리하여 결제 시스템과 분할 상환 로직을 분리
 - `revolving_history`: 신용카드 회계 기록을 저장하며, 이는 단순 거래 내역이 아닌 특정 기간의 회계 정보를 필요로 함
+
+## 감사 로그 — 트리거로 캡처한다 (#296, #298, #299)
+
+쓰기를 남기는 방법은 두 가지였다. 라우트가 직접 기록하거나, DB 트리거가 잡거나.
+**트리거를 골랐다.** 라우트 기록은 새 라우트를 쓰는 사람이 한 줄 빠뜨리면 그 경로만
+조용히 안 남는다 — 빠뜨려도 구멍이 안 나는 구조가 필요했다.
+
+트리거는 JS 상태를 볼 수 없다. 그래서 `_audit_context` 단일 행 테이블이 있다. 요청
+미들웨어가 `actor`/`action_id` 를 그 행에 밀어넣고, 트리거가 그것을 읽어 `audit_log`
+에 적는다.
+
+| 컬럼 | 왜 필요한가 |
+|---|---|
+| `actor` | `user` / `system` / `import`. 조회마다 도는 시스템 스윕(#205)이 실행취소 후보에 오르면 안 된다 |
+| `action_id` | 한 요청이 만드는 모든 행이 같은 값을 갖는다. **실행취소의 단위**가 이것이다 |
+| `action_label` | 선택. 안 붙여도 로그는 남는다 — 빠뜨려도 구멍이 안 나는 구조의 일부다 |
+| `undone_at` | 되돌린 시각. 두 번 되돌리는 것을 막는다 |
+
+**되돌리기는 `before_json` 을 되쓴다.** 쓰기 전에 현재 행이 `after_json` 과 같은지
+보고, 다르면 거부한다 — 그 사이 누군가(또는 스윕이) 또 바꾼 것이고, 그대로 되돌리면
+그 변경을 **조용히 덮어쓴다.** 조용히 덮어쓰는 게 최악이라 거부한다.
+
+되돌리기 자체도 감사 로그에 남는다. 다만 `actor='system'` 이라 다시 후보에 오르지
+않는다 — 되돌리기의 되돌리기 루프가 생기지 않는다.
+
+**새 테이블을 만들면 트리거가 저절로 붙지 않는다.** 017 이 만들 때 있던 표만
+대상이었기 때문이다. 새 표를 더하는 마이그레이션은 `rebuildAuditTriggers(db)` 를
+불러야 하고, `test/audit-coverage.test.js` 가 안 부른 것을 잡는다. 018·019 에서
+실제로 걸렸다.
+
+**전제:** `_audit_context` 가 단일 행으로 성립하는 근거는 better-sqlite3 가 동기이고
+이 앱이 단일 프로세스·단일 커넥션이라는 점이다. 커넥션 풀이나 워커 스레드가 들어오면
+깨진다 — 그때는 `AsyncLocalStorage` 로 바꿔야 한다.
+
+## 반복 규칙 — 발생일 단위로 센다 (#278, #279, #280)
+
+004 의 `recurring_rule_months` 는 월 단위 전제라 `daily` 규칙의 멱등성을 보장할 수
+없다(한 달에 여러 번 발생한다). 013 이 `recurring_occurrences` 로 옮겼다.
+
+**멱등성의 근거는 `UNIQUE(rule_id, occurred_on)` 이다.** 애플리케이션에서 "이미 있나
+확인 후 삽입" 하면 확인과 삽입 사이에 경쟁이 생긴다. `INSERT OR IGNORE` 로 DB 가
+판정하게 하고, 실제로 들어간 건에 대해서만 거래를 만든다.
+
+`freq`/`interval` 기본값이 `monthly`/`1` 이라 기존 행은 그대로 월 반복으로 남는다 —
+마이그레이션이 동작을 바꾸지 않는다.
+
+**지정일이 그 달에 없으면 말일로 당긴다(A안, 2026-08-03 확정).** 월세·구독료는
+카드사도 말일로 당겨 청구한다. 건너뛰면 사용자가 "왜 2월만 빠졌지" 를 겪는다.
+
+## 카드 — 카드사 아래에 상품이 붙는다 (#274, #306)
+
+실제 데이터의 `payment_methods` 는 **카드사 단위**다(하나카드·삼성카드 …). 개별
+카드가 아니다. `payment_methods` 를 부수지 않고 `card_products` 를 옆에 붙였다 —
+기존 거래가 `payment_method_id` 를 참조하고 있어 갈아엎으면 파급이 크다.
+
+**`card_products.payment_method_id` 에 UNIQUE 를 걸지 않는다.** 같은 카드사 카드
+두 장을 표현할 수 없으면 이 구조의 목적이 사라진다.
+
+**기존 거래의 카드 상품은 추측하지 않는다.** 시기·금액·가맹점으로 역추정하면
+그럴듯하지만, 틀렸을 때 전략 계산이 조용히 잘못된 답을 낸다. 전부 NULL 로 두고
+사용자가 직접 지정한다. 아직 안 정한 거래 수는
+`GET /api/card-products/unassigned-count` 가 알려준다.
+
+**청구 주기 세 컬럼은 NULL 을 허용한다.** 사용자가 자기 카드의 결제일·마감일을 모를
+수 있고, 모르는 것을 0 이나 1 로 채우면 계산이 틀린 답을 자신 있게 낸다.
+
+**전월 실적은 달력 월이 아니다.** 카드사 실적은 `statement_close_day` 기준
+마감일~마감일 구간으로 집계된다. 달력 월로 세면 실적 추정이 조용히 틀린다.
+
+`card_benefits.rate` 는 0 도 100 도 유효하다. 0 은 "이 카테고리에는 혜택 없음" 을
+명시적으로 적어 두는 쓰임이 있다 — 안 적은 것과 없다고 적은 것은 다르다.

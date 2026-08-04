@@ -1373,3 +1373,211 @@
   }
   ```
 - **에러 케이스**: 없음
+
+## audit.js
+
+모든 쓰기의 전후 값과 1단계 실행취소(#297, #300, #301). 캡처는 라우트가 아니라 DB
+트리거가 한다 — 라우트 기록은 새 라우트를 쓰는 사람이 한 줄 빠뜨리면 그 경로만
+조용히 안 남는다.
+
+### GET /api/audit/undoable
+방금 한 작업 중 되돌릴 수 있는 것 1건. 없으면 `null`.
+
+**되돌릴 수 없는 작업(임포트·복원·시스템)에는 아무것도 주지 않는다.** 화면이
+버튼을 낼지 말지를 여기서 판단하므로, 화면이 규칙을 따로 갖지 않는다.
+
+- **응답 스키마**:
+  ```json
+  { "undoable": { "action_id": "string", "label": "string|null", "ts": "string",
+                  "affected": "number", "tables": ["string"], "ops": ["string"] } }
+  ```
+- **비고**: `label` 은 대개 `null` 이다(#298 에서 선택으로 뒀다). 화면이 "방금 한
+  작업" 같은 무의미한 말 대신 이름을 지어낼 수 있도록 `tables` 와 `ops` 를 함께 준다.
+  `affected` 는 몇 건이 되돌아가는지다 — 큰 작업은 사용자가 확인하고 눌러야 한다(ADR 0008).
+
+### POST /api/audit/undo
+- **요청 파라미터**: `action_id` (body, optional). 없으면 가장 최근 후보를 되돌린다
+- **응답 스키마**: `{ "ok": true, "reverted": "number" }`
+- **에러 케이스**:
+  - 400: 되돌릴 작업이 없음 / 이미 되돌린 작업 / 시스템 작업을 직접 지정 /
+    **그 사이 값이 또 바뀜**
+- **비고**: 쓰기 전에 현재 행이 `after_json` 과 같은지 본다. 다르면 그 뒤에
+  누군가(또는 스윕이) 또 바꾼 것이고, 그대로 되돌리면 그 변경을 **조용히 덮어쓴다.**
+  조용히 덮어쓰는 게 최악이라 거부한다. 거부되면 데이터는 하나도 안 바뀐다.
+
+  되돌리기 자체도 로그에 남지만 `actor='system'` 이라 다시 후보에 오르지 않는다 —
+  되돌리기의 되돌리기 루프가 생기지 않는다.
+
+### GET /api/audit/log
+- **요청 파라미터**:
+  - `actor` (query, optional): `user` / `system` / `import` / `all`
+  - `limit` / `offset` (query, optional)
+- **응답 스키마**: `{ "data": [ audit_log 행 ], "total": "number" }`
+- **비고**: 화면 기본값은 `user` 다. 조회마다 도는 시스템 스윕(#205)을 섞으면 목록을
+  뒤덮어 사용자가 자기 작업을 찾을 수 없다.
+
+## accounts.js
+
+통장·계좌(#288). 잔액 추적(M11)의 바탕이다.
+
+### GET /api/accounts
+- **요청 파라미터**: `include_inactive` (query, optional)
+- **응답 스키마**: `{ "data": [ accounts 행 ] }`
+
+### POST /api/accounts
+- **요청 파라미터**: `name`, `type` (required), `opening_balance`, `credit_limit` (optional, 숫자검증)
+- **응답 스키마**: `{ "id": "number" }`
+
+### GET /api/accounts/balances
+활성 계좌별 현재 잔액과 가용액.
+
+- **응답 스키마**: `{ "data": [{ "id", "name", "type", "balance", "available", ... }] }`
+- **비고**: 잔액은 `opening_balance` 에 그 계좌에 걸린 결제수단의 거래를 더해 센다.
+  수입은 더하고 나머지는 뺀다. **`/:id` 보다 먼저 선언해야 한다** — 뒤에 두면
+  `balances` 가 id 로 잡힌다.
+
+### GET /api/accounts/:id
+계좌 1건 + 잔액.
+
+- **에러 케이스**: 404 — 없는 계좌
+
+### PUT /api/accounts/:id
+- **요청 파라미터**: 위와 같음 + `is_active` (숫자검증)
+- **에러 케이스**: 404 — 없는 계좌
+
+## dataIntegrity.js
+
+데이터가 어긋난 곳을 한 번에 훑는다. **고치지 않고 보여주기만 한다** — 무엇을 고칠지는
+사용자가 정한다.
+
+### GET /api/data-integrity
+- **응답 스키마**: `{ "checks": [{ "name": "string", "count": "number", "samples": [...] }] }`
+- **비고**: 현재 검사 항목 — 비ISO 날짜 형식 / `payment_style` 이상값 / `major_type`
+  이상값 / 금액이 비정상적으로 작은 임포트 건 / 종료됐어야 하는데 진행중으로 남은 할부 /
+  카테고리 없는 거래 / 중복 승인번호. `samples` 는 최대 20건만 준다.
+
+## cardProducts.js
+
+카드 상품(#274, #306). `payment_methods` 는 **카드사 단위**라 개별 카드를 표현할 수
+없다. 부수지 않고 옆에 붙인다.
+
+**`payment_method_id` 에 UNIQUE 를 걸지 않는다.** 같은 카드사 카드 두 장을 표현할
+수 없으면 이 구조의 목적이 사라진다.
+
+### GET /api/card-products
+- **요청 파라미터**: `payment_method_id` (query, optional)
+- **응답 스키마**: `{ "data": [ card_products 행 + payment_method_name ] }`
+
+### GET /api/card-products/unassigned-count
+아직 어느 카드인지 정하지 않은 신용 거래 수.
+
+- **응답 스키마**: `{ "unassigned": "number" }`
+- **비고**: 기존 거래의 카드 상품은 **추측하지 않는다.** 역추정하면 그럴듯하지만
+  틀렸을 때 전략 계산이 조용히 잘못된 답을 낸다. 사용자가 재매핑을 언제 끝냈는지
+  알 수 있어야 해서 이 수를 낸다.
+
+### POST /api/card-products
+- **요청 파라미터**:
+  - `payment_method_id`, `issuer`, `product_name`, `card_type` (required)
+  - `annual_fee` (optional, 숫자검증)
+  - `prev_month_threshold` (optional, 숫자검증): 전월 실적 기준액. 없으면 조건 없음
+  - `billing_cycle_day` / `statement_close_day` (optional, 숫자검증): 결제일 / 마감일. 1~31
+  - `memo` (optional)
+- **응답 스키마**: `{ "id": "number", "ok": true }`
+- **에러 케이스**:
+  - 400: 필수값 누락 / 카드 종류가 목록 밖 / 결제일·마감일이 1~31 밖 /
+    전월 실적 기준액이 음수 / 없는 결제수단
+  - 409: 같은 카드사에 같은 이름의 카드가 이미 있음
+- **비고**: 청구 주기 세 필드는 **비워 둘 수 있다.** 사용자가 자기 카드의
+  결제일·마감일을 모를 수 있고, 모르는 것을 0 이나 1 로 채우면 계산이 틀린 답을
+  자신 있게 낸다.
+
+  **전월 실적은 달력 월이 아니다.** 카드사 실적은 `statement_close_day` 기준
+  마감일~마감일 구간으로 집계된다.
+
+### PUT /api/card-products/:id
+보내지 않은 필드는 기존 값을 잇는다.
+
+- **에러 케이스**: 404 — 없는 카드. 그 외 POST 와 같음
+
+### DELETE /api/card-products/:id
+- **비고**: 삭제해도 거래는 남는다. `card_product_id` 가 NULL 로 돌아가 "미상" 이
+  될 뿐이다 — 거래를 지우면 가계부 기록이 사라지므로 그럴 수 없다.
+
+## cardBenefits.js
+
+카드별 할인·적립 조건(#274).
+
+**시장 전체 카드 비교는 범위 밖이다.** 상품 정보를 주는 공식 API 가 없고 크롤링은
+약관·정확성 양쪽에서 믿을 수 없다. 사용자가 자기 카드를 직접 넣는다.
+
+### GET /api/card-benefits
+- **요청 파라미터**: `card_product_id` (query, optional)
+- **응답 스키마**: `{ "data": [ card_benefits 행 + category_name, product_name, issuer ] }`
+
+### POST /api/card-benefits
+- **요청 파라미터**:
+  - `card_product_id` (required, 숫자검증), `benefit_type` (required): `할인` / `적립`
+  - `rate` (required): % . **0 이상 100 이하**
+  - `category_id` (optional, 숫자검증): 없으면 전 가맹점
+  - `merchant_pattern` (optional): 없으면 그 카테고리 전체
+  - `monthly_cap` (optional, 숫자검증): 없으면 무제한
+  - `min_amount` (optional, 숫자검증, default 0): 건당 최소 결제액
+  - `memo` (optional)
+- **응답 스키마**: `{ "id": "number", "ok": true }`
+- **에러 케이스**: 400 — 혜택 종류가 목록 밖 / 비율이 0~100 밖 / 한도·최소액이 음수 /
+  없는 카드 / 없는 카테고리
+- **비고**: `rate` 0 은 유효하다. "이 카테고리에는 혜택 없음" 을 명시적으로 적어 두는
+  쓰임이 있다 — 안 적은 것과 없다고 적은 것은 다르다.
+
+### PUT /api/card-benefits/:id
+보내지 않은 필드는 기존 값을 잇는다. 일부만 보내는 호출부가 안 보낸 값을 기본값으로
+덮으면 사용자가 적어 둔 한도가 조용히 사라진다.
+
+- **에러 케이스**: 404 — 없는 혜택. 그 외 POST 와 같음
+
+### DELETE /api/card-benefits/:id
+- **비고**: **실제로 지운다.** 카드·결제수단과 달리 지난 기록으로서의 값이 없고
+  거래가 참조하지도 않는다. 소프트 삭제를 두면 목록에서 걸러야 할 상태만 는다.
+  카드를 지우면 `ON DELETE CASCADE` 로 혜택도 사라진다.
+
+## recurringRules.js — #278~#280 에서 늘어난 것
+
+004 의 월 단위 규칙에 주기·기간이 붙었다. 기존 행은 `freq='monthly'`, `interval=1` 로
+남아 동작이 바뀌지 않는다.
+
+### GET /api/recurring-rules/catchup
+기동 시 따라잡기(#279)의 결과. 화면이 "무엇이 새로 생겼는지" 를 알리는 데 쓴다.
+
+- **응답 스키마**:
+  ```json
+  { "created": "number", "skipped": "number", "rules": "number",
+    "today": "string", "details": [{ "rule_id": "number", "merchant": "string", "created": "number" }] }
+  ```
+- **비고**: catch-up 은 **상한을 두지 않는다.** 공백이 길어도 규칙대로 전부 만든다 —
+  사용자가 규칙으로 이미 의사를 밝혔는데 "156건을 만들까요" 를 되묻는 것은 규칙의
+  취지를 없앤다. 대신 몇 건이 생겼는지 화면이 반드시 알려야 한다.
+
+### GET /api/recurring-rules/due
+이번 달(기본값) 아직 처리하지 않은 규칙 목록. 대시보드의 "이번 달 반복 거래 확인" 이
+쓴다.
+
+- **요청 파라미터**: `month` (query, optional): `YYYY-MM`. 형식이 어긋나면 400
+- **응답 스키마**: `{ "month": "string", "data": [ recurring_rules 행 + category_name, payment_method_name ] }`
+- **비고**: 따라잡기(#279)가 자동으로 만드는 것과 별개다. 이쪽은 사용자가 확인하고
+  `confirm` / `skip` 을 누르는 흐름이다.
+
+### POST / PUT /api/recurring-rules — 늘어난 필드
+- `freq` (optional, default `monthly`): `daily` / `monthly` / `yearly`
+- `interval` (optional, default 1): 1 이상
+- `starts_on` (optional): `YYYY-MM-DD`. **생략하면 새 규칙은 오늘, 수정은 기존 값**
+- `ends_on` (optional): `YYYY-MM-DD` 또는 null(무기한). `starts_on` 보다 빠르면 400
+- `month_of_year` (optional): 1~12. `freq='yearly'` 에서만 의미가 있다
+- `day_of_month`: `monthly`/`yearly` 면 required. `daily` 면 생략 가능하고 `starts_on` 의 일자로 채운다
+
+- **비고**: 보내지 않은 반복 필드는 **기존 값을 잇는다.** 일부만 보내는 호출부가
+  있어서(재활성화), 안 보낸 값을 기본값으로 덮으면 연 반복의 지정 월과 종료일이
+  조용히 사라진다. 명시적 `null` 은 지우려는 뜻이므로 값이 아니라 키의 유무로 가른다.
+
+  `starts_on` 을 API 에서 선택으로 둔 이유는 생략한 기존 호출을 400 으로 만들면 이미
+  있는 경로가 깨지기 때문이다. 화면은 필수로 받는다.
