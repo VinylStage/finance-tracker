@@ -43,6 +43,17 @@ const CTX_LABEL = `(SELECT action_label FROM _audit_context WHERE id=1)`;
 // 하루 어긋난다(FND-20). datetime(...,'localtime') 으로 보정한다.
 const TS = `datetime('now','localtime')`;
 
+// 감사 인프라가 이미 선 DB 인지 본다. 017 이전 상태에는 audit_log 도
+// _audit_context 도 없어 트리거를 만들면 즉시 깨진다. 마이그레이션 러너가
+// 체인 끝에서 재생성할지 판단하는 데 쓴다(#346).
+function hasAuditInfrastructure(db) {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS n FROM sqlite_master
+    WHERE type='table' AND name IN ('audit_log', '_audit_context')
+  `).get();
+  return row.n === 2;
+}
+
 function rebuildAuditTriggers(db) {
   for (const table of targetTables(db)) {
     const cols = db.prepare(`PRAGMA table_info("${table}")`).all().map((c) => c.name);
@@ -99,4 +110,4 @@ function up(db) {
   rebuildAuditTriggers(db);
 }
 
-module.exports = { up, rebuildAuditTriggers, targetTables, EXCLUDED };
+module.exports = { up, rebuildAuditTriggers, hasAuditInfrastructure, targetTables, EXCLUDED };
