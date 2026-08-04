@@ -11,6 +11,7 @@ import Icon from '../components/Icon';
 import TransactionCalendar from '../components/TransactionCalendar';
 import { bucketByDay } from '../lib/dailyBuckets';
 import { defaultTxDate } from '../lib/defaultTxDate';
+import UndoSnackbar from '../components/UndoSnackbar';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -416,6 +417,10 @@ export default function Transactions() {
           </div>
         </details>
       </div>
+
+      {/* 쓰기가 끝날 때마다 되돌릴 것이 있는지 묻는다(#301). dataVersion 은
+          저장·삭제 성공 시에만 증가하므로 그대로 트리거가 된다. */}
+      <UndoSnackbar trigger={dataVersion} onUndone={refreshAfterMutation} />
 
       {showForm && (
         <Modal
