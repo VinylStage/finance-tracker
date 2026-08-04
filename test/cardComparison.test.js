@@ -2,7 +2,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
 
-const { compareCards, isEligible } = require('../src/services/cardComparison');
+const { compareCards, isEligible, isUnknownCard } = require('../src/services/cardComparison');
 
 // 사후 분석 — 실제 카드 대비 최적 카드의 차액(#276).
 //
@@ -173,5 +173,70 @@ describe('E. 실적 미달', () => {
     // B 가 요율은 높지만 실적 미달이라 0. A(100원)가 최적이 된다.
     assert.equal(r.details[0].best.cardId, 1);
     assert.equal(r.totalGap, 0);
+  });
+});
+
+// M10 세션이 #302 본문에서 짚어 준 것 — "카드를 안 썼다" 와 "어느 카드인지
+// 모른다" 를 섞으면 차액이 부풀려진다.
+//
+// 실측(2026-08-04): 거래 546건 중 **458건이 신용·체크 결제인데
+// card_product_id 가 전부 NULL** 이다. 카드 등록 화면(#302)이 아직 없어서다.
+// 이걸 "카드 안 씀" 으로 보면 458건의 최적 혜택 전액이 '놓친 돈' 으로 잡힌다.
+describe('F. 카드인데 상품을 모르는 건', () => {
+  const cardTx = (over) => tx({ card_product_id: null, payment_method_type: '신용', ...over });
+
+  test('F-1. 카드 결제인데 상품을 모르면 차액에서 뺀다', () => {
+    const r = compareCards({ transactions: [cardTx()], cards: [CARD_A, CARD_B] });
+
+    assert.equal(r.comparable, false);
+    assert.equal(r.reason, 'card-product-unknown');
+    assert.equal(r.totalGap, 0, '모르는 건을 놓친 돈으로 계산했다');
+    assert.equal(r.unknownCard, 1);
+  });
+
+  test('F-2. 현금·이체는 카드를 안 쓴 것이 맞다', () => {
+    const r = compareCards({
+      transactions: [tx({ card_product_id: null, payment_method_type: '현금성' })],
+      cards: [CARD_A, CARD_B],
+    });
+    assert.equal(r.comparable, true);
+    assert.equal(r.totalGap, 1000, '현금인데 차액을 안 냈다');
+    assert.equal(r.unknownCard, 0);
+  });
+
+  test('F-3. 섞여 있으면 아는 것만 계산하고 모르는 건수를 알린다', () => {
+    // 화면이 "카드 상품을 등록하면 N건을 더 분석할 수 있어요" 를 말해야 한다.
+    const r = compareCards({
+      transactions: [
+        cardTx({ id: 1 }),
+        cardTx({ id: 2 }),
+        tx({ id: 3, card_product_id: null, payment_method_type: '현금성' }),
+      ],
+      cards: [CARD_A, CARD_B],
+    });
+
+    assert.equal(r.comparable, true);
+    assert.equal(r.unknownCard, 2);
+    assert.equal(r.details.length, 1, '모르는 건이 계산에 들어갔다');
+    assert.equal(r.totalGap, 1000);
+  });
+
+  test('F-4. 상품을 알면 정상 계산한다', () => {
+    const r = compareCards({
+      transactions: [tx({ card_product_id: 1, payment_method_type: '신용' })],
+      cards: [CARD_A, CARD_B],
+    });
+    assert.equal(r.comparable, true);
+    assert.equal(r.unknownCard, 0);
+    assert.equal(r.totalGap, 900);
+  });
+
+  test('F-5. 판정 함수 자체를 고정한다', () => {
+    assert.equal(isUnknownCard({ card_product_id: null, payment_method_type: '신용' }), true);
+    assert.equal(isUnknownCard({ card_product_id: null, payment_method_type: '체크' }), true);
+    assert.equal(isUnknownCard({ card_product_id: 5, payment_method_type: '신용' }), false);
+    assert.equal(isUnknownCard({ card_product_id: null, payment_method_type: '현금성' }), false);
+    assert.equal(isUnknownCard({ card_product_id: null }), false);
+    assert.equal(isUnknownCard(null), false);
   });
 });

@@ -28,9 +28,41 @@ const { estimateBenefit } = require('./cardStrategy');
 // 호출부가 걸러 넘기는 것이 원칙이지만, 여기서도 한 번 막는다 — 두 곳에서
 // 막아야 한 곳이 빠져도 거짓이 안 나온다.
 
+// ─────────────────────────────────────────────────────────────────────────
+// "카드를 안 썼다" 와 "어느 카드인지 모른다" 는 다르다
+//
+// 실측(2026-08-04): 거래 546건 중 **458건이 신용·체크 결제인데
+// card_product_id 가 전부 NULL** 이다. 카드 상품 등록 화면(#302)이 아직
+// 없어서다.
+//
+// 이 둘을 같게 보면 458건 전부가 "카드를 안 썼다" 가 되고, 최적 카드 혜택
+// **전액이 '놓친 돈' 으로 잡힌다.** 사용자는 실제로 카드를 썼는데 앱이
+// 수십만원을 놓쳤다고 말하는 상태가 된다.
+//
+// 그래서 세 가지를 나눈다.
+//
+//   card_product_id 있음         → 실제 혜택을 계산해 차액을 낸다
+//   카드 결제수단인데 id 없음      → **차액 계산에서 뺀다.** 모르는 것은 모른다고 한다
+//   현금·이체                    → 카드를 안 쓴 것이 맞다. 차액은 최적 카드 혜택 전액
+//
+// 두 번째는 unknownCard 로 세어 화면이 "카드 상품을 등록하면 N건을 더
+// 분석할 수 있어요" 를 말할 수 있게 한다.
+
+// 카드로 결제된 것으로 보는 결제수단 종류. constants 의 CARD_TYPES 와 같은
+// 값이지만 이쪽은 payment_methods.type 이라 별도로 둔다.
+const CARD_PAYMENT_TYPES = new Set(['신용', '체크']);
+
 // 혜택 대상이 아닌 출처. constants 의 LOCKED_ORIGINS 와 겹치지만 뜻이 다르다 —
 // 저쪽은 "화면에서 못 고친다", 이쪽은 "혜택 대상이 아니다".
 const NON_ELIGIBLE_ORIGINS = new Set(['installment', 'revolving', 'debt_interest', 'debt_repayment']);
+
+// 카드 결제인데 어느 상품인지 모르는가. 이걸 "카드 안 씀" 과 섞으면 차액이
+// 부풀려진다.
+function isUnknownCard(tx) {
+  if (!tx) return false;
+  if (tx.card_product_id !== null && tx.card_product_id !== undefined) return false;
+  return CARD_PAYMENT_TYPES.has(tx.payment_method_type);
+}
 
 function isEligible(tx) {
   const origin = tx && tx.origin ? tx.origin : 'manual';
@@ -55,7 +87,15 @@ function compareCards({ transactions, cards } = {}) {
 
   const eligible = list.filter(isEligible);
   if (eligible.length === 0) {
-    return { comparable: false, reason: 'no-eligible-transactions', totalGap: 0, byCard: [], details: [] };
+    return { comparable: false, reason: 'no-eligible-transactions', totalGap: 0, byCard: [], details: [], unknownCard: 0 };
+  }
+
+  // 카드로 썼는데 어느 상품인지 모르는 건은 차액 계산에서 뺀다.
+  const analyzable = eligible.filter((tx) => !isUnknownCard(tx));
+  const unknownCard = eligible.length - analyzable.length;
+
+  if (analyzable.length === 0) {
+    return { comparable: false, reason: 'card-product-unknown', totalGap: 0, byCard: [], details: [], unknownCard };
   }
 
   // 월 한도는 카드마다 누적된다. 거래를 순서대로 훑으며 각 카드가 이미 받은
@@ -66,7 +106,7 @@ function compareCards({ transactions, cards } = {}) {
   let totalGap = 0;
   const details = [];
 
-  for (const tx of eligible) {
+  for (const tx of analyzable) {
     const amount = Number(tx.amount) || 0;
 
     // 카드마다 이 거래를 계산한다. 한도 누적은 **가정 계산에도** 반영한다 —
@@ -111,7 +151,7 @@ function compareCards({ transactions, cards } = {}) {
     .filter((c) => c.gapIfUsed > 0)
     .sort((a, b) => b.gapIfUsed - a.gapIfUsed);
 
-  return { comparable: true, totalGap, byCard, details };
+  return { comparable: true, totalGap, byCard, details, unknownCard };
 }
 
-module.exports = { compareCards, isEligible, NON_ELIGIBLE_ORIGINS };
+module.exports = { compareCards, isEligible, isUnknownCard, NON_ELIGIBLE_ORIGINS, CARD_PAYMENT_TYPES };
