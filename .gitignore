@@ -1,11 +1,15 @@
-node_modules/
+# node_modules 에는 트레일링 슬래시를 붙이지 않는다. `foo/` 는 **디렉터리만**
+# 매칭해서 심링크는 그대로 통과한다. 세션마다 워크트리를 따로 쓰고 node_modules
+# 를 심링크로 공유하는 구조라(설치 시간·디스크) 이 구멍이 실제로 두 번 뚫렸다.
+# 슬래시를 떼면 디렉터리·심링크 양쪽 다 잡힌다.
+node_modules
+client/node_modules
 data/
 dist/
 .env
 .DS_Store
 *.log
 ref/
-client/node_modules/
 client/dist/
 docs/01_*
 docs/02_*
