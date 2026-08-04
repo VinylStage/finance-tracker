@@ -132,9 +132,25 @@ const NO_POLICY = { policy_type: '유이자', annual_rate: 0, free_from_sequence
 // 쓴다. 실제 카드사가 구매 시점 약정을 할부 종료까지 유지하고, 무엇보다 이쪽이
 // "과거 청구액이 소급해서 바뀌지 않는다" 를 더 강하게 보장한다 — 회차마다 그때의
 // 정책을 다시 찾으면 정책을 새로 등록하는 것만으로 지난 회차 금액이 움직인다.
+//
+// 카테고리는 할부에 적힌 가맹점 카테고리다(#316). 같은 카드라도 "온라인쇼핑
+// 6개월 무이자" 처럼 카테고리별 예외가 있어서 #315 가 정책에 그 차원을 넣었다.
+// policyAt 은 카테고리 정책을 먼저 찾고 없으면 기본 정책으로 떨어진다.
+//
+// 비어 있으면(기존 할부, 또는 사용자가 안 고른 경우) 기본 정책만 본다 —
+// 모르는 것을 아무 카테고리로 채우면 엉뚱한 예외 정책이 걸린다.
+//
+// 주의: buildInstallmentRows 의 categoryId 와 다른 값이다. 그쪽은 **생성되는
+// 거래 행에 붙는** 카테고리('할부')고, 이것은 **정책을 고르는** 기준이다.
 function resolveInstallmentPolicy(db, installment) {
   if (!installment.payment_method_id) return null;
-  return policyAt(db, installment.payment_method_id, installment.months, installment.purchase_date);
+  return policyAt(
+    db,
+    installment.payment_method_id,
+    installment.months,
+    installment.purchase_date,
+    installment.category_id ?? null
+  );
 }
 
 // 할부 하나가 만들어야 할 거래 행들. DB 를 읽기만 한다.

@@ -20,6 +20,7 @@ export default function Installments() {
   const [items, setItems] = useState([]);
   const [thisMonthTotal, setThisMonthTotal] = useState(0);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [filter, setFilter] = useState('진행중');
   const [showForm, setShowForm] = useState(false);
   const [openId, setOpenId] = useState(null);
@@ -30,13 +31,15 @@ export default function Installments() {
 
   const { loading, error, reload } = useLoader(async () => {
     const qs = filter === '전체' ? '' : `?status=${encodeURIComponent(filter)}`;
-    const [inst, pms] = await Promise.all([
+    const [inst, pms, cats] = await Promise.all([
       api.get(`/api/installments${qs}`),
       api.get('/api/payment-methods'),
+      api.get('/api/categories'),
     ]);
     setItems(inst.data || []);
     setThisMonthTotal(inst.this_month_total || 0);
     setPaymentMethods(pms);
+    setCategories(cats.data || cats || []);
   }, [filter]);
 
   // 거래내역에서 넘어왔으면 그 할부를 펼쳐 보여준다(#270).
@@ -107,6 +110,7 @@ export default function Installments() {
       {showForm && (
         <InstallmentForm
           paymentMethods={paymentMethods}
+          categories={categories}
           onSave={handleSave}
           onCancel={() => setShowForm(false)}
         />
@@ -250,7 +254,7 @@ export default function Installments() {
   );
 }
 
-function InstallmentForm({ paymentMethods, onSave, onCancel }) {
+function InstallmentForm({ paymentMethods, categories, onSave, onCancel }) {
   const today = localYMD();
   const thisMonth = today.slice(0, 7);
   const [form, setForm] = useState({
@@ -262,6 +266,7 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
     fee_per_month: '',
     payment_method_id: '',
     start_billing_month: thisMonth,
+    category_id: '',
   });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -275,6 +280,7 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
       monthly_amount: Number(form.monthly_amount),
       fee_per_month: form.fee_per_month ? Number(form.fee_per_month) : 0,
       payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
+      category_id: form.category_id ? Number(form.category_id) : null,
     });
   };
 
@@ -313,6 +319,19 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
           <select id="inst-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
             <option value="">선택...</option>
             {paymentMethods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div>
+          {/* 가맹점 카테고리. 정책을 고르는 기준이다(#316) — 같은 카드라도
+              "온라인쇼핑 6개월 무이자" 처럼 카테고리별 예외가 있다(#315).
+              고르지 않으면 그 카드의 기본 정책만 본다. 모르는 것을 아무
+              카테고리로 채우면 엉뚱한 예외 정책이 걸린다. */}
+          <label htmlFor="inst-category" className="block text-xs text-caption mb-1">가맹점 분류</label>
+          <select id="inst-category" className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)}>
+            <option value="">선택 안 함 (기본 정책)</option>
+            {categories.filter(c => c.major_type !== '수입').map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
           </select>
         </div>
         <div>

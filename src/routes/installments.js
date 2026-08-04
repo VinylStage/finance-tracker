@@ -228,7 +228,7 @@ router.post('/', numericBody(['total_amount', 'months', 'monthly_amount', 'fee_p
   try {
     const {
       purchase_date, merchant, total_amount, months, monthly_amount,
-      fee_per_month = 0, payment_method_id, start_billing_month,
+      fee_per_month = 0, payment_method_id, start_billing_month, category_id,
     } = req.body;
     if (!purchase_date || !merchant || !total_amount || !months || !monthly_amount || !start_billing_month) {
       return res.status(400).json({ error: '구입일, 가맹점, 총액, 개월수, 월 납입액, 첫 청구월은 필수입니다.' });
@@ -242,9 +242,12 @@ router.post('/', numericBody(['total_amount', 'months', 'monthly_amount', 'fee_p
     let derived;
     db.transaction(() => {
       const result = db.prepare(`
-        INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '진행중')
-      `).run(purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id || null, start_billing_month);
+        INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, category_id, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '진행중')
+      `).run(
+        purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month,
+        payment_method_id || null, start_billing_month, category_id || null
+      );
       newId = Number(result.lastInsertRowid);
       // 신규 등록은 프리뷰를 요구하지 않는다. 지울 것이 없고 만드는 것뿐이라
       // ADR 0008 이 막으려는 "조용한 대량 변경" 에 해당하지 않는다(#279 와 같은
@@ -290,11 +293,12 @@ router.put('/:id', (req, res) => {
     const merged = { ...existing, ...changes };
     db.prepare(`
       UPDATE installments SET purchase_date=?, merchant=?, total_amount=?, months=?, monthly_amount=?,
-        fee_per_month=?, payment_method_id=?, start_billing_month=?, status=?
+        fee_per_month=?, payment_method_id=?, start_billing_month=?, category_id=?, status=?
       WHERE id=?
     `).run(
       merged.purchase_date, merged.merchant, merged.total_amount, merged.months, merged.monthly_amount,
-      merged.fee_per_month, merged.payment_method_id || null, merged.start_billing_month, merged.status,
+      merged.fee_per_month, merged.payment_method_id || null, merged.start_billing_month,
+      merged.category_id || null, merged.status,
       req.params.id
     );
     res.json({ ok: true });
