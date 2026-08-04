@@ -13,6 +13,7 @@ const Revolving = lazy(() => import('./pages/Revolving'));
 const Debts = lazy(() => import('./pages/Debts'));
 const Simulator = lazy(() => import('./pages/Simulator'));
 const Savings = lazy(() => import('./pages/Savings'));
+const Accounts = lazy(() => import('./pages/Accounts'));
 const Settings = lazy(() => import('./pages/Settings'));
 const AuditLog = lazy(() => import('./pages/AuditLog'));
 const Guide = lazy(() => import('./pages/Guide'));
@@ -88,6 +89,7 @@ export default function App() {
             <Route path="/assets">
               <Redirect to="/assets/installments" />
             </Route>
+            <Route path="/assets/accounts" component={Accounts} />
             <Route path="/assets/installments" component={Installments} />
             <Route path="/assets/revolving" component={Revolving} />
             <Route path="/assets/debts" component={Debts} />
