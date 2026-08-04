@@ -5,6 +5,7 @@ import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
+import BalanceProjection from '../components/BalanceProjection';
 
 // 통장 잔액 화면(#291).
 //
@@ -89,6 +90,18 @@ export default function Accounts() {
               </tbody>
             </table>
           </div>
+
+          {/* 계좌마다 추이를 따로 그린다. 합쳐서 하나로 보여주면 "어느 통장이
+              모자라는가" 를 알 수 없다 — 통장이 여럿인 이유가 그 구분이다. */}
+          {accounts.map((account) => (
+            <section
+              key={`proj-${account.id}`}
+              aria-label={`${account.name} 앞으로의 잔액`}
+              className="bg-surface shadow-card rounded-card border border-line p-4"
+            >
+              <BalanceProjection projection={account.projection} />
+            </section>
+          ))}
         </>
       )}
     </div>
