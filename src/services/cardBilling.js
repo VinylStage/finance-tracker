@@ -114,7 +114,4 @@ function billingMonthInfo(purchaseDate, cardProduct) {
   return { billingMonth: toYearMonth(year, closeMonthIndex + offset), resolved: true };
 }
 
-// clampDay·validDay 를 내보내는 이유 — 실적 구간 계산(cardThreshold)이 **같은**
-// 말일 접기 규칙을 써야 한다. 규칙이 갈라지면 청구월과 실적 구간이 서로 다른
-// 달을 가리키는 날이 온다(마감일 31일, 2월).
-module.exports = { billingMonthFor, billingMonthInfo, clampDay, validDay };
+module.exports = { billingMonthFor, billingMonthInfo };

@@ -6,88 +6,81 @@ const { prevPeriodFor, computeThreshold, thresholdOf } = require('../src/service
 
 // 전월 실적 구간과 합산(#276).
 //
-// **이 파일이 지키는 것은 "구간이 달력 월이 아니다" 다.** 마감일 6일 카드의
-// 전월 실적은 6/7 ~ 7/6 이지 7/1 ~ 7/31 이 아니다. 이게 어긋나면 마감일
-// 근처 결제가 통째로 다른 구간에 잡히고, 사용자는 실적을 채웠다고 믿었는데
-// 혜택을 못 받는다.
+// **이 파일이 지키는 것은 "실적 기간은 청구 기간이 아니다" 다.**
+//
+// 처음엔 마감일 ~ 마감일로 잡았다가 고쳤다. 결제일 25일 카드에서 2026-02
+// 실적조건 40만원이면 마감일 기준 321,394원(미달) / 달력월 403,054원(충족)
+// 으로 **판정이 뒤집힌다.** 사용자가 자격을 채웠는데 앱이 혜택을 0 으로 계산해
+// 추천에서 떨어뜨린다.
 
-const card = (over) => ({ statement_close_day: 6, prev_month_threshold: null, ...over });
+const card = (over) => ({ prev_month_threshold: null, ...over });
 
-describe('A. 실적 구간은 마감일에서 마감일까지다', () => {
-  test('A-1. 마감일 6일이면 8월 초 기준 전월 실적은 6/7 ~ 7/6 이다', () => {
-    const p = prevPeriodFor('2026-08-04', card());
-    assert.deepEqual(p, { start: '2026-06-07', end: '2026-07-06', resolved: true });
+describe('A. 실적 구간은 전월 달력월이다', () => {
+  test('A-1. 8월 초 기준 전월 실적은 7/1 ~ 7/31 이다', () => {
+    assert.deepEqual(prevPeriodFor('2026-08-04'), { start: '2026-07-01', end: '2026-07-31' });
   });
 
-  test('A-2. 마감일 당일은 아직 이번 구간이다', () => {
-    // billingMonthInfo 가 `day <= closeDay` 를 이번 달 마감으로 보는 것과 같다.
-    // 8/6 결제는 8/6 마감분에 들어가므로, 8/6 시점의 전월 실적은 그대로다.
-    const p = prevPeriodFor('2026-08-06', card());
-    assert.equal(p.end, '2026-07-06', '마감일 당일에 구간이 넘어갔다');
-  });
-
-  test('A-3. 마감일 다음 날 구간이 한 칸 움직인다', () => {
-    const p = prevPeriodFor('2026-08-07', card());
-    assert.deepEqual(p, { start: '2026-07-07', end: '2026-08-06', resolved: true });
-  });
-
-  test('A-4. 마감일 31일은 2월에 말일로 접힌다', () => {
-    // 2026년 2월은 28일까지다. 31일 마감은 2/28 로 접힌다.
-    const p = prevPeriodFor('2026-03-15', card({ statement_close_day: 31 }));
-    assert.deepEqual(p, { start: '2026-02-01', end: '2026-02-28', resolved: true });
-  });
-
-  test('A-5. 접힌 마감일 다음 구간은 1일에 시작한다', () => {
-    // 6/30 마감(31일이 접힘) 다음 날은 7/1 이다. 마감일에서 하루를 빼는 식으로
-    // 계산하면 7/1 이 아니라 8/1 이나 6/31 같은 값이 나온다.
-    const p = prevPeriodFor('2026-08-15', card({ statement_close_day: 31 }));
-    assert.deepEqual(p, { start: '2026-07-01', end: '2026-07-31', resolved: true });
-  });
-
-  test('A-6. 연말을 넘어간다', () => {
-    const p = prevPeriodFor('2027-01-04', card());
-    assert.deepEqual(p, { start: '2026-11-07', end: '2026-12-06', resolved: true });
-  });
-
-  test('A-7. 구간은 양 끝을 포함하고 겹치지 않는다', () => {
-    // 8/7 구간의 시작(7/7)은 8/4 구간의 끝(7/6) 바로 다음 날이어야 한다.
-    // 하루라도 벌어지면 그 날 결제가 어느 구간에도 안 잡힌다.
-    const earlier = prevPeriodFor('2026-08-04', card());
-    const later = prevPeriodFor('2026-08-07', card());
-    assert.equal(earlier.end, '2026-07-06');
-    assert.equal(later.start, '2026-07-07');
-  });
-});
-
-describe('B. 마감일을 모르면 추측하지 않는다', () => {
-  test('B-1. 미설정이면 지난 달력 월로 떨어지고 그걸 알린다', () => {
-    const p = prevPeriodFor('2026-08-04', card({ statement_close_day: null }));
-    assert.deepEqual(p, { start: '2026-07-01', end: '2026-07-31', resolved: false });
-  });
-
-  test('B-2. 카드 정보 자체가 없어도 던지지 않는다', () => {
-    assert.equal(prevPeriodFor('2026-08-04', null).resolved, false);
-  });
-
-  test('B-3. 범위 밖 마감일은 미설정으로 본다', () => {
-    for (const bad of [0, 32, -1, '6', 6.5, NaN]) {
-      assert.equal(
-        prevPeriodFor('2026-08-04', card({ statement_close_day: bad })).resolved,
-        false,
-        `${JSON.stringify(bad)} 를 유효한 마감일로 받았다`,
+  test('A-2. 달 안에서는 며칠이든 같은 구간이다', () => {
+    // 마감일 기준이면 날짜에 따라 구간이 움직였다. 달력월은 안 움직인다.
+    for (const day of ['01', '04', '15', '25', '31']) {
+      assert.deepEqual(
+        prevPeriodFor(`2026-08-${day}`),
+        { start: '2026-07-01', end: '2026-07-31' },
+        `8/${day} 에서 구간이 달라졌다`,
       );
     }
   });
 
-  test('B-4. 폴백도 연말을 넘어간다', () => {
-    const p = prevPeriodFor('2027-01-15', card({ statement_close_day: null }));
-    assert.deepEqual(p, { start: '2026-12-01', end: '2026-12-31', resolved: false });
+  test('A-3. 2월 말일이 그 해에 맞는다', () => {
+    assert.deepEqual(prevPeriodFor('2026-03-15'), { start: '2026-02-01', end: '2026-02-28' });
+    assert.deepEqual(prevPeriodFor('2028-03-15'), { start: '2028-02-01', end: '2028-02-29' });
   });
 
-  test('B-5. 날짜 형식이 틀리면 던진다', () => {
-    // 조용히 0원을 돌려주면 실적 미달로 잘못 판정된다. 이건 호출부 버그다.
+  test('A-4. 31일에 물어도 30일 달이 안 깨진다', () => {
+    // 5/31 의 전월은 4/1~4/30 이다. 날짜를 그대로 빼면 4/31 이 나온다.
+    assert.deepEqual(prevPeriodFor('2026-05-31'), { start: '2026-04-01', end: '2026-04-30' });
+  });
+
+  test('A-5. 연초에 전년으로 넘어간다', () => {
+    assert.deepEqual(prevPeriodFor('2027-01-04'), { start: '2026-12-01', end: '2026-12-31' });
+  });
+
+  test('A-6. 카드 정보를 받지 않는다', () => {
+    // 실적 구간은 카드마다 다르지 않다. 마감일·결제일이 정하는 것은 청구
+    // 기간이지 실적 기간이 아니다. 인자를 받으면 언젠가 누가 그걸 쓴다.
+    assert.equal(prevPeriodFor.length, 1);
+  });
+});
+
+describe('B. 마감일·결제일에 흔들리지 않는다', () => {
+  test('B-1. 마감일을 무엇으로 주든 구간이 같다', () => {
+    // 예전 구현은 여기서 구간이 카드마다 달라졌다.
+    const expected = { start: '2026-07-01', end: '2026-07-31' };
+    for (const closeDay of [1, 6, 11, 25, 31, null, undefined, 0, 99]) {
+      const c = computeThreshold({
+        cardProduct: card({ statement_close_day: closeDay, billing_cycle_day: 25 }),
+        transactions: [], asOf: '2026-08-04',
+      });
+      assert.deepEqual(c.period, expected, `마감일 ${closeDay} 에서 구간이 달라졌다`);
+    }
+  });
+
+  test('B-2. 카드 정보 자체가 없어도 구간이 나온다', () => {
+    const c = computeThreshold({ cardProduct: null, transactions: [], asOf: '2026-08-04' });
+    assert.deepEqual(c.period, { start: '2026-07-01', end: '2026-07-31' });
+  });
+
+  test('B-3. 못 풀었다는 상태가 없다', () => {
+    // 달력월은 언제나 정확히 정해진다. resolved 같은 단서를 남기면 화면이
+    // "마감일을 설정하면 정확해집니다" 같은 틀린 안내를 하게 된다.
+    const c = computeThreshold({ cardProduct: card(), transactions: [], asOf: '2026-08-04' });
+    assert.deepEqual(Object.keys(c.period).sort(), ['end', 'start']);
+  });
+
+  test('B-4. 날짜 형식이 틀리면 던진다', () => {
+    // 조용히 오늘로 떨어지면 호출부 버그가 안 보인다.
     for (const bad of ['2026-8-4', '20260804', '', null, undefined]) {
-      assert.throws(() => prevPeriodFor(bad, card()), TypeError);
+      assert.throws(() => prevPeriodFor(bad), TypeError);
     }
   });
 });
@@ -115,7 +108,7 @@ describe('C. 실적 조건', () => {
 });
 
 describe('D. 합산', () => {
-  const tx = (over) => ({ date: '2026-06-20', amount: 10000, origin: 'manual', major_type: '선택지출', ...over });
+  const tx = (over) => ({ date: '2026-07-10', amount: 10000, origin: 'manual', major_type: '선택지출', ...over });
   const withThreshold = card({ prev_month_threshold: 300000 });
 
   const run = (transactions, cardProduct = withThreshold) =>
@@ -123,10 +116,10 @@ describe('D. 합산', () => {
 
   test('D-1. 구간 안의 거래만 센다', () => {
     const r = run([
-      tx({ date: '2026-06-06' }),          // 구간 직전
-      tx({ date: '2026-06-07' }),          // 시작일 — 포함
-      tx({ date: '2026-07-06' }),          // 마감일 — 포함
-      tx({ date: '2026-07-07' }),          // 구간 직후
+      tx({ date: '2026-06-30' }),          // 구간 직전
+      tx({ date: '2026-07-01' }),          // 1일 — 포함
+      tx({ date: '2026-07-31' }),          // 말일 — 포함
+      tx({ date: '2026-08-01' }),          // 구간 직후
     ]);
     assert.equal(r.counted, 2, '경계가 어긋났다');
     assert.equal(r.spend, 20000);
@@ -185,9 +178,57 @@ describe('D. 합산', () => {
     assert.equal(run([]).estimated, true);
   });
 
-  test('D-9. 마감일 미설정이면 구간과 함께 그 사실도 넘어온다', () => {
-    const r = run([tx({ date: '2026-07-15' })], card({ statement_close_day: null, prev_month_threshold: 300000 }));
-    assert.equal(r.period.resolved, false);
-    assert.equal(r.spend, 10000, '달력 월 폴백 구간이 안 잡혔다');
+  test('D-9. 구간은 언제나 전월 달력월이다', () => {
+    const r = run([tx({ date: '2026-07-15' })]);
+    assert.deepEqual(r.period, { start: '2026-07-01', end: '2026-07-31' });
+    assert.equal(r.spend, 10000);
+  });
+});
+
+// 사용자가 실사용 중 제기한 건(2026-08-04). 삼성카드 결제일 25일.
+//
+// 결제일 25일이면 **청구** 이용기간은 전월 12일 ~ 당월 11일이다. 이걸 실적
+// 구간으로 쓰면 실거래에서 판정이 뒤집혔다.
+//
+//   2026-02 기준, 실적조건 400,000원
+//     마감일(11일) 기준 구간 01-12 ~ 02-11  →  321,394원  "미달"
+//     전월 달력월     구간 01-01 ~ 01-31  →  403,054원  "충족"
+//
+// 사용자는 자격을 채웠는데 앱이 "실적을 못 채웠어요" 라고 말하고 그 카드를
+// 추천에서 떨어뜨린다. 아래는 그 금액을 그대로 재현한 회귀 테스트다.
+describe('E. 결제일 25일 카드 — 실사용 회귀', () => {
+  const SAMSUNG = { statement_close_day: 11, billing_cycle_day: 25, prev_month_threshold: 400000 };
+
+  // 실거래에서 뽑은 분포를 금액만 남겨 재구성한다.
+  //   1/1 ~ 1/11 에 81,660원, 1/12 ~ 1/31 에 321,394원.
+  const TX = [
+    { date: '2026-01-05', amount: 81660, origin: 'manual', major_type: '선택지출' },
+    { date: '2026-01-20', amount: 321394, origin: 'manual', major_type: '선택지출' },
+  ];
+
+  test('E-1. 청구 이용기간이 아니라 달력월로 잰다', () => {
+    const r = computeThreshold({ cardProduct: SAMSUNG, transactions: TX, asOf: '2026-02-20' });
+
+    assert.deepEqual(r.period, { start: '2026-01-01', end: '2026-01-31' });
+    assert.equal(r.spend, 403054, '1월 초 결제가 구간에서 빠졌다 — 청구기간으로 쟀다');
+  });
+
+  test('E-2. 실적을 채운 것으로 판정한다', () => {
+    const r = computeThreshold({ cardProduct: SAMSUNG, transactions: TX, asOf: '2026-02-20' });
+
+    assert.equal(r.met, true, '자격을 채웠는데 미달로 판정했다');
+    assert.equal(r.shortfall, 0);
+  });
+
+  test('E-3. 결제일을 바꿔도 판정이 안 흔들린다', () => {
+    // 결제일은 언제 갚느냐일 뿐이다. 자격 판정을 건드리면 안 된다.
+    for (const pay of [12, 13, 14, 15, 25, null]) {
+      const r = computeThreshold({
+        cardProduct: { ...SAMSUNG, billing_cycle_day: pay, statement_close_day: pay ? pay - 14 : null },
+        transactions: TX, asOf: '2026-02-20',
+      });
+      assert.equal(r.met, true, `결제일 ${pay} 에서 판정이 뒤집혔다`);
+      assert.equal(r.spend, 403054, `결제일 ${pay} 에서 금액이 달라졌다`);
+    }
   });
 });

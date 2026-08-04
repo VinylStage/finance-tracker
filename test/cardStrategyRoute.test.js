@@ -83,7 +83,8 @@ describe('B. 실적 구간이 쿼리 범위로 쓰인다', () => {
     });
     ids.card = await firstId('/api/card-products', (l) => l.find((c) => c.product_name === '실적카드'));
 
-    // asOf 2026-08-04 기준 실적 구간은 6/7 ~ 7/6 이다.
+    // asOf 2026-08-04 기준 실적 구간은 전월 달력월 7/1 ~ 7/31 이다.
+    // 마감일 6일을 넣어 두는 이유는 **그 값이 실적에 안 쓰이는지 보기 위해서**다.
     // card_product_id 를 안 보낸다. **쓰는 곳이 없기 때문이다** — 거래 입력은
     // 결제수단만 고른다. 상품 특정은 결제수단을 되짚어 나온다.
     const tx = (date, amount, over = {}) => post('/api/transactions', {
@@ -91,17 +92,17 @@ describe('B. 실적 구간이 쿼리 범위로 쓰인다', () => {
       merchant: '테스트', ...over,
     });
 
-    await tx('2026-06-06', 500000);  // 구간 직전 — 세면 안 된다
-    await tx('2026-06-07', 200000);  // 시작일 — 포함
-    await tx('2026-07-06', 100000);  // 마감일 — 포함
-    await tx('2026-07-07', 500000);  // 구간 직후 — 세면 안 된다
+    await tx('2026-06-30', 500000);  // 구간 직전 — 세면 안 된다
+    await tx('2026-07-01', 200000);  // 1일 — 포함
+    await tx('2026-07-31', 100000);  // 말일 — 포함
+    await tx('2026-08-01', 500000);  // 구간 직후 — 세면 안 된다
   });
 
-  test('B-1. 마감일 기준 구간만 합산한다', async () => {
+  test('B-1. 전월 달력월만 합산한다', async () => {
     const { body } = await json('/api/card-strategy/thresholds?asOf=2026-08-04');
     const row = body.data.find((c) => c.cardProductId === ids.card);
 
-    assert.deepEqual(row.period, { start: '2026-06-07', end: '2026-07-06', resolved: true });
+    assert.deepEqual(row.period, { start: '2026-07-01', end: '2026-07-31' });
     assert.equal(row.spend, 300000, '구간 밖 거래가 실적에 들어갔다');
     assert.equal(row.counted, 2);
     assert.equal(row.met, true);
@@ -109,7 +110,7 @@ describe('B. 실적 구간이 쿼리 범위로 쓰인다', () => {
 
   test('B-2. 수입은 실적에서 빠진다', async () => {
     await post('/api/transactions', {
-      date: '2026-06-20', amount: 9000000, category_id: ids.incomeCat,
+      date: '2026-07-10', amount: 9000000, category_id: ids.incomeCat,
       payment_method_id: ids.cardPm, merchant: '월급',
     });
 
