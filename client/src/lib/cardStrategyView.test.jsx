@@ -164,7 +164,7 @@ describe('D. 추천 근거', () => {
 });
 
 describe('E. 실적 표시는 색에만 기대지 않는다', () => {
-  const period = { start: '2026-06-07', end: '2026-07-06', resolved: true };
+  const period = { start: '2026-07-01', end: '2026-07-31' };
 
   it('E-1. 충족·미달·조건없음에 각각 글자 라벨이 있다', () => {
     // #191 — 색상 단독 인코딩 금지.
@@ -185,15 +185,15 @@ describe('E. 실적 표시는 색에만 기대지 않는다', () => {
     expect(unmet.text).toContain('11,107원 남았어요');
   });
 
-  it('E-3. 마감일을 모르면 그렇게 계산했다고 밝힌다', () => {
-    const t = periodText({ start: '2026-07-01', end: '2026-07-31', resolved: false });
-
-    expect(t).toContain('마감일 미설정');
-    expect(t).toContain('달력 월');
+  it('E-3. 구간은 날짜만 말한다', () => {
+    // 마감일은 실적과 무관하다. "마감일을 설정하면 정확해집니다" 같은 안내를
+    // 붙이면 사용자를 틀린 방향으로 보낸다(#398).
+    expect(periodText(period)).toBe('2026-07-01 ~ 2026-07-31');
   });
 
-  it('E-4. 마감일을 알면 군더더기를 안 붙인다', () => {
-    expect(periodText(period)).toBe('2026-06-07 ~ 2026-07-06');
+  it('E-4. 마감일 값이 섞여 들어와도 문구가 안 흔들린다', () => {
+    expect(periodText({ ...period, resolved: false, statement_close_day: 11 }))
+      .toBe('2026-07-01 ~ 2026-07-31');
   });
 });
 
@@ -213,7 +213,7 @@ describe('F. 문구 전수 검사', () => {
     else if (v && typeof v === 'object') Object.values(v).forEach(collect);
   };
 
-  const period = { start: '2026-06-07', end: '2026-07-06', resolved: true };
+  const period = { start: '2026-07-01', end: '2026-07-31' };
 
   // 상태를 하나도 빼지 않고 다 돌린다.
   collect(comparisonView({ loading: true }));
@@ -237,7 +237,7 @@ describe('F. 문구 전수 검사', () => {
   collect(thresholdLine({ threshold: 300000, spend: 400000, met: true, shortfall: 0, period }));
   collect(thresholdLine({ threshold: 300000, spend: 288893, met: false, shortfall: 11107, period }));
   collect(thresholdLine({ threshold: null, spend: 0, met: true, shortfall: 0, period }));
-  collect(periodText({ start: '2026-07-01', end: '2026-07-31', resolved: false }));
+  collect(periodText(period));
 
   it('F-0. 검사 대상이 실제로 잡힌다', () => {
     // 코퍼스가 비면 위반도 0 이라 조용히 통과한다. 그걸 막는다.

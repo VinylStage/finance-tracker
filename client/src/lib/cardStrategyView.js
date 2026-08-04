@@ -185,10 +185,11 @@ export function thresholdLine(threshold) {
   };
 }
 
+// 실적 구간은 **전월 달력월**이고 카드마다 다르지 않다. 예전엔 마감일 기준
+// 이라 "마감일 미설정" 같은 단서를 붙였는데, 그 규칙 자체가 틀렸다(#398).
+// 단서를 남겨 두면 화면이 "마감일을 설정하면 정확해집니다" 라는 **틀린 안내**를
+// 한다 — 마감일은 실적과 무관하다.
 export function periodText(period) {
   if (!period) return '전월';
-  // 마감일을 모르면 달력 월로 계산했다는 사실을 문구에 남긴다. 그래야
-  // 사용자가 "왜 내 카드 마감일과 다르지" 를 물을 수 있다.
-  const suffix = period.resolved ? '' : ' (마감일 미설정이라 달력 월로 계산)';
-  return `${period.start} ~ ${period.end}${suffix}`;
+  return `${period.start} ~ ${period.end}`;
 }
