@@ -7,6 +7,7 @@ import LoadError from '../components/LoadError';
 import DerivedTransactions from '../components/DerivedTransactions';
 import DuplicateCandidates from '../components/DuplicateCandidates';
 import InstallmentRegenerate from '../components/InstallmentRegenerate';
+import InstallmentBillingHint from '../components/InstallmentBillingHint';
 import { useHashTarget } from '../hooks/useHashTarget';
 import { anchorId } from '../lib/derivedOrigin';
 
@@ -266,6 +267,24 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // 자동계산이 채운 값인지, 사용자가 고친 값인지 구분한다(#316).
+  // 한 번이라도 직접 고쳤으면 그 뒤로는 계산이 덮어쓰지 않는다 — 실제 청구서가
+  // 계산과 다른 경우가 있고, 그때 사용자가 실제 값을 못 넣으면 가계부가 틀린
+  // 값을 강제하게 된다.
+  const [touched, setTouched] = useState({ monthly_amount: false, fee_per_month: false });
+  const setTouchedField = (k, v) => {
+    setTouched(t => (t[k] ? t : { ...t, [k]: true }));
+    set(k, v);
+  };
+
+  const applyEstimate = (est) => {
+    setForm(f => ({
+      ...f,
+      monthly_amount: touched.monthly_amount ? f.monthly_amount : String(est.monthly_amount),
+      fee_per_month: touched.fee_per_month ? f.fee_per_month : String(est.fee_per_month),
+    }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSave({
@@ -302,11 +321,11 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
         </div>
         <div>
           <label htmlFor="inst-monthly-amount" className="block text-xs text-caption mb-1">월납부액 (원) *</label>
-          <input id="inst-monthly-amount" type="number" className={inp} value={form.monthly_amount} onChange={e => set('monthly_amount', e.target.value)} required />
+          <input id="inst-monthly-amount" type="number" className={inp} value={form.monthly_amount} onChange={e => setTouchedField('monthly_amount', e.target.value)} required />
         </div>
         <div>
           <label htmlFor="inst-fee-per-month" className="block text-xs text-caption mb-1">월 수수료 (원)</label>
-          <input id="inst-fee-per-month" type="number" className={inp} placeholder="0" value={form.fee_per_month} onChange={e => set('fee_per_month', e.target.value)} />
+          <input id="inst-fee-per-month" type="number" className={inp} placeholder="0" value={form.fee_per_month} onChange={e => setTouchedField('fee_per_month', e.target.value)} />
         </div>
         <div>
           <label htmlFor="inst-payment-method" className="block text-xs text-caption mb-1">카드</label>
@@ -320,6 +339,18 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
           <input id="inst-start-billing-month" type="month" className={inp} value={form.start_billing_month} onChange={e => set('start_billing_month', e.target.value)} required />
         </div>
       </div>
+
+      <InstallmentBillingHint
+        totalAmount={form.total_amount}
+        months={form.months}
+        paymentMethodId={form.payment_method_id}
+        purchaseDate={form.purchase_date}
+        startBillingMonth={form.start_billing_month}
+        monthlyAmount={form.monthly_amount}
+        feePerMonth={form.fee_per_month}
+        onEstimate={applyEstimate}
+      />
+
       <div className="flex gap-3 pt-1">
         <button type="submit" className="btn-primary text-sm px-5 py-2 rounded-control transition-colors">
           등록
