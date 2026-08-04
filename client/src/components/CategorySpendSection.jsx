@@ -94,7 +94,23 @@ export default function CategorySpendSection({ rows }) {
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           <PieChart>
-            <Pie data={slices} dataKey="total" nameKey="category" innerRadius={55} outerRadius={90} paddingAngle={2}>
+            {/* isAnimationActive={false} 는 취향이 아니라 렌더 조건이다(#237).
+                recharts 3.10.1 의 Pie 는 진입 애니메이션이 켜져 있으면 조각
+                path 를 끝내 만들지 않는다. 실브라우저 실측: 조각 그룹
+                (.recharts-pie-sector)은 데이터 수만큼 생기는데 그 안의
+                .recharts-shape 가 빈 채로 남아 svg 안의 path 가 0개다. 2초를
+                기다려도, resize 로 재렌더를 유도해도 0개였다 — 애니메이션이
+                느린 게 아니라 시작하지 않는다.
+                끄면 즉시 조각이 그려진다. dev/prod 빌드 양쪽에서 같고
+                prefers-reduced-motion 과도 무관하다.
+                같은 화면의 Bar/Line/Area 는 애니메이션이 정상이라 차트 전반이
+                아니라 Pie 한정이다. recharts 를 올릴 때 이 줄을 지워도 되는지
+                반드시 브라우저에서 다시 확인할 것 — jsdom 은 이 결함을 못 잡는다. */}
+            <Pie
+              data={slices} dataKey="total" nameKey="category"
+              innerRadius={55} outerRadius={90} paddingAngle={2}
+              isAnimationActive={false}
+            >
               {slices.map((c, i) => (
                 <Cell key={c.category} fill={sliceColor(i, c.isOthers)} stroke="none" />
               ))}
