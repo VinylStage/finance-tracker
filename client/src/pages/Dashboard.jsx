@@ -26,6 +26,7 @@ import HeatmapPeriodPicker from '../components/HeatmapPeriodPicker';
 import { monthRange as heatMonthRange, bucketToDaily } from '../lib/heatmapPeriod';
 import { bucketByDay } from '../lib/dailyBuckets';
 import CashFlowBars from '../components/CashFlowBars';
+import CashFlowSankey from '../components/CashFlowSankey';
 
 const PERIODS = ['일', '주', '월', '연'];
 
@@ -465,7 +466,16 @@ export default function Dashboard() {
       {/* 자금 흐름 — 요약 카드 바로 다음이다. "얼마 벌고 얼마 썼나" 를 본 직후
           "그래서 어디로 갔나" 를 답하는 순서라야 읽는 흐름이 끊기지 않는다. */}
       <Section title="자금 흐름" caption="수입이 어디로 갔나">
-        <CashFlowBars rows={data.categoryBreakdown} income={data.income} />
+        {/* 좁은 폭에서는 Sankey 가 읽히지 않는다 — 밴드가 겹치고 라벨이 서로를
+            가린다. 그래서 모바일은 100% 스택 바 + 목록으로 치환한다(#241).
+            둘은 같은 cashFlow() 결과를 쓰므로 숫자가 갈라지지 않는다.
+            CSS 로 가르는 이유는 리사이즈 리스너 없이 되기 때문이다. */}
+        <div className="hidden lg:block">
+          <CashFlowSankey rows={data.categoryBreakdown} income={data.income} />
+        </div>
+        <div className="lg:hidden">
+          <CashFlowBars rows={data.categoryBreakdown} income={data.income} />
+        </div>
       </Section>
 
       {/* 지출 분석 */}
