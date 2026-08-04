@@ -57,9 +57,13 @@ const DERIVED_CATEGORIES = {
 // 목록을 상수로 둔 이유는 "무엇이 바뀌면 프리뷰가 필요한가" 를 라우트가 아니라
 // 한 곳에서 정하기 위해서다. 라우트에 인라인으로 적으면 필드가 늘 때 조용히
 // 빠지고, 그러면 프리뷰 없이 대량 변경이 실행된다(ADR 0008 이 막으려는 것).
+// 이 값들이 바뀌면 회차를 다시 만들어야 한다.
+// category_id 가 여기 있는 이유: 카테고리가 바뀌면 적용되는 정책이 바뀌고
+// (카테고리 예외 → 기본 정책, 또는 그 반대) 그러면 수수료가 달라진다(#316).
 const INSTALLMENT_SCHEDULE_FIELDS = [
   'total_amount', 'months', 'start_billing_month',
   'payment_method_id', 'purchase_date', 'paid_off_on', 'fee_per_month',
+  'category_id',
 ];
 
 // audit_log.actor 허용값의 정본(#297).
