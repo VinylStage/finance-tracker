@@ -20,8 +20,12 @@ const { get, post, put, del } = vi.hoisted(() => ({
   get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(),
 }));
 
+// 실제 api 객체(lib/api.js)의 표면을 그대로 흉내낸다. 여기서 없는 이름을
+// 지어내면 화면이 그것을 불러도 테스트만 통과한다 — 실제로 그렇게 됐다.
+// 목이 `delete` 를 갖고 있어서 `api.delete(...)` 가 통과했고, 브라우저에서는
+// TypeError 로 카드 삭제가 아예 안 됐다.
 vi.mock('../lib/api', () => ({
-  api: { get, post, put, delete: del },
+  api: { get, post, put, del },
   ApiError: class ApiError extends Error {},
 }));
 
@@ -211,5 +215,20 @@ describe('수정·삭제', () => {
     expect(await screen.findByText(/등록한 혜택도 함께 지워져요/)).toBeTruthy();
     // 확인 전에는 지우지 않는다
     expect(del).not.toHaveBeenCalled();
+  });
+
+  // 확인 뒤에 실제로 지우는지를 아무도 보지 않아서, api 에 없는 이름을
+  // (api.delete) 부르는 코드가 통과했다. 브라우저에서는 TypeError 로 삭제가
+  // 아예 안 됐다. 앞 케이스의 "확인 전에는 안 지운다" 만으로는 부족하다.
+  it('확인하면 그 카드를 실제로 지운다', async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue({ data: PRODUCTS });
+    setup();
+    await screen.findByText('하나 A');
+    await user.click(screen.getAllByText('삭제')[0]);
+    await user.click(await screen.findByText('확인'));
+
+    await waitFor(() => expect(del).toHaveBeenCalled());
+    expect(del.mock.calls[0][0]).toBe('/api/card-products/10');
   });
 });
