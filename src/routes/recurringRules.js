@@ -4,7 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { serverError, errMsg } = require('../utils/errors');
-const { PAYMENT_STYLES } = require('../constants');
+const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
 const { getLastCatchupSummary } = require('../services/recurringCatchup');
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -21,6 +21,52 @@ function resolveDate(yearMonth, dayOfMonth) {
   return `${yearMonth}-${pad2(day)}`;
 }
 
+function isYMD(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+function today() {
+  // 로컬 기준이다. UTC 로 하면 KST 자정~9시 사이에 하루 어긋난다(FND-20).
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+// #278 이 컬럼을 넣었지만 쓰기 경로가 없었다 — 화면에서 만든 규칙은 전부
+// monthly/1 에 starts_on 이 비어 있었다. 여기서 받아야 #280 의 편집 화면이 성립한다.
+//
+// **`starts_on` 은 API 에서 선택이다.** 화면은 필수로 받지만, 생략한 기존 호출을
+// 400 으로 만들면 이미 있는 경로가 깨진다.
+//
+// 생략했을 때 무엇으로 채우는지가 만들 때와 고칠 때 다르다. 수정에서 오늘로
+// 채우면 **시작일을 안 보낸 클라이언트가 규칙의 시작일을 조용히 날린다.**
+// 기존 행이 있으면 그 값을 잇고, 새 규칙일 때만 오늘로 본다.
+// 보내지 않은 반복 필드는 기존 값을 잇는다. 이 라우트는 일부 필드만 보내는
+// 호출부가 있고(재활성화), 안 보낸 값을 기본값으로 덮으면 **연 반복의 지정 월이나
+// 종료일이 조용히 사라진다.** 명시적으로 null 을 보낸 것은 지우려는 뜻이므로
+// 값이 아니라 키의 유무로 가른다.
+function normalizeRuleBody(body, existing = null) {
+  const carry = (key, fallback) => (key in body ? body[key] : (existing ? existing[key] : fallback));
+
+  const freq = body.freq || existing?.freq || 'monthly';
+  const rawStart = carry('starts_on', null);
+  const startsOn = rawStart == null ? (existing?.starts_on || today()) : rawStart;
+
+  // daily 는 day_of_month 를 안 쓴다(발생일은 starts_on + interval 로 정해진다).
+  // 그래도 컬럼이 NOT NULL 이라 값은 있어야 하므로 시작일의 일자를 넣는다.
+  let dayOfMonth = carry('day_of_month', null);
+  if (dayOfMonth == null && freq === 'daily' && isYMD(startsOn)) {
+    dayOfMonth = Number(startsOn.slice(8, 10));
+  }
+
+  return {
+    ...body,
+    freq,
+    starts_on: startsOn,
+    day_of_month: dayOfMonth,
+    interval: carry('interval', 1),
+    ends_on: carry('ends_on', null),
+    month_of_year: carry('month_of_year', null),
+  };
+}
+
 function validateRuleBody(body) {
   const missing = missingFields(body, ['category_id', 'merchant', 'amount', 'day_of_month']);
   if (missing.length) return `${missing.join(', ')} required`;
@@ -34,7 +80,47 @@ function validateRuleBody(body) {
       !PAYMENT_STYLES.includes(body.payment_style)) {
     return `payment_style must be one of ${PAYMENT_STYLES.join(', ')}`;
   }
+
+  if (!RECURRING_FREQS.includes(body.freq)) {
+    return `freq must be one of ${RECURRING_FREQS.join(', ')}`;
+  }
+  if (body.interval !== undefined && body.interval !== null) {
+    const n = asInt(body.interval);
+    if (n === null || n < 1) return 'interval must be an integer of at least 1';
+  }
+  if (!isYMD(body.starts_on)) return 'starts_on must be YYYY-MM-DD';
+  if (body.ends_on !== undefined && body.ends_on !== null && body.ends_on !== '') {
+    if (!isYMD(body.ends_on)) return 'ends_on must be YYYY-MM-DD';
+    // 'YYYY-MM-DD' 는 사전순 비교가 곧 시간순이다.
+    if (body.ends_on < body.starts_on) return 'ends_on must not be earlier than starts_on';
+  }
+  if (body.month_of_year !== undefined && body.month_of_year !== null && body.month_of_year !== '') {
+    const m = asInt(body.month_of_year);
+    if (m === null || m < 1 || m > 12) return 'month_of_year must be an integer between 1 and 12';
+  }
   return null;
+}
+
+// 규칙 행에 쓸 값으로 정리한다. INSERT 와 UPDATE 가 같은 정리를 쓰게 한다 —
+// 한쪽만 고치면 만들 때와 고칠 때 동작이 갈린다.
+function ruleColumns(body) {
+  const blank = (v) => (v === undefined || v === null || v === '' ? null : v);
+  return {
+    category_id: asInt(body.category_id),
+    merchant: body.merchant,
+    amount: asInt(body.amount),
+    day_of_month: asInt(body.day_of_month),
+    payment_method_id: body.payment_method_id != null ? asInt(body.payment_method_id) : null,
+    payment_style: body.payment_style || '일시불',
+    memo: blank(body.memo),
+    freq: body.freq,
+    interval: body.interval != null && body.interval !== '' ? asInt(body.interval) : 1,
+    starts_on: body.starts_on,
+    ends_on: blank(body.ends_on),
+    // 연 반복이 아니면 월 지정은 의미가 없다. 남겨 두면 주기를 바꿨을 때
+    // 안 보이는 값이 계산에 끼어든다.
+    month_of_year: body.freq === 'yearly' ? asInt(blank(body.month_of_year)) : null,
+  };
 }
 
 // GET /api/recurring-rules?include_inactive=1
@@ -86,14 +172,17 @@ router.get('/due', (req, res) => {
 // POST /api/recurring-rules
 router.post('/', (req, res) => {
   try {
-    const err = validateRuleBody(req.body);
+    const body = normalizeRuleBody(req.body);
+    const err = validateRuleBody(body);
     if (err) return res.status(400).json({ error: err });
-    const { category_id, merchant, amount, day_of_month, payment_method_id, payment_style = '일시불', memo } = req.body;
+    const c = ruleColumns(body);
     const result = db.prepare(`
-      INSERT INTO recurring_rules (category_id, merchant, amount, day_of_month, payment_method_id, payment_style, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(asInt(category_id), merchant, asInt(amount), asInt(day_of_month),
-           payment_method_id != null ? asInt(payment_method_id) : null, payment_style, memo || null);
+      INSERT INTO recurring_rules
+        (category_id, merchant, amount, day_of_month, payment_method_id, payment_style, memo,
+         freq, interval, starts_on, ends_on, month_of_year)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(c.category_id, c.merchant, c.amount, c.day_of_month, c.payment_method_id,
+           c.payment_style, c.memo, c.freq, c.interval, c.starts_on, c.ends_on, c.month_of_year);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
     serverError(res, e, 'recurringRules');
@@ -103,16 +192,21 @@ router.post('/', (req, res) => {
 // PUT /api/recurring-rules/:id
 router.put('/:id', numericBody(['is_active']), (req, res) => {
   try {
-    const err = validateRuleBody(req.body);
+    const existing = db.prepare('SELECT * FROM recurring_rules WHERE id=?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
+
+    const body = normalizeRuleBody(req.body, existing);
+    const err = validateRuleBody(body);
     if (err) return res.status(400).json({ error: err });
-    const { category_id, merchant, amount, day_of_month, payment_method_id, payment_style, memo, is_active } = req.body;
+    const c = ruleColumns(body);
     const result = db.prepare(`
       UPDATE recurring_rules SET category_id=?, merchant=?, amount=?, day_of_month=?,
-        payment_method_id=?, payment_style=?, memo=?, is_active=?
+        payment_method_id=?, payment_style=?, memo=?, is_active=?,
+        freq=?, interval=?, starts_on=?, ends_on=?, month_of_year=?
       WHERE id=?
-    `).run(asInt(category_id), merchant, asInt(amount), asInt(day_of_month),
-           payment_method_id != null ? asInt(payment_method_id) : null, payment_style,
-           memo || null, is_active ?? 1, req.params.id);
+    `).run(c.category_id, c.merchant, c.amount, c.day_of_month, c.payment_method_id,
+           c.payment_style, c.memo, req.body.is_active ?? 1,
+           c.freq, c.interval, c.starts_on, c.ends_on, c.month_of_year, req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useLocation } from 'wouter';
 import TransactionList from '../components/TransactionList';
 import TransactionForm from '../components/TransactionForm';
 import Modal from '../components/Modal';
@@ -12,6 +13,8 @@ import TransactionCalendar from '../components/TransactionCalendar';
 import { bucketByDay } from '../lib/dailyBuckets';
 import { defaultTxDate } from '../lib/defaultTxDate';
 import UndoSnackbar from '../components/UndoSnackbar';
+import { formFromTransaction } from '../lib/recurringForm';
+import { putRecurringDraft } from '../lib/recurringDraft';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -103,6 +106,7 @@ function buildFilterParams(filters, categoryFilter) {
 }
 
 export default function Transactions() {
+  const [, navigate] = useLocation();
   const [years, setYears] = useState([]);
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
@@ -273,6 +277,13 @@ export default function Transactions() {
       // 실패해도 반드시 풀어야 한다. 안 그러면 모달이 영영 닫히지 않는다.
       setSaving(false);
     }
+  };
+
+  // 거래를 반복 규칙의 템플릿으로 넘긴다(#280). 값은 세션 저장소로 넘긴다 —
+  // 쿼리 문자열로 넘기면 가맹점·메모가 주소창과 방문 기록에 남는다.
+  const handleMakeRecurring = (tx) => {
+    putRecurringDraft(formFromTransaction(tx));
+    navigate('/settings#recurring');
   };
 
   const handleDelete = async (id) => {
@@ -507,6 +518,7 @@ export default function Transactions() {
                     items={selectedDayItems}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
+                    onMakeRecurring={handleMakeRecurring}
                     bare
                   />
                 </div>
@@ -580,6 +592,7 @@ export default function Transactions() {
                             items={itemsData.data}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
+                            onMakeRecurring={handleMakeRecurring}
                             bare
                             selectedIds={selectedIds}
                             onToggleSelect={handleToggleSelect}

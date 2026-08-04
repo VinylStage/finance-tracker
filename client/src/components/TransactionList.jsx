@@ -8,7 +8,7 @@ function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
 }
 
-export default function TransactionList({ items, onEdit, onDelete, bare = false, selectedIds, onToggleSelect, onToggleSelectAll }) {
+export default function TransactionList({ items, onEdit, onDelete, onMakeRecurring, bare = false, selectedIds, onToggleSelect, onToggleSelectAll }) {
   const lastCheckedIndexRef = useRef(null);
 
   if (!items.length) {
@@ -122,6 +122,16 @@ export default function TransactionList({ items, onEdit, onDelete, bare = false,
                       >
                         수정
                       </button>
+                      {/* 매달 같은 곳에 같은 금액을 내는 것이 고정지출이므로,
+                          실제로 낸 거래가 곧 반복 규칙의 템플릿이다(#280). */}
+                      {onMakeRecurring && (
+                        <button
+                          onClick={() => onMakeRecurring(tx)}
+                          className="text-caption hover:text-brand-text transition-colors text-xs"
+                        >
+                          반복으로
+                        </button>
+                      )}
                       <button
                         onClick={() => onDelete(tx.id)}
                         className="text-caption hover:text-loss-text transition-colors text-xs"
