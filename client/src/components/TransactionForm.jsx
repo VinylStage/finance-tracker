@@ -13,10 +13,14 @@ const CONFIDENCE_STYLE = {
   '없음': 'bg-surface-sunken text-caption',
 };
 
-export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel }) {
+// defaultDate 는 보고 있던 화면이 정해 준 날짜다(#304). 없으면 오늘을 쓴다.
+// 수정 모드(initial 있음)에서는 그 거래의 날짜가 이기므로 영향이 없다.
+//
+// **기본값일 뿐이다.** 사용자가 폼에서 날짜를 고치면 그 값이 유지된다.
+export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel, defaultDate }) {
   const today = localYMD();
   const [form, setForm] = useState({
-    date: today,
+    date: defaultDate || today,
     category_id: '',
     amount: '',
     payment_method_id: '',

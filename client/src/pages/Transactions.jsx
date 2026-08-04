@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 import TransactionCalendar from '../components/TransactionCalendar';
 import { bucketByDay } from '../lib/dailyBuckets';
+import { defaultTxDate } from '../lib/defaultTxDate';
 
 function fmt(n) {
   return Number(n || 0).toLocaleString('ko-KR') + '원';
@@ -18,6 +19,7 @@ function fmt(n) {
 const today = new Date();
 const CURRENT_YEAR = String(today.getFullYear());
 const CURRENT_MONTH = `${CURRENT_YEAR}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+const CURRENT_DATE = `${CURRENT_MONTH}-${String(today.getDate()).padStart(2, '0')}`;
 
 const EMPTY_FILTERS = { merchant: '', memo: '', minAmount: '', maxAmount: '', paymentMethodId: '' };
 const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
@@ -228,6 +230,21 @@ export default function Transactions() {
     [selectedDay, calendarItems]
   );
 
+  // 보고 있던 화면이 아는 날짜를 폼 기본값으로 넘긴다(#304).
+  //
+  // 달력뷰에서 고른 날짜 > 목록뷰에서 펼친 달 > 오늘 순이다. 상태는 이 방향으로만
+  // 흐른다 — 폼에서 날짜를 바꿔도 목록 펼침이나 달력 월은 움직이지 않는다.
+  const formDefaultDate = useMemo(
+    () => defaultTxDate({
+      // 달력뷰를 보고 있을 때만 선택 날짜가 의미를 갖는다. 목록뷰로 돌아온 뒤
+      // 남아 있는 선택이 기본값을 잡으면 사용자가 예측할 수 없다.
+      selectedDay: viewMode === 'calendar' ? selectedDay : null,
+      expandedMonths: [...expandedMonths],
+      today: CURRENT_DATE,
+    }),
+    [viewMode, selectedDay, expandedMonths]
+  );
+
   const toggleMonth = (month) => {
     setExpandedMonths(prev => {
       const next = new Set(prev);
@@ -408,6 +425,7 @@ export default function Transactions() {
         >
           <TransactionForm
             initial={editItem}
+            defaultDate={formDefaultDate}
             categories={categories}
             paymentMethods={paymentMethods}
             onSave={handleSave}
@@ -466,9 +484,19 @@ export default function Transactions() {
                 </div>
               ) : selectedDay ? (
                 <div className="border-t border-line pt-3 mt-3">
-                  <div className="text-sm font-semibold text-ink mb-2">
-                    {Number(selectedDay.slice(5, 7))}월 {Number(selectedDay.slice(8, 10))}일
-                    <span className="text-xs text-caption ml-2">{selectedDayItems.length}건</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-ink">
+                      {Number(selectedDay.slice(5, 7))}월 {Number(selectedDay.slice(8, 10))}일
+                      <span className="text-xs text-caption ml-2">{selectedDayItems.length}건</span>
+                    </div>
+                    {/* 날짜를 이미 골라놓은 자리다. 여기서 추가하면 더 정할 게 없다(#304). */}
+                    <button
+                      type="button"
+                      onClick={() => { setEditItem(null); setShowForm(true); }}
+                      className="text-xs px-2 py-1 rounded-chip border border-line text-caption hover:bg-surface-page"
+                    >
+                      이 날짜로 추가
+                    </button>
                   </div>
                   <TransactionList
                     items={selectedDayItems}
@@ -530,6 +558,17 @@ export default function Transactions() {
                   </button>
                   {expanded && (
                     <div className="border-t border-line p-3">
+                      {/* 펼친 달이 곧 사용자가 보고 있는 기간이다. 여기서 추가하면
+                          그 달 기준 날짜가 기본값으로 들어간다(#304). */}
+                      <div className="flex justify-end mb-2">
+                        <button
+                          type="button"
+                          onClick={() => { setEditItem(null); setShowForm(true); }}
+                          className="text-xs px-2 py-1 rounded-chip border border-line text-caption hover:bg-surface-page"
+                        >
+                          {monthNum}월에 거래 추가
+                        </button>
+                      </div>
                       {itemsData ? (
                         <>
                           <TransactionList
