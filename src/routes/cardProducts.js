@@ -5,6 +5,7 @@ const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { numericBody, missingFields } = require('../utils/validate');
 const { CARD_TYPES } = require('../constants');
+const { billingMonthInfo } = require('../services/cardBilling');
 
 // 보유 카드(카드상품) CRUD(#306).
 //
@@ -101,6 +102,60 @@ router.get('/unassigned-count', (_req, res) => {
       WHERE t.card_product_id IS NULL AND p.type = '신용'
     `).get();
     res.json({ unassigned: row.cnt });
+  } catch (e) {
+    serverError(res, e, 'cardProducts');
+  }
+});
+
+// GET /api/card-products/billing-month?payment_method_id=&purchase_date=
+//
+// 구매일이 실리는 청구월을 돌려준다(#364). 할부 등록 폼이 「청구 시작월」 기본값을
+// 채우는 데 쓴다 — 지금은 이번 달이 박혀 있어서, 7/28 구매인데 마감이 7/25 인
+// 카드면 두 달 어긋난 채로 회차 전체가 생성된다.
+//
+// **결제수단에 카드 상품이 여럿일 수 있다.** 상품마다 청구 주기가 다르면 어느
+// 것을 쓸지 알 수 없다. 그때는 추측하지 않고 미해결로 돌려준다 — 청구월을
+// 잘못 옮기면 사용자가 보기에 지출이 이유 없이 다른 달에 가 있다.
+//
+// '/:id' 보다 먼저 선언해야 한다. 뒤에 두면 'billing-month' 가 id 로 잡힌다.
+router.get('/billing-month', (req, res) => {
+  try {
+    const { payment_method_id, purchase_date } = req.query;
+    if (!purchase_date) {
+      return res.status(400).json({ error: '구매일을 지정해 주세요.' });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(purchase_date)) {
+      return res.status(400).json({ error: '구매일은 YYYY-MM-DD 형식이어야 합니다.' });
+    }
+
+    let card = null;
+    let ambiguous = false;
+    if (payment_method_id) {
+      const rows = db.prepare(`
+        SELECT id, product_name, billing_cycle_day, statement_close_day
+        FROM card_products
+        WHERE payment_method_id = ?
+          AND billing_cycle_day IS NOT NULL
+          AND statement_close_day IS NOT NULL
+      `).all(Number(payment_method_id));
+
+      const distinct = new Set(rows.map((r) => `${r.billing_cycle_day}/${r.statement_close_day}`));
+      if (rows.length === 1 || distinct.size === 1) card = rows[0] || null;
+      else if (rows.length > 1) ambiguous = true;
+    }
+
+    const info = billingMonthInfo(purchase_date, card);
+    res.json({
+      data: {
+        billing_month: info.billingMonth,
+        // 청구 주기를 알고 계산했는가. false 면 구매일의 달력 월로 폴백한 것이고,
+        // 화면은 그 사실을 밝혀야 한다.
+        resolved: info.resolved,
+        // 주기가 서로 다른 상품이 여럿이라 고를 수 없었는가.
+        ambiguous,
+        card_product: card ? { id: card.id, product_name: card.product_name } : null,
+      },
+    });
   } catch (e) {
     serverError(res, e, 'cardProducts');
   }

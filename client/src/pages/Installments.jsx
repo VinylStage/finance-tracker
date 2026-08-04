@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
@@ -277,11 +277,42 @@ function InstallmentForm({ paymentMethods, categories, onSave, onCancel }) {
   // 한 번이라도 직접 고쳤으면 그 뒤로는 계산이 덮어쓰지 않는다 — 실제 청구서가
   // 계산과 다른 경우가 있고, 그때 사용자가 실제 값을 못 넣으면 가계부가 틀린
   // 값을 강제하게 된다.
-  const [touched, setTouched] = useState({ monthly_amount: false, fee_per_month: false });
+  const [touched, setTouched] = useState({ monthly_amount: false, fee_per_month: false, start_billing_month: false });
+  const [billingMonthInfo, setBillingMonthInfo] = useState(null);
   const setTouchedField = (k, v) => {
     setTouched(t => (t[k] ? t : { ...t, [k]: true }));
     set(k, v);
   };
+
+  // 청구 시작월을 구매일·카드 청구주기에서 계산해 기본값으로 채운다(#364).
+  //
+  // 지금까지는 '이번 달' 이 박혀 있었다. 7/28 구매인데 마감이 7/25 인 카드면
+  // 첫 청구는 9월이라 두 달 어긋난다 — 그리고 #269 의 파생 거래가 이 값을
+  // 그대로 써서 회차 전체가 잘못된 달에 쌓인다.
+  //
+  // 사용자가 직접 고치면 덮어쓰지 않는다. 월납부액 자동채움(#316)과 같은 규칙이다.
+  useEffect(() => {
+    if (!form.purchase_date) return undefined;
+    let alive = true;
+    (async () => {
+      try {
+        const qs = new URLSearchParams({ purchase_date: form.purchase_date });
+        if (form.payment_method_id) qs.set('payment_method_id', String(form.payment_method_id));
+        const res = await api.get(`/api/card-products/billing-month?${qs}`);
+        if (!alive) return;
+        setBillingMonthInfo(res.data);
+        setForm(f => (touched.start_billing_month
+          ? f
+          : { ...f, start_billing_month: res.data.billing_month }));
+      } catch {
+        // 계산이 실패해도 입력은 막지 않는다. 기존 값을 그대로 둔다.
+        if (alive) setBillingMonthInfo(null);
+      }
+    })();
+    return () => { alive = false; };
+    // touched 를 의존성에 넣으면 사용자가 고치는 순간 다시 계산이 돈다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.purchase_date, form.payment_method_id]);
 
   const applyEstimate = (est) => {
     setForm(f => ({
@@ -363,7 +394,16 @@ function InstallmentForm({ paymentMethods, categories, onSave, onCancel }) {
         </div>
         <div>
           <label htmlFor="inst-start-billing-month" className="block text-xs text-caption mb-1">청구 시작월 *</label>
-          <input id="inst-start-billing-month" type="month" className={inp} value={form.start_billing_month} onChange={e => set('start_billing_month', e.target.value)} required />
+          <input id="inst-start-billing-month" type="month" className={inp} value={form.start_billing_month} onChange={e => setTouchedField('start_billing_month', e.target.value)} required />
+          {billingMonthInfo && !touched.start_billing_month && (
+            <p className="text-[11px] text-caption mt-1">
+              {billingMonthInfo.resolved
+                ? `${billingMonthInfo.card_product?.product_name ?? '카드'} 청구주기로 계산했어요.`
+                : billingMonthInfo.ambiguous
+                  ? '이 카드에 청구주기가 다른 상품이 여럿이라 구매일의 달로 뒀어요. 실제 청구월을 확인해 주세요.'
+                  : '카드 청구주기를 몰라 구매일의 달로 뒀어요. 실제 청구월을 확인해 주세요.'}
+            </p>
+          )}
         </div>
       </div>
 
