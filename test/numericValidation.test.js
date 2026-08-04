@@ -29,6 +29,8 @@ const EXPECTED = [
   { file: 'cardBenefits.js', method: 'POST', routePath: '/', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
   { file: 'cardBenefits.js', method: 'PUT', routePath: '/:id', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
   { file: 'cardPolicies.js', method: 'POST', routePath: '/range', fields: ['payment_method_id', 'from_month', 'to_month', 'free_from_sequence', 'category_id'] },
+  { file: 'cardProducts.js', method: 'POST', routePath: '/remap/preview', fields: ['card_product_id', 'min_amount', 'max_amount'] },
+  { file: 'cardProducts.js', method: 'POST', routePath: '/remap', fields: ['card_product_id', 'min_amount', 'max_amount'] },
   { file: 'cardProducts.js', method: 'POST', routePath: '/', fields: ['payment_method_id', 'annual_fee', 'prev_month_threshold', 'billing_cycle_day', 'statement_close_day'] },
   { file: 'cardProducts.js', method: 'PUT', routePath: '/:id', fields: ['payment_method_id', 'annual_fee', 'prev_month_threshold', 'billing_cycle_day', 'statement_close_day'] },
   { file: 'categories.js', method: 'POST', routePath: '/', fields: ['monthly_budget'] },

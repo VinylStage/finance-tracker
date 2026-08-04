@@ -18,6 +18,7 @@ import Icon from '../components/Icon';
 import AnchorNav from '../components/AnchorNav';
 import CardPolicySection from '../components/CardPolicySection';
 import CardProductSection from '../components/CardProductSection';
+import CardRemapSection from '../components/CardRemapSection';
 import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
@@ -83,6 +84,12 @@ export default function Settings() {
           <Anchor id="card-product">
             <CardProductSection paymentMethods={paymentMethods} />
           </Anchor>
+          {/* 재매핑은 카드를 등록한 **다음** 할 일이다(#302 3단계). 등록 화면
+              바로 아래에 두어 "카드를 넣었으니 지난 거래도 붙이자" 가 이어지게 한다.
+              위에 두면 옮길 카드가 없는 상태에서 도구부터 만나게 된다. */}
+          <Anchor id="card-remap">
+            <CardRemapSection paymentMethods={paymentMethods} />
+          </Anchor>
           {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
           <Anchor id="card-policy">
             <CardPolicySection paymentMethods={paymentMethods} />
@@ -128,6 +135,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'category', label: '카테고리 관리' },
   { id: 'payment', label: '결제수단 관리' },
   { id: 'card-product', label: '보유 카드' },
+  { id: 'card-remap', label: '지난 거래 카드 지정' },
   { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
   { id: 'history', label: '변경 이력' },
