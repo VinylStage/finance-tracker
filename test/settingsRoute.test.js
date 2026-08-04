@@ -1,49 +1,24 @@
-const { test, before, after } = require('node:test');
-const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
-
+// 서버 기동은 공용 헬퍼가 맡는다(#379). 조기 종료를 즉시 감지한다.
 // FND-12(감사, B안): 18개 API 마운트 중 11개가 HTTP 테스트 전무했고, 그중
 // export/settings 무테스트가 FND-03(설정 복원 100% 실패)이 릴리스까지
 // 발견되지 못한 직접 원인이었다. settings 라우트는 이미 GET의 에러노출
 // 회귀 테스트(FND-11, settingsErrorExposure.test.js)가 있으나 정상 경로
 // (GET 기본값/PUT 갱신/GET 반영)는 아직 테스트가 없었다 — 이 파일이 채운다.
+const { test, before, after } = require('node:test');
+const assert = require('node:assert');
+
+const { startTestServer } = require('./helpers/testServer');
 
 const PORT = 34576; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-
-let serverOutput = '';
+let server;
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 test('settings 라우트 — GET 기본값 → PUT 갱신 → GET 반영 → 부분 갱신 → 잘못된 입력 거부', async () => {
