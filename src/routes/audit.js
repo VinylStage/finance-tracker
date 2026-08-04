@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { findUndoable, applyUndo } = require('../services/undo');
+const { getLastPurgeSummary } = require('../services/auditRetention');
 
 // 감사 이력 조회와 1단계 실행취소(#300).
 
@@ -73,6 +74,18 @@ router.get('/log', (req, res) => {
 
     const total = db.prepare(`SELECT COUNT(*) AS cnt FROM audit_log ${where}`).get(...params).cnt;
     res.json({ data: rows, total });
+  } catch (e) {
+    serverError(res, e, 'audit');
+  }
+});
+
+// 이번 기동에서 감사로그를 얼마나 정리했는지(#367).
+//
+// 사후 고지다 — 정리는 확인 없이 돌지만 조용히 넘어가지는 않는다. 화면이
+// "180일 지난 이력 N건을 정리했어요" 를 한 번 보여줄 수 있어야 한다.
+router.get('/retention', (_req, res) => {
+  try {
+    res.json(getLastPurgeSummary());
   } catch (e) {
     serverError(res, e, 'audit');
   }
