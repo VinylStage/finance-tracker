@@ -6,7 +6,7 @@ const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { resolvePeriod } = require('../utils/period');
 const { isEditable, lockedMessage, findLocked, countLockedAll } = require('../services/transactionOrigin');
-const { PAYMENT_STYLES } = require('../constants');
+const { PAYMENT_STYLES, SETTLEMENTS, DEFAULT_SETTLEMENT } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
 const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
 
@@ -393,6 +393,16 @@ function validateTxBody(body) {
       !PAYMENT_STYLES.includes(body.payment_style)) {
     return `payment_style must be one of ${PAYMENT_STYLES.join(', ')}`;
   }
+  // DB 에 CHECK 를 걸지 않으므로(#289) 여기가 값을 지키는 유일한 곳이다.
+  // 잘못된 값이 들어가면 잔액 계산에서 조용히 빠진다 — 어느 합계에도 안 잡힌다.
+  if (body.settlement !== undefined && body.settlement !== null &&
+      !SETTLEMENTS.includes(body.settlement)) {
+    return `settlement must be one of ${SETTLEMENTS.join(', ')}`;
+  }
+  if (body.billing_month !== undefined && body.billing_month !== null &&
+      !/^\d{4}-\d{2}$/.test(body.billing_month)) {
+    return 'billing_month must be in YYYY-MM format';
+  }
   return null;
 }
 
@@ -401,12 +411,17 @@ router.post('/', (req, res) => {
   try {
     const err = validateTxBody(req.body);
     if (err) return res.status(400).json({ error: err });
-    const { date, category_id, amount, payment_method_id, payment_style = '일시불', merchant, memo } = req.body;
+    const {
+      date, category_id, amount, payment_method_id, payment_style = '일시불', merchant, memo,
+      settlement = DEFAULT_SETTLEMENT, account_id, billing_month,
+    } = req.body;
+    // 기본값이 immediate 라 안 보내던 클라이언트의 동작이 그대로다(#289).
     const result = db.prepare(`
-      INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant, memo, settlement, account_id, billing_month)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
-           payment_style, merchant || null, memo || null);
+           payment_style, merchant || null, memo || null,
+           settlement, account_id != null ? asInt(account_id) : null, billing_month || null);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
     serverError(res, e, 'transactions');
@@ -424,13 +439,24 @@ router.put('/:id', (req, res) => {
     if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
 
-    const { date, category_id, amount, payment_method_id, payment_style, merchant, memo } = req.body;
+    const {
+      date, category_id, amount, payment_method_id, payment_style, merchant, memo,
+      settlement, account_id, billing_month,
+    } = req.body;
+    // settlement 는 **보낸 경우에만** 바꾼다. PUT 이 전체 교체라 생략하면
+    // 기본값으로 덮이는데, 그러면 deferred 였던 거래를 메모만 고쳐도 잔액이
+    // 조용히 달라진다(#289). 나머지 둘도 같은 이유로 COALESCE 를 쓴다.
     const result = db.prepare(`
       UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?,
-        payment_style=?, merchant=?, memo=?
+        payment_style=?, merchant=?, memo=?,
+        settlement=COALESCE(?, settlement),
+        account_id=COALESCE(?, account_id),
+        billing_month=COALESCE(?, billing_month)
       WHERE id=?
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
-           payment_style || '일시불', merchant || null, memo || null, req.params.id);
+           payment_style || '일시불', merchant || null, memo || null,
+           settlement || null, account_id != null ? asInt(account_id) : null, billing_month || null,
+           req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {
