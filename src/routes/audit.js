@@ -25,6 +25,9 @@ router.get('/undoable', (_req, res) => {
         // 누를 수 있어야 한다(ADR 0008).
         affected: candidate.entries.length,
         tables: [...new Set(candidate.entries.map((e) => e.table_name))],
+        // 라벨은 선택이라 대개 비어 있다(#298). 화면이 "방금 한 작업" 같은
+        // 무의미한 말 대신 이름을 지어낼 수 있게 무엇을 어떻게 했는지 함께 준다.
+        ops: [...new Set(candidate.entries.map((e) => e.op))],
       },
     });
   } catch (e) {

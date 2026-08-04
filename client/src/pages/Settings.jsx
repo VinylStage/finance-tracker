@@ -1,3 +1,4 @@
+import { Link } from 'wouter';
 import React, { useState } from 'react';
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
@@ -75,6 +76,11 @@ export default function Settings() {
           <Anchor id="recurring">
             <RecurringRuleSection rules={recurringRules} categories={categories} paymentMethods={paymentMethods} onChanged={reload} />
           </Anchor>
+          {/* 되돌리기는 여기서만 할 수 있다. 백업·복원 바로 앞에 두어, 되돌리려는
+              사람이 전체 복원까지 가기 전에 만나게 한다. */}
+          <Anchor id="history">
+            <HistorySection />
+          </Anchor>
           <Anchor id="export">
             <ExportSection />
           </Anchor>
@@ -109,6 +115,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'payment', label: '결제수단 관리' },
   { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
+  { id: 'history', label: '변경 이력' },
   { id: 'export', label: '데이터 내보내기' },
   { id: 'settings-backup', label: '설정 백업 / 복원' },
   { id: 'tx-backup', label: '거래내역 백업 / 복원' },
@@ -705,6 +712,25 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+// 변경 이력은 화면이 따로 있다(#301). 설정은 앵커 섹션 구조라, 별도 라우트로
+// 나가는 입구가 여기 없으면 주소를 아는 사람만 쓸 수 있다.
+function HistorySection() {
+  return (
+    <div className="bg-surface shadow-card rounded-card p-4 space-y-3">
+      <h2 className="text-sm font-semibold text-body">변경 이력</h2>
+      <p className="text-xs text-caption">
+        추가·수정·삭제한 내역을 시간순으로 보고, 잘못 바꾼 것을 되돌립니다.
+      </p>
+      <Link
+        href="/settings/history"
+        className="inline-block text-sm text-brand-text border border-line hover:bg-surface-page rounded-control px-4 py-2 transition-colors"
+      >
+        변경 이력 보기
+      </Link>
     </div>
   );
 }

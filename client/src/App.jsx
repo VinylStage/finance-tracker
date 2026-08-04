@@ -14,6 +14,7 @@ const Debts = lazy(() => import('./pages/Debts'));
 const Simulator = lazy(() => import('./pages/Simulator'));
 const Savings = lazy(() => import('./pages/Savings'));
 const Settings = lazy(() => import('./pages/Settings'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
 const Guide = lazy(() => import('./pages/Guide'));
 
 function NavLink({ href, active, className = '', children }) {
@@ -92,6 +93,7 @@ export default function App() {
             <Route path="/assets/debts" component={Debts} />
             <Route path="/assets/savings" component={Savings} />
             <Route path="/settings" component={Settings} />
+            <Route path="/settings/history" component={AuditLog} />
             <Route path="/guide" component={Guide} />
             <Route>
               <Redirect to="/" />
