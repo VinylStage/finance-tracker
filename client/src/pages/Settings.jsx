@@ -17,6 +17,7 @@ import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
 import Icon from '../components/Icon';
 import AnchorNav from '../components/AnchorNav';
 import CardPolicySection from '../components/CardPolicySection';
+import CardProductSection from '../components/CardProductSection';
 import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
@@ -76,6 +77,12 @@ export default function Settings() {
           <Anchor id="payment">
             <PaymentMethodSection paymentMethods={paymentMethods} accounts={accounts} onChanged={reload} />
           </Anchor>
+          {/* 보유 카드는 결제수단(카드사) 아래 카드 한 장 단위다(#302). 카드사
+              바로 다음에 두어 "카드사를 넣고 그 아래 카드를 넣는다" 순서가
+              화면에서도 그대로 읽히게 한다. */}
+          <Anchor id="card-product">
+            <CardProductSection paymentMethods={paymentMethods} />
+          </Anchor>
           {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
           <Anchor id="card-policy">
             <CardPolicySection paymentMethods={paymentMethods} />
@@ -120,6 +127,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'app', label: '기본 설정' },
   { id: 'category', label: '카테고리 관리' },
   { id: 'payment', label: '결제수단 관리' },
+  { id: 'card-product', label: '보유 카드' },
   { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
   { id: 'history', label: '변경 이력' },
