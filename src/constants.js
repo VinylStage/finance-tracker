@@ -112,10 +112,15 @@ const RECURRING_FREQS = ['daily', 'monthly', 'yearly'];
 // 즉시 차감이다. 여기서는 기록만 하고 계산은 그쪽 이슈의 몫이다.
 const CARD_TYPES = ['신용', '체크'];
 
+// 할인은 결제 금액이 즉시 깎이고, 적립은 나중에 포인트로 돌아온다. 계산은 같아도
+// **돈이 언제 손에 오는지가 다르다** — 잔액 추적(M11)에서 둘을 같게 다루면
+// 안 들어온 돈을 있는 것으로 센다. 여기서는 구분해 두기만 한다.
+const BENEFIT_TYPES = ['할인', '적립'];
+
 module.exports = {
   PAYMENT_STYLES, MAJOR_TYPES, INSTALLMENT_POLICY_TYPES,
   TRANSACTION_ORIGINS, LOCKED_ORIGINS,
   DERIVED_CATEGORIES, INSTALLMENT_SCHEDULE_FIELDS,
-  AUDIT_ACTORS, AUDIT_OPS, RECURRING_FREQS, CARD_TYPES,
+  AUDIT_ACTORS, AUDIT_OPS, RECURRING_FREQS, CARD_TYPES, BENEFIT_TYPES,
   LOAN_TYPES, LOAN_TYPE_DEFAULTS,
 };

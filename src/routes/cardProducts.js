@@ -26,6 +26,22 @@ function validate(body) {
   }
   const pm = db.prepare('SELECT id FROM payment_methods WHERE id=?').get(body.payment_method_id);
   if (!pm) return '선택한 카드사를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.';
+
+  // 청구 주기(#274). 모르면 비워 두는 것이 맞다 — 모르는 값을 1 이나 0 으로
+  // 채우면 전월 실적과 청구월 계산이 틀린 답을 자신 있게 낸다.
+  for (const key of ['billing_cycle_day', 'statement_close_day']) {
+    const v = body[key];
+    if (v === undefined || v === null || v === '') continue;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 1 || n > 31) {
+      return '결제일과 마감일은 1일에서 31일 사이로 입력해 주세요.';
+    }
+  }
+  if (body.prev_month_threshold !== undefined && body.prev_month_threshold !== null
+      && body.prev_month_threshold !== '') {
+    const n = Number(body.prev_month_threshold);
+    if (!Number.isFinite(n) || n < 0) return '전월 실적 기준액은 0 이상이어야 합니다.';
+  }
   return null;
 }
 
@@ -37,7 +53,17 @@ function normalize(body) {
     card_type: body.card_type,
     annual_fee: body.annual_fee ?? 0,
     memo: body.memo || null,
+    // 빈 문자열을 그대로 넣으면 숫자 컬럼에 '' 이 저장돼 이후 비교가 전부 어긋난다.
+    prev_month_threshold: blankToNull(body.prev_month_threshold),
+    billing_cycle_day: blankToNull(body.billing_cycle_day),
+    statement_close_day: blankToNull(body.statement_close_day),
   };
+}
+
+function blankToNull(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 // GET /api/card-products?payment_method_id=
@@ -80,7 +106,7 @@ router.get('/unassigned-count', (_req, res) => {
   }
 });
 
-router.post('/', numericBody(['payment_method_id', 'annual_fee']), (req, res) => {
+router.post('/', numericBody(['payment_method_id', 'annual_fee', 'prev_month_threshold', 'billing_cycle_day', 'statement_close_day']), (req, res) => {
   try {
     const err = validate(req.body);
     if (err) return res.status(400).json({ error: err });
@@ -88,9 +114,11 @@ router.post('/', numericBody(['payment_method_id', 'annual_fee']), (req, res) =>
     const p = normalize(req.body);
     const info = db.prepare(`
       INSERT INTO card_products
-        (payment_method_id, issuer, product_name, card_type, annual_fee, memo)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(p.payment_method_id, p.issuer, p.product_name, p.card_type, p.annual_fee, p.memo);
+        (payment_method_id, issuer, product_name, card_type, annual_fee, memo,
+         prev_month_threshold, billing_cycle_day, statement_close_day)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(p.payment_method_id, p.issuer, p.product_name, p.card_type, p.annual_fee, p.memo,
+           p.prev_month_threshold, p.billing_cycle_day, p.statement_close_day);
     res.status(201).json({ id: info.lastInsertRowid, ok: true });
   } catch (e) {
     if (String(e.message || '').includes('UNIQUE')) {
@@ -100,7 +128,7 @@ router.post('/', numericBody(['payment_method_id', 'annual_fee']), (req, res) =>
   }
 });
 
-router.put('/:id', numericBody(['payment_method_id', 'annual_fee']), (req, res) => {
+router.put('/:id', numericBody(['payment_method_id', 'annual_fee', 'prev_month_threshold', 'billing_cycle_day', 'statement_close_day']), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM card_products WHERE id=?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: '찾는 카드가 없습니다. 이미 삭제됐을 수 있어요.' });
@@ -112,9 +140,11 @@ router.put('/:id', numericBody(['payment_method_id', 'annual_fee']), (req, res) 
     const p = normalize(merged);
     db.prepare(`
       UPDATE card_products
-      SET payment_method_id=?, issuer=?, product_name=?, card_type=?, annual_fee=?, memo=?
+      SET payment_method_id=?, issuer=?, product_name=?, card_type=?, annual_fee=?, memo=?,
+          prev_month_threshold=?, billing_cycle_day=?, statement_close_day=?
       WHERE id=?
-    `).run(p.payment_method_id, p.issuer, p.product_name, p.card_type, p.annual_fee, p.memo, req.params.id);
+    `).run(p.payment_method_id, p.issuer, p.product_name, p.card_type, p.annual_fee, p.memo,
+           p.prev_month_threshold, p.billing_cycle_day, p.statement_close_day, req.params.id);
     res.json({ ok: true });
   } catch (e) {
     if (String(e.message || '').includes('UNIQUE')) {
