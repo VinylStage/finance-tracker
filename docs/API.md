@@ -1476,6 +1476,53 @@
   틀렸을 때 전략 계산이 조용히 잘못된 답을 낸다. 사용자가 재매핑을 언제 끝냈는지
   알 수 있어야 해서 이 수를 낸다.
 
+### POST /api/card-products/remap/preview
+지난 거래를 카드 상품에 붙일 때 **무엇이 몇 건 바뀌는지** 계산한다(#302 3단계).
+**DB 를 바꾸지 않는다** — ADR 0008 의 프리뷰 단계다.
+
+- **요청 파라미터**:
+  - `card_product_id` (required, 숫자검증): 옮겨 갈 카드
+  - `from` / `to` (optional): 기간. `YYYY-MM-DD`
+  - `merchant` (optional): 가맹점 부분일치
+  - `min_amount` / `max_amount` (optional, 숫자검증): 금액대
+  - `include_assigned` (optional, boolean): 이미 다른 카드로 지정된 거래까지 포함
+- **응답 스키마**:
+  ```
+  { "target": {...}, "count": "number", "already_assigned": "number",
+    "samples": [{ "id", "date", "merchant", "amount", "before", "after" }],
+    "preview_token": "string", "remaining_unassigned": "number", "undoable": true }
+  ```
+- **에러 케이스**: 400 — 카드 미지정 / 없는 카드 / 기간 형식이 `YYYY-MM-DD` 아님 /
+  금액이 숫자 아님
+- **비고**: 대상은 **그 카드가 달린 카드사의 거래**로 고정된다. 카드사를 따로 받으면
+  "삼성카드 거래를 하나 A카드로" 가 가능해지는데, 그건 재매핑이 아니라 결제수단
+  변경이고 거래 입력이 할 일이다.
+
+  **금액은 부호 없이 받는다.** 거래 금액이 전부 양수로 저장되고 지출·수입은
+  카테고리 대분류가 가른다 — 음수를 넣으면 아무것도 안 걸린다.
+
+  이미 그 카드인 거래는 `count` 에 세지 않는다. 바뀌지 않는 것을 세면 건수가
+  사실이 아니게 된다.
+
+  기간 형식이 틀리면 400 이다. SQLite 의 문자열 비교라 `2026-8-1` 같은 값은 오류
+  없이 조용히 0건이 되거나 엉뚱하게 걸린다 — 사용자는 조건을 걸었다고 믿는다.
+
+### POST /api/card-products/remap
+확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
+
+- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
+- **응답 스키마**: `{ "ok": true, "updated": "number", "remaining_unassigned": "number", "target": {...} }`
+- **에러 케이스**:
+  - 400: 프리뷰와 같음
+  - 428: `preview_token` 없음 (`preview_required: true`)
+  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
+- **비고**: **화면에서만 막고 엔드포인트가 열려 있으면 원칙이 반쪽이 된다**(ADR 0008).
+  지문은 대상의 id 뿐 아니라 금액과 현재 카드까지 넣어 만든다 — id 만 넣으면 그 사이
+  같은 거래가 다른 카드로 지정된 것을 못 잡는다.
+
+  재매핑 전체가 한 `action_id` 로 묶이고 `카드 재매핑 → <카드 이름>` 라벨이 붙어,
+  `/api/audit/undo` 로 통째로 되돌아간다.
+
 ### POST /api/card-products
 - **요청 파라미터**:
   - `payment_method_id`, `issuer`, `product_name`, `card_type` (required)
