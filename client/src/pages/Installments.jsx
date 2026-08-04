@@ -8,6 +8,7 @@ import DerivedTransactions from '../components/DerivedTransactions';
 import DuplicateCandidates from '../components/DuplicateCandidates';
 import InstallmentRegenerate from '../components/InstallmentRegenerate';
 import InstallmentBillingHint from '../components/InstallmentBillingHint';
+import InstallmentMonthsPicker from '../components/InstallmentMonthsPicker';
 import { useHashTarget } from '../hooks/useHashTarget';
 import { anchorId } from '../lib/derivedOrigin';
 
@@ -323,7 +324,14 @@ function InstallmentForm({ paymentMethods, categories, onSave, onCancel }) {
         </div>
         <div>
           <label htmlFor="inst-months" className="block text-xs text-caption mb-1">개월수 *</label>
-          <input id="inst-months" type="number" min="2" className={inp} value={form.months} onChange={e => set('months', e.target.value)} required />
+          <InstallmentMonthsPicker
+            value={form.months}
+            onChange={(v) => set('months', v)}
+            paymentMethodId={form.payment_method_id}
+            categoryId={form.category_id}
+            purchaseDate={form.purchase_date}
+            inputClassName={inp}
+          />
         </div>
         <div>
           <label htmlFor="inst-monthly-amount" className="block text-xs text-caption mb-1">월납부액 (원) *</label>

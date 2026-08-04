@@ -181,7 +181,51 @@ function findOverlapping(db, policy, excludeId = null) {
   return rows.find((r) => r.id !== excludeId && sameScope(r) && overlaps(r, policy)) || null;
 }
 
+// 이 카드(+카테고리)로 고를 수 있는 개월수 목록(#317).
+//
+// 실제 카드 결제창처럼 "이 카드는 2·3·6개월이 됩니다" 를 보여주기 위한 것이다.
+// 지금은 개월수가 자유 입력이라 카드사가 제공하지 않는 7개월 같은 값을 넣을 수
+// 있고, 그러면 그 뒤 계산이 전부 무의미해진다.
+//
+// 카테고리 예외가 있으면 그쪽이 이긴다 — policyAt 과 같은 우선순위여야 화면에서
+// 고른 개월수의 정책과 실제로 적용되는 정책이 어긋나지 않는다.
+//
+// 정책이 하나도 없으면 빈 배열이다. **그 경우를 오류로 다루지 않는다** — 정책을
+// 아직 등록하지 않은 사용자가 정상적으로 존재하고, 그때도 할부는 기록할 수
+// 있어야 한다(#317 B안). 자유 입력 폴백은 화면이 판단한다.
+function availableMonths(db, paymentMethodId, date, categoryId = null) {
+  const rows = db.prepare(`
+    SELECT * FROM card_installment_policies
+    WHERE payment_method_id = ?
+    ORDER BY months
+  `).all(paymentMethodId);
+
+  const effective = rows.filter((p) => isEffectiveOn(p, date));
+
+  // 개월수마다 하나만 남긴다. 카테고리 예외가 기본 정책을 덮는다.
+  const byMonths = new Map();
+  for (const p of effective) {
+    const isCategory = categoryId != null && p.category_id === categoryId;
+    const isBase = p.category_id == null;
+    if (!isCategory && !isBase) continue;   // 다른 카테고리 전용 정책은 무시
+
+    const prev = byMonths.get(p.months);
+    // 이미 카테고리 예외를 잡았으면 기본 정책으로 덮지 않는다.
+    if (prev && prev.source === 'category' && !isCategory) continue;
+    byMonths.set(p.months, {
+      months: p.months,
+      policy_type: p.policy_type,
+      annual_rate: p.annual_rate || 0,
+      free_from_sequence: p.free_from_sequence || 0,
+      source: isCategory ? 'category' : 'base',
+    });
+  }
+
+  return [...byMonths.values()].sort((a, b) => a.months - b.months);
+}
+
 module.exports = {
   isEffectiveOn, overlaps, validatePolicy, policyAt, resolvePolicy, findOverlapping,
+  availableMonths,
   expandRange, validateRange, RANGE_MONTH_MIN, RANGE_MONTH_MAX,
 };

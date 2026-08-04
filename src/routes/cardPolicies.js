@@ -5,7 +5,7 @@ const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { numericBody, missingFields } = require('../utils/validate');
 const {
-  validatePolicy, findOverlapping, policyAt, expandRange, validateRange,
+  validatePolicy, findOverlapping, policyAt, expandRange, validateRange, availableMonths,
 } = require('../services/cardPolicy');
 
 // 숫자 필드 선언(#211). 라우트 정의에 붙여 두면 어느 필드에 검증을 빠뜨렸는지
@@ -48,6 +48,28 @@ router.get('/effective', (req, res) => {
     }
     const found = policyAt(db, Number(payment_method_id), Number(months), on);
     res.json({ data: found });
+  } catch (e) {
+    serverError(res, e, 'cardPolicies');
+  }
+});
+
+// GET /api/card-policies/months?payment_method_id=&on=&category_id= — 고를 수 있는 개월수(#317)
+//
+// '/:id' 보다 먼저 선언해야 한다. 뒤에 두면 'months' 가 id 로 잡힌다.
+router.get('/months', (req, res) => {
+  try {
+    const { payment_method_id, on, category_id } = req.query;
+    if (!payment_method_id || !on) {
+      return res.status(400).json({ error: '결제수단과 기준일을 지정해 주세요.' });
+    }
+    const data = availableMonths(
+      db,
+      Number(payment_method_id),
+      on,
+      category_id ? Number(category_id) : null
+    );
+    // 빈 배열은 오류가 아니다. 정책 미등록도 정상 상태다(#317).
+    res.json({ data });
   } catch (e) {
     serverError(res, e, 'cardPolicies');
   }
