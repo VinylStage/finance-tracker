@@ -1,5 +1,4 @@
 'use strict';
-const { rebuildAuditTriggers } = require('./017-audit-triggers');
 
 // 계좌(통장) 엔티티(#288).
 //
@@ -45,12 +44,9 @@ function up(db) {
       ON payment_methods(account_id);
   `);
 
-  // 새 테이블은 감사 캡처 대상이다(#299). 트리거는 생성 시점의 테이블만 덮으므로
-  // 여기서 재생성해야 accounts 가 빠지지 않는다 — test/audit-coverage.test.js 가
-  // 이걸 빠뜨리면 실패한다.
-  //
-  // payment_methods 에 컬럼이 늘었으므로 그쪽 트리거도 새 컬럼을 잡도록 다시 만든다.
-  rebuildAuditTriggers(db);
+  // accounts 는 새 테이블이고 payment_methods 는 컬럼이 늘었으므로 둘 다 감사
+  // 트리거를 다시 만들어야 한다(#299). 그 재생성은 여기서 하지 않는다 —
+  // runMigrations 가 체인을 다 적용한 뒤 한 번에 책임진다(#346).
 }
 
 module.exports = { up };
