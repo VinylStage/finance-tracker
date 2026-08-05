@@ -1,7 +1,7 @@
 'use strict';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
+const { startTestServer } = require('./helpers/testServer');
 const path = require('node:path');
 const os = require('node:os');
 
@@ -14,8 +14,8 @@ const os = require('node:os');
 
 const PORT = 34627;
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let serverOutput = '';
+let server;
+let dbPath;
 
 async function api(method, url, body) {
   const res = await fetch(`${BASE}${url}`, {
@@ -53,27 +53,8 @@ function benefit(cardId, over = {}) {
 }
 
 before(async () => {
-  const dbPath = path.join(os.tmpdir(), `finance-benefits-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-
-  // 고정 대기는 느린 기계에서 흔들린다. 뜰 때까지 묻는다.
-  const deadline = Date.now() + 15000;
-  let up = false;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) { up = true; break; }
-    } catch { /* 아직 기동 전 */ }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (!up) throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
+  dbPath = server.dbPath;
 
   const pms = await api('GET', '/api/payment-methods');
   const pmRows = Array.isArray(pms.body) ? pms.body : pms.body.data;
@@ -84,7 +65,7 @@ before(async () => {
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
+  if (server) server.stop();
 });
 
 test('A-1. 혜택을 만들면 201 이고 id 가 온다', async () => {
