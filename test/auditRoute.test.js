@@ -180,3 +180,72 @@ test('D-3. 이력에 전체 건수가 함께 온다', async () => {
   assert.equal(res.body.data.length, 1);
   assert.ok(res.body.total > 1, `total 이 목록 길이만 반영한다: ${res.body.total}`);
 });
+
+// 아래 네 개는 커버리지에서 비어 있던 분기다. 기존 테스트가 limit·offset·actor 를
+// 항상 명시해 보내서 기본값이 한 번도 안 돌았고, 되돌릴 것이 없는 상태도 만들지
+// 않았다. 둘 다 사용자가 실제로 만나는 상태다 — 앱을 처음 켜면 이력이 비어 있다.
+
+test('E-1. 쿼리 없이 부르면 기본값이 적용된다', async () => {
+  const r = await api('GET', '/api/audit/log');
+  assert.strictEqual(r.status, 200);
+  assert.ok(Array.isArray(r.body.data), '목록이 배열이 아니다');
+  assert.ok(typeof r.body.total === 'number', '전체 건수가 없다');
+  // 기본 actor 는 'user' 다. 명시적으로 user 를 준 것과 결과가 같아야 하고,
+  // all 과는 달라야 한다 — 같으면 기본값이 걸러 주지 않는다는 뜻이다.
+  const asUser = await api('GET', '/api/audit/log?actor=user');
+  assert.strictEqual(r.body.total, asUser.body.total, '기본값이 user 와 다르게 동작한다');
+
+  // all 에는 import·migration 등 다른 actor 의 기록도 들어온다. 기본값이 걸러
+  // 주지 않으면 두 값이 같아진다.
+  const all = await api('GET', '/api/audit/log?actor=all');
+  assert.ok(
+    all.body.total > r.body.total,
+    `기본값이 걸러 주지 않는다. user=${r.body.total} all=${all.body.total}`
+  );
+  assert.ok(r.body.data.every((row) => row.actor === 'user'), '기본 조회에 다른 actor 가 섞였다');
+});
+
+test('E-2. limit 이 범위를 벗어나면 잘라 준다', async () => {
+  // 0 은 parseInt 결과가 falsy 라 `|| 50` 에 걸려 기본값이 된다. 클램프가 실제로
+  // 도는 것은 음수일 때다 — parseInt('-5') 는 truthy 라 Math.max(-5, 1) 로 간다.
+  const zero = await api('GET', '/api/audit/log?limit=0');
+  assert.strictEqual(zero.status, 200);
+  assert.ok(zero.body.data.length <= 50, `limit=0 은 기본값 50 이어야 한다: ${zero.body.data.length}`);
+
+  const neg = await api('GET', '/api/audit/log?limit=-5');
+  assert.strictEqual(neg.status, 200);
+  assert.strictEqual(neg.body.data.length, Math.min(1, neg.body.total), `음수 limit 이 1 로 안 잘렸다: ${neg.body.data.length}`);
+
+  const huge = await api('GET', '/api/audit/log?limit=99999');
+  assert.strictEqual(huge.status, 200);
+  assert.ok(huge.body.data.length <= 200, `limit 상한이 안 걸렸다: ${huge.body.data.length}`);
+
+  const bad = await api('GET', '/api/audit/log?limit=abc&offset=xyz');
+  assert.strictEqual(bad.status, 200, '숫자가 아닌 값에도 500 이 나면 안 된다');
+});
+
+test('E-3. 되돌릴 것이 없으면 undoable 이 null 이다', async () => {
+  const fresh = await startTestServer({ port: PORT + 1 });
+  try {
+    const r = await fetch(`${fresh.base}/api/audit/undoable`);
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(await r.json(), { undoable: null });
+  } finally {
+    fresh.stop();
+  }
+});
+
+test('E-4. 되돌릴 것이 없는데 undo 를 부르면 400 이다', async () => {
+  const fresh = await startTestServer({ port: PORT + 2 });
+  try {
+    const r = await fetch(`${fresh.base}/api/audit/undo`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    assert.strictEqual(r.status, 400);
+    const body = await r.json();
+    assert.ok(body.error, '거부 사유가 없다');
+    assert.ok(!body.error.includes('action_id'), `문구에 내부 필드명 노출: ${body.error}`);
+  } finally {
+    fresh.stop();
+  }
+});
