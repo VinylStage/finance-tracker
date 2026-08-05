@@ -21,6 +21,31 @@ const SHINHAN_CSV = [
   '2026.02.11,이마트,32000',
 ].join('\n');
 
+// 필수 입력이 빠졌을 때의 400 은 커버리지에서 비어 있었다(#448). 화면은 두 값을
+// 항상 채워 보내지만 API 는 직접 호출될 수 있고, 그때 나가는 문구다.
+test('POST /api/csv-import - 카드사나 CSV 가 빠지면 400 이고 저장되지 않는다', async () => {
+  for (const body of [
+    { csvText: SHINHAN_CSV },
+    { cardCompany: 'shinhan' },
+    { cardCompany: '', csvText: SHINHAN_CSV },
+  ]) {
+    const resp = await fetch(`${BASE}/api/csv-import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.strictEqual(resp.status, 400, `거부돼야 한다: ${JSON.stringify(body)}`);
+    const err = await resp.json();
+    assert.ok(err.error, '거부 사유가 없다');
+    for (const bad of ['cardCompany', 'csvText']) {
+      assert.ok(!err.error.includes(bad), `문구에 내부 필드명 노출: ${err.error}`);
+    }
+  }
+
+  const listResp = await fetch(`${BASE}/api/transactions`);
+  assert.strictEqual((await listResp.json()).total, 0, '거부됐는데 저장됐다');
+});
+
 test('POST /api/csv-import?preview=true - 저장 없이 신규/중복 건수만 반환', async () => {
   const resp = await fetch(`${BASE}/api/csv-import?preview=true`, {
     method: 'POST',

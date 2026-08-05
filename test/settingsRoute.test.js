@@ -52,4 +52,19 @@ test('settings 라우트 — GET 기본값 → PUT 갱신 → GET 반영 → 부
     body: JSON.stringify({ initial_balance: 'abc' }),
   });
   assert.strictEqual(badResp.status, 400);
+
+  // 같은 모양의 검증이 두 개인데 위 단언은 첫 번째만 지난다. 두 번째 분기는
+  // 커버리지에서 비어 있었다(#448). 한쪽만 보면 나머지가 조용히 사라져도 모른다.
+  const badIncome = await fetch(`${BASE}/api/settings`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ monthly_income: '삼백만원' }),
+  });
+  assert.strictEqual(badIncome.status, 400);
+  const body = await badIncome.json();
+  assert.ok(body.error, '거부 사유가 없다');
+  assert.ok(!body.error.includes('monthly_income'), `문구에 내부 필드명 노출: ${body.error}`);
+
+  // 거부됐으면 값도 안 바뀌어야 한다.
+  const afterBad = await (await fetch(`${BASE}/api/settings`)).json();
+  assert.strictEqual(afterBad.monthly_income, 3500000, '거부됐는데 값이 바뀌었다');
 });
