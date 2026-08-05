@@ -1,7 +1,7 @@
 'use strict';
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
+const { startTestServer } = require('./helpers/testServer');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -24,9 +24,7 @@ let otherCatId;
 
 const PORT = 34614;
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-let serverOutput = '';
+let server;
 
 async function json(pathname, options) {
   const r = await fetch(`${BASE}${pathname}`, {
@@ -37,24 +35,10 @@ async function json(pathname, options) {
 const post = (p, body) => json(p, { method: 'POST', body: JSON.stringify(body) });
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-months-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  const deadline = Date.now() + 15000;
-  let up = false;
-  while (Date.now() < deadline) {
-    try { const r = await fetch(`${BASE}/api/health`); if (r.ok) { up = true; break; } } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (!up) throw new Error(`서버가 15초 안에 기동하지 않음:\n${serverOutput}`);
-
-  // 픽스처는 같은 훅 안에서 세운다. node:test 는 같은 레벨의 before 를 여러 개
-  // 두면 뒤엣것이 앞엣것을 덮는다.
+  server = await startTestServer({ port: PORT });
+  
+  // 기존 before 안에 있던 나머지 준비 작업은 이 아래에 그대로 남긴다
+  const dbPath = server.dbPath;
   const pm = await post('/api/payment-methods', { name: '개월수테스트카드', type: '신용' });
   pmId = pm.body.id;
 
@@ -83,10 +67,7 @@ before(async () => {
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 const url = (extra = '') => `/api/card-policies/months?payment_method_id=${pmId}&on=2026-07-10${extra}`;
