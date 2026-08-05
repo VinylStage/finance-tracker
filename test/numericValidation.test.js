@@ -3,7 +3,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { numericBody, asInt } = require('../src/utils/validate');
+const { numericBody, asInt, toIdList } = require('../src/utils/validate');
 
 const ROOT = path.join(__dirname, '..');
 const ROUTES_DIR = path.join(ROOT, 'src/routes');
@@ -131,5 +131,41 @@ describe('numericBody validation declarations', () => {
     assert.strictEqual(asInt(true), null);
     assert.strictEqual(asInt([]), null);
     assert.strictEqual(asInt({}), null);
+  });
+});
+
+// id 목록 강제변환 — `ids.map(Number)` 이 만들던 구멍(2026-08-06 실측).
+//
+// `Number(true)` 는 `1`, `Number([2])` 는 `2`, `Number(null)` 은 `0` 이고 셋 다
+// `Number.isInteger` 를 통과한다. `DELETE /api/transactions` 가 그 목록을 그대로
+// `WHERE id IN (...)` 에 넣어서, `{ ids: [true] }` 로 부르면 **1번 거래가 지워지고
+// 200 이 돌아왔다.**
+describe('toIdList', () => {
+  test('강제변환으로 id 를 만들어내지 않는다', () => {
+    for (const bad of [true, false, null, undefined, '', ' ', [], [2], {}, '어제', NaN]) {
+      assert.deepStrictEqual(
+        toIdList([bad]), [],
+        `${JSON.stringify(bad)} 가 id 로 통과했다`
+      );
+    }
+  });
+
+  test('숫자와 숫자 문자열은 통과한다', () => {
+    assert.deepStrictEqual(toIdList([1, 2, 3]), [1, 2, 3]);
+    assert.deepStrictEqual(toIdList(['4', ' 5 ']), [4, 5]);
+    assert.deepStrictEqual(toIdList([7, '7']), [7], '중복은 하나로 합친다');
+  });
+
+  test('0 이하는 뺀다 — 매칭은 안 되지만 판정을 흐린다', () => {
+    // 통과시키면 "하나라도 유효하면 진행" 판정이 잘못 서서, 아무것도 안 지운
+    // 요청이 성공(200 deleted:0)으로 보인다. 사용자는 지워진 줄 안다.
+    assert.deepStrictEqual(toIdList([0, -1, -99]), []);
+    assert.deepStrictEqual(toIdList([0, 5]), [5]);
+  });
+
+  test('배열이 아니면 빈 목록', () => {
+    for (const v of [undefined, null, 'ids', 5, {}]) {
+      assert.deepStrictEqual(toIdList(v), []);
+    }
   });
 });

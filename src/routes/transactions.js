@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { asInt, missingFields, escapeLike } = require('../utils/validate');
+const { asInt, missingFields, escapeLike, toIdList } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
 const { resolvePeriod } = require('../utils/period');
@@ -275,7 +275,7 @@ router.delete('/', (req, res) => {
       return res.json({ ok: true, deleted });
     }
     if (Array.isArray(ids) && ids.length > 0) {
-      const validIds = ids.map(Number).filter(Number.isInteger);
+      const validIds = toIdList(ids);
       if (!validIds.length) return res.status(400).json({ error: '선택한 거래를 확인할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.' });
 
       // 선택 목록에 잠긴 거래가 섞이면 전체를 거부한다. 일부만 지우면 사용자가

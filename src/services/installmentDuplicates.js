@@ -1,4 +1,5 @@
 'use strict';
+const { toIdList } = require('../utils/validate');
 
 const crypto = require('node:crypto');
 
@@ -162,7 +163,7 @@ function resolveFingerprint(rows) {
  * 어긋난다 — 화면에서 못 고르게 막혀 있지만 API 를 직접 부를 수 있다.
  */
 function planResolve(db, ids) {
-  const unique = [...new Set((ids || []).map(Number).filter(Number.isInteger))];
+  const unique = toIdList(ids);
   if (!unique.length) return { rows: [], locked: [], missing: [], total: 0, fingerprint: null };
 
   const placeholders = unique.map(() => '?').join(',');
@@ -186,7 +187,7 @@ function planResolve(db, ids) {
 // 지우는 것만이 판단이 아니다. 둘 다 남겨 두기로 했는데 목록이 계속 같은 행을
 // 보여주면 사용자는 결국 목록 자체를 무시하게 된다.
 function dismiss(db, ids) {
-  const unique = [...new Set((ids || []).map(Number).filter(Number.isInteger))];
+  const unique = toIdList(ids);
   if (!unique.length) return 0;
   const stmt = db.prepare(
     'INSERT OR IGNORE INTO installment_duplicate_dismissals (transaction_id) VALUES (?)'
@@ -197,7 +198,7 @@ function dismiss(db, ids) {
 }
 
 function undismiss(db, ids) {
-  const unique = [...new Set((ids || []).map(Number).filter(Number.isInteger))];
+  const unique = toIdList(ids);
   if (!unique.length) return 0;
   const placeholders = unique.map(() => '?').join(',');
   return db.prepare(

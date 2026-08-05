@@ -7,6 +7,21 @@ function asInt(v) {
   return null;
 }
 
+// id 목록을 실제 id 로만 걸러 낸다.
+//
+// **`Array.prototype.map(Number)` 을 쓰면 안 된다.** `Number(true)` 는 `1`,
+// `Number([2])` 는 `2`, `Number(null)` 은 `0` 이라 전부 `Number.isInteger` 를
+// 통과한다. 그래서 `{ ids: [true] }` 로 부르면 **1번 거래가 지워지고 200 이
+// 돌아온다**(2026-08-06 실측). 사용자가 고른 적 없는 행이다.
+//
+// `asInt` 는 number 와 숫자 문자열만 통과시키므로 그 강제변환이 일어나지 않는다.
+// id 는 항상 양수라 0 이하도 뺀다 — 통과시켜도 매칭되진 않지만, 남겨 두면
+// "하나라도 유효하면 진행" 판정이 잘못 서서 빈 요청이 성공으로 보인다.
+function toIdList(ids) {
+  if (!Array.isArray(ids)) return [];
+  return [...new Set(ids.map(asInt).filter((n) => n !== null && n > 0))];
+}
+
 // body 에서 누락된 필수 키 목록을 반환 (undefined/null/'' 만 누락으로 본다).
 function missingFields(body, keys) {
   return keys.filter((k) => body[k] === undefined || body[k] === null || body[k] === '');
@@ -45,4 +60,5 @@ function numericBody(fields) {
   };
 }
 
-module.exports = { asInt, missingFields, escapeLike, numericBody };
+module.exports = {
+  toIdList, asInt, missingFields, escapeLike, numericBody };
