@@ -66,3 +66,98 @@ test('debts 라우트 — 생성/조회/이자흐름/이력조회/수정/삭제 
   const list3 = await (await fetch(`${BASE}/api/debts`)).json();
   assert.ok(!list3.data.some(d => d.id === id));
 });
+
+// 위 테스트는 성공 경로만 지난다. 사용자가 만나는 거부 경로가 통째로 비어 있었다
+// (분기 커버리지 69.5%). 아래는 그중 실제 로직인 것들이다 — catch 방어 블록은
+// DB 를 강제로 깨뜨려야 도달해서 제외했다.
+
+test('E-1. 없는 부채를 건드리면 404 다', async () => {
+  const gone = 999999;
+
+  const put = await fetch(`${BASE}/api/debts/${gone}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ balance: 1000 }),
+  });
+  const putBody = await put.json();
+  assert.strictEqual(put.status, 404, JSON.stringify(putBody));
+  assert.ok(putBody.error, '거부 사유가 없다');
+
+  const interest = await fetch(`${BASE}/api/debts/${gone}/interest`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rate: 5, interest_amount: 100, log_date: '2026-01-01' }),
+  });
+  const interestBody = await interest.json();
+  assert.strictEqual(interest.status, 404, JSON.stringify(interestBody));
+  assert.ok(interestBody.error, '거부 사유가 없다');
+});
+
+test('E-2. 생성에 이름이나 잔액이 없으면 400 이다', async () => {
+  for (const body of [{ balance: 1000 }, { name: '이름만' }, { name: '', balance: 1000 }]) {
+    const r = await fetch(`${BASE}/api/debts`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.strictEqual(r.status, 400, `거부돼야 한다: ${JSON.stringify(body)}`);
+    const err = await r.json();
+    assert.ok(err.error, '거부 사유가 없다');
+    for (const bad of ['balance', 'name']) {
+      assert.ok(!err.error.includes(bad), `문구에 내부 필드명 노출: ${err.error}`);
+    }
+  }
+});
+
+test('E-3. 이자 기록에 필수 값이 빠지면 400 이고 잔액이 안 바뀐다', async () => {
+  const created = await fetch(`${BASE}/api/debts`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '거부검증부채', balance: 500000, annual_rate: 5 }),
+  });
+  const { id } = await created.json();
+
+  const cases = [
+    { name: '이자율 없음', body: { interest_amount: 1000, log_date: '2026-01-01' } },
+    { name: '금액 없음', body: { rate: 5, log_date: '2026-01-01' } },
+    { name: '기록일 없음', body: { rate: 5, interest_amount: 1000 } },
+    { name: '이자율이 범위 밖', body: { rate: -3, interest_amount: 1000, log_date: '2026-01-01' } },
+  ];
+  for (const c of cases) {
+    const r = await fetch(`${BASE}/api/debts/${id}/interest`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(c.body),
+    });
+    assert.strictEqual(r.status, 400, `${c.name}: 거부돼야 한다`);
+  }
+
+  // 전부 거부됐으니 잔액은 그대로여야 한다. 400 만 보면 거부하고도 쓰는 경우를 놓친다.
+  const list = await (await fetch(`${BASE}/api/debts`)).json();
+  const after = list.data.find((d) => d.id === id);
+  assert.strictEqual(after.balance, 500000, '거부됐는데 잔액이 바뀌었다');
+});
+
+test('E-4. 금리 조회는 날짜 형식을 본다', async () => {
+  const created = await fetch(`${BASE}/api/debts`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '금리조회부채', balance: 100000, annual_rate: 4.17 }),
+  });
+  const { id } = await created.json();
+
+  for (const date of ['', '2026-1-1', '20260101', 'abc']) {
+    const r = await fetch(`${BASE}/api/debts/${id}/rate-on?date=${encodeURIComponent(date)}`);
+    assert.strictEqual(r.status, 400, `형식이 틀렸는데 통과했다: "${date}"`);
+  }
+
+  const ok = await fetch(`${BASE}/api/debts/${id}/rate-on?date=2026-01-01`);
+  assert.strictEqual(ok.status, 200, await ok.text());
+});
+
+test('E-5. 없는 상환 기록을 지우면 404 다', async () => {
+  const created = await fetch(`${BASE}/api/debts`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '상환삭제부채', balance: 100000 }),
+  });
+  const { id } = await created.json();
+
+  const r = await fetch(`${BASE}/api/debts/${id}/repayments/999999`, { method: 'DELETE' });
+  const err = await r.json();
+  assert.strictEqual(r.status, 404, JSON.stringify(err));
+  assert.ok(err.error, '거부 사유가 없다');
+});
