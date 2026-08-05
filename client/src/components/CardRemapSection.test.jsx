@@ -44,8 +44,13 @@ const PLAN = {
   target: { id: 10, product_name: '하나 A', payment_method_name: '하나카드' },
   count: 260,
   already_assigned: 0,
+  billing_month_filled: 0,
+  billing_month_cleared: 0,
   samples: [
-    { id: 1, date: '2026-03-02', merchant: '스타벅스', amount: -4500, before: null, after: '하나 A' },
+    {
+      id: 1, date: '2026-03-02', merchant: '스타벅스', amount: -4500, before: null, after: '하나 A',
+      billing_month_before: null, billing_month_after: null,
+    },
   ],
   preview_token: 'token-260',
   remaining_unassigned: 265,
@@ -290,5 +295,72 @@ describe('F. 실행 뒤', () => {
     await user.click(await screen.findByText('확인'));
 
     expect(await screen.findByText(/다시 확인하고 옮겨 주세요/)).toBeTruthy();
+  });
+});
+
+// 재매핑은 카드 지정만 바꾸는 게 아니다. `card_product_id` 는 청구월의 입력이라
+// 카드가 바뀌면 **카드값이 언제 빠지는지**가 같이 달라진다(#289).
+//
+// 건수만 물으면 사용자는 무엇을 승인하는지 모른 채 승인한다. ADR 0008 이
+// 프리뷰에 "부작용" 을 요구하는 이유가 이것이다.
+describe('G. 청구월이 함께 바뀐다는 것을 알린다', () => {
+  it('G-1. 채워지는 청구월 건수를 프리뷰가 말한다', async () => {
+    const user = userEvent.setup();
+    post.mockResolvedValue({ ...PLAN, billing_month_filled: 260 });
+    setup();
+    await pickCard(user);
+
+    expect(await screen.findByText(/청구월 260건이 채워져요/)).toBeTruthy();
+  });
+
+  it('G-2. 지워지는 청구월은 이유까지 말한다 — 사용자가 고칠 수 있어야 한다', async () => {
+    const user = userEvent.setup();
+    post.mockResolvedValue({ ...PLAN, billing_month_cleared: 7 });
+    setup();
+    await pickCard(user);
+
+    expect(await screen.findByText(/청구월 7건이 지워져요/)).toBeTruthy();
+    expect(await screen.findByText(/결제일·마감일을/)).toBeTruthy();
+  });
+
+  it('G-3. 확인 창이 청구월 변화를 말한다', async () => {
+    const user = userEvent.setup();
+    post.mockResolvedValue({ ...PLAN, billing_month_filled: 260 });
+    setup();
+    await pickCard(user);
+    await user.click(await screen.findByText('옮기기'));
+
+    // 프리뷰 문단에도 같은 문구가 있으므로 확인 창의 문장 전체로 찍어야
+    // "대화상자가 말했다" 를 실제로 재는 것이 된다.
+    expect(await screen.findByText(
+      /260건을 '하나 A' 로 옮길까요\? 청구월 260건이 채워져요\./
+    )).toBeTruthy();
+  });
+
+  it('G-4. 바뀌지 않으면 청구월 이야기를 꺼내지 않는다', async () => {
+    const user = userEvent.setup();
+    setup();
+    await pickCard(user);
+    await screen.findByText(/260건이 바뀌어요/);
+
+    expect(screen.queryByText(/청구월/)).toBe(null);
+  });
+
+  it('G-5. 대표 사례에 청구월 전 → 후가 나온다', async () => {
+    const user = userEvent.setup();
+    post.mockResolvedValue({
+      ...PLAN,
+      billing_month_filled: 1,
+      samples: [{
+        id: 1, date: '2026-05-15', merchant: '스타벅스', amount: -4500,
+        before: null, after: '하나 A',
+        billing_month_before: null, billing_month_after: '2026-06',
+      }],
+    });
+    setup();
+    await pickCard(user);
+
+    expect(await screen.findByText(/청구월 없음 →/)).toBeTruthy();
+    expect(await screen.findByText('2026-06')).toBeTruthy();
   });
 });
