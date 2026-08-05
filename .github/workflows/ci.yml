@@ -27,6 +27,17 @@ jobs:
       # 브라우저에서 ReferenceError 로 죽은 적이 있다. 여기가 그 자리를 막는다.
       - name: Lint (no-undef)
         run: npm run lint
+      # 릴리즈 아티팩트가 main 과 어긋난 채로 develop 이 굴러가면, develop → main
+      # 릴리즈 PR 에서 네 파일이 충돌하고 소유자 bypass 를 쓰게 된다
+      # (CONTRIBUTING.md 조건 1번). 세 릴리즈 연속 놓쳤던 자리라 사람 기억 대신
+      # 여기서 막는다. develop 대상 PR 에서만 돈다 — 릴리즈 PR 은 버전을 올리는
+      # 것이 목적이므로 검사 대상이 아니다.
+      - name: Release artifacts in sync with main
+        if: github.base_ref == 'develop'
+        run: |
+          git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main
+          ./scripts/check-release-sync.sh
+
       - name: Audit dependencies (root)
         run: npm audit --audit-level=high
       - name: Audit dependencies (client)

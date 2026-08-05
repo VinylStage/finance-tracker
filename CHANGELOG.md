@@ -5,6 +5,120 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/VinylStage/finance-tracker/compare/v0.8.0...v0.9.0) (2026-07-29)
+
+
+### Features
+
+* **ui:** Pretendard 한글·라틴 고빈도 서브셋 self-host ([#244](https://github.com/VinylStage/finance-tracker/issues/244)) ([#252](https://github.com/VinylStage/finance-tracker/issues/252)) ([0fc9d32](https://github.com/VinylStage/finance-tracker/commit/0fc9d32540f362bba97311775cf55f8d0a5f9090))
+* **ui:** 모바일 하단 탭바를 인라인 SVG 아이콘으로 재구성 ([#246](https://github.com/VinylStage/finance-tracker/issues/246)) ([#262](https://github.com/VinylStage/finance-tracker/issues/262)) ([c5424bb](https://github.com/VinylStage/finance-tracker/commit/c5424bb35ee042009790a773dcab6a291598ce2b))
+* **ui:** 설정 페이지 좌측 앵커 목차 ([#245](https://github.com/VinylStage/finance-tracker/issues/245)) ([#260](https://github.com/VinylStage/finance-tracker/issues/260)) ([d7fdffb](https://github.com/VinylStage/finance-tracker/commit/d7fdffb69af545edab44777508b9a353ed6e9805))
+* **ui:** 시각 디자인 토큰 체계 전면 교체 ([#240](https://github.com/VinylStage/finance-tracker/issues/240)) ([#248](https://github.com/VinylStage/finance-tracker/issues/248)) ([892bc7e](https://github.com/VinylStage/finance-tracker/commit/892bc7e7453b19a9913ff46720fd834d2dd1843e))
+* **ui:** 인라인 SVG 아이콘 기반 도입 ([#244](https://github.com/VinylStage/finance-tracker/issues/244)) ([#251](https://github.com/VinylStage/finance-tracker/issues/251)) ([fa18bed](https://github.com/VinylStage/finance-tracker/commit/fa18bed9fd08a715c30142c20f5f85c37425ba85))
+* **ui:** 일별 지출 강도 캘린더 히트맵 ([#242](https://github.com/VinylStage/finance-tracker/issues/242)) ([#259](https://github.com/VinylStage/finance-tracker/issues/259)) ([6ae544d](https://github.com/VinylStage/finance-tracker/commit/6ae544d7a19074121d181e82357a1ece0a7f9986))
+* **ui:** 자금 흐름 100% 스택 바와 목록 ([#241](https://github.com/VinylStage/finance-tracker/issues/241)) ([#261](https://github.com/VinylStage/finance-tracker/issues/261)) ([a8542a5](https://github.com/VinylStage/finance-tracker/commit/a8542a5b23c0258aa4859b5a0a158da76c7d0978))
+* **ui:** 카테고리 아이콘 배선과 남은 이모지 제거 ([#244](https://github.com/VinylStage/finance-tracker/issues/244), [#254](https://github.com/VinylStage/finance-tracker/issues/254)) ([#256](https://github.com/VinylStage/finance-tracker/issues/256)) ([410556c](https://github.com/VinylStage/finance-tracker/commit/410556c4465743949f36a5d6bdaa7be77e15273d))
+
+
+### Bug Fixes
+
+* 스택 PR 이 잘못된 base 로 머지돼 누락된 모듈 복구 ([#241](https://github.com/VinylStage/finance-tracker/issues/241), [#242](https://github.com/VinylStage/finance-tracker/issues/242)) ([#253](https://github.com/VinylStage/finance-tracker/issues/253)) ([af53eb1](https://github.com/VinylStage/finance-tracker/commit/af53eb1dfc067622a34a34eea286d9ec7389b04e))
+
+
+### Maintenance
+
+* **release:** develop → main 릴리즈 (시각 디자인 리뉴얼 사이클) ([037e1b5](https://github.com/VinylStage/finance-tracker/commit/037e1b539a81c8bf42b018da330f782c3fbed33b))
+
+
+### Documentation
+
+* **audit:** 미시정 결함 재현 상세를 비공개 저장소로 분리 ([#205](https://github.com/VinylStage/finance-tracker/issues/205)) ([#255](https://github.com/VinylStage/finance-tracker/issues/255)) ([208c711](https://github.com/VinylStage/finance-tracker/commit/208c7113cca63ac44aaad04b057664064c714691))
+* **audit:** 설계 절충 예외 대장을 신설하고 line-strong 미달을 등재 ([#247](https://github.com/VinylStage/finance-tracker/issues/247)) ([#263](https://github.com/VinylStage/finance-tracker/issues/263)) ([8969a61](https://github.com/VinylStage/finance-tracker/commit/8969a61c6108765112a759842d3e2dfad3955396))
+
+## [0.8.0](https://github.com/VinylStage/finance-tracker/compare/v0.7.0...v0.8.0) (2026-07-28)
+
+
+### Features
+
+* **ui:** IA 5그룹 재구성 + wouter URL 라우팅 도입 ([#215](https://github.com/VinylStage/finance-tracker/issues/215)) ([8a43bf3](https://github.com/VinylStage/finance-tracker/commit/8a43bf33ace4ec11365b0ad9a031204cf089caa8))
+* **ui:** 거래 빠른입력 UX 개선 — 모달 전환·최근 가맹점 원탭·잔여예산 인라인 ([#224](https://github.com/VinylStage/finance-tracker/issues/224)) ([f175cc4](https://github.com/VinylStage/finance-tracker/commit/f175cc486e1fb829e68923d0c23d64ab457096ee)), closes [#196](https://github.com/VinylStage/finance-tracker/issues/196)
+* **ui:** 거래 테이블 모바일 카드뷰 전환 — 컬럼 숨김 제거 ([#216](https://github.com/VinylStage/finance-tracker/issues/216)) ([1db9a6a](https://github.com/VinylStage/finance-tracker/commit/1db9a6ac06764cf680ae7802999abcac7d708856))
+* **ui:** 다크모드 도입 ([#201](https://github.com/VinylStage/finance-tracker/issues/201)) ([#227](https://github.com/VinylStage/finance-tracker/issues/227)) ([a2fdae3](https://github.com/VinylStage/finance-tracker/commit/a2fdae3504f82d6431dad5c9a2cd499679a26613))
+* **ui:** 대시보드 하위 섹션 기본 접힘 처리 ([#219](https://github.com/VinylStage/finance-tracker/issues/219)) ([eb11fdb](https://github.com/VinylStage/finance-tracker/commit/eb11fdb3b5a2c6020943f2bb7bbe1732250dea4c))
+* **ui:** 시맨틱 디자인 토큰 시스템 도입 ([#213](https://github.com/VinylStage/finance-tracker/issues/213)) ([c77cd49](https://github.com/VinylStage/finance-tracker/commit/c77cd49b2c63b7546bd9d277c7a6b3ff1c94cdb0))
+* **ui:** 신뢰 마이크로카피 + 마지막 내보내기 시각 표시 ([#222](https://github.com/VinylStage/finance-tracker/issues/222)) ([c18c158](https://github.com/VinylStage/finance-tracker/commit/c18c158020cd64faf122ae1ec90b2039d1b531af))
+* **ui:** 예산 진행바 손실회피 프레이밍 3단계 전환 ([#217](https://github.com/VinylStage/finance-tracker/issues/217)) ([e90f601](https://github.com/VinylStage/finance-tracker/commit/e90f601ae3c131a908c8f99d31004346b6b6ff76))
+* **ui:** 저축 목표 진행바 goal-gradient 도입 ([#220](https://github.com/VinylStage/finance-tracker/issues/220)) ([726fb0c](https://github.com/VinylStage/finance-tracker/commit/726fb0c8bb92254dda1b4570d084a2c4c13ad915)), closes [#200](https://github.com/VinylStage/finance-tracker/issues/200)
+* **ui:** 최초 실행 온보딩 + 공통 EmptyState 도입 ([#223](https://github.com/VinylStage/finance-tracker/issues/223)) ([5b4c7bf](https://github.com/VinylStage/finance-tracker/commit/5b4c7bf6e894d0ffe76ba4039bc3c695f919fe06)), closes [#197](https://github.com/VinylStage/finance-tracker/issues/197)
+* **ui:** 카테고리별 지출 랭킹 막대 기본 뷰 + 파이 Top5 캡핑 ([#218](https://github.com/VinylStage/finance-tracker/issues/218)) ([604e5aa](https://github.com/VinylStage/finance-tracker/commit/604e5aa99b4166bbe1796cf4faa5d0fe35450d4e))
+
+
+### Bug Fixes
+
+* **a11y:** 카테고리 대분류를 색상+아이콘+텍스트 3중 인코딩으로 전환 ([#214](https://github.com/VinylStage/finance-tracker/issues/214)) ([a1b7c0d](https://github.com/VinylStage/finance-tracker/commit/a1b7c0d840d4403c44e6f9e48ba6fc41c7b740f3))
+* **ui:** CSP 가 막던 다크모드 부트스트랩을 외부 스크립트로 분리 ([#228](https://github.com/VinylStage/finance-tracker/issues/228)) ([#229](https://github.com/VinylStage/finance-tracker/issues/229)) ([67bd82e](https://github.com/VinylStage/finance-tracker/commit/67bd82e82661766b812bf670556b58cfd924da2f))
+* 사용자에게 노출되던 개발자용 에러 메시지 정리 ([#231](https://github.com/VinylStage/finance-tracker/issues/231)) ([#232](https://github.com/VinylStage/finance-tracker/issues/232)) ([3b59c3f](https://github.com/VinylStage/finance-tracker/commit/3b59c3fe831e35412f71490819791ea9d6175a1e))
+* 숫자 필드 검증을 선언적 미들웨어로 전환 ([#211](https://github.com/VinylStage/finance-tracker/issues/211)) ([#233](https://github.com/VinylStage/finance-tracker/issues/233)) ([3bf38f0](https://github.com/VinylStage/finance-tracker/commit/3bf38f09beb0cb87d618b8be2dc5bd6532cbee57))
+
+
+### Maintenance
+
+* **process:** 문서 변경 승인 게이트(confirm-chain) 배선 ([#209](https://github.com/VinylStage/finance-tracker/issues/209)) ([8d25a21](https://github.com/VinylStage/finance-tracker/commit/8d25a21503bb74b5c49932c148d82ef41337b24f))
+
+
+### Documentation
+
+* **audit:** 2라운드 PDCA 교차검토 — A1 판정 정정 + 신규결함 3건 근본원인 ([#207](https://github.com/VinylStage/finance-tracker/issues/207)) ([74eef24](https://github.com/VinylStage/finance-tracker/commit/74eef243679612beb6999801604f2969cacaa370))
+* **audit:** 2차 독립 감사 보고서 — 루브릭 21항목 실측 재판정 (R2) ([#204](https://github.com/VinylStage/finance-tracker/issues/204)) ([33bda4d](https://github.com/VinylStage/finance-tracker/commit/33bda4dc9ec0dc9f040a1dcf4d495951e684cf05))
+* **audit:** 루브릭에 위협모델 예외 판정 절차 명문화 — N/A 대신 Pass/Partial 흡수 ([#208](https://github.com/VinylStage/finance-tracker/issues/208)) ([3f67ddd](https://github.com/VinylStage/finance-tracker/commit/3f67dddc2ba786f717255a5a728288dc6b7ae7f1))
+* UI/UX 개편 설계 문서 추가 ([#203](https://github.com/VinylStage/finance-tracker/issues/203)) ([3374ad4](https://github.com/VinylStage/finance-tracker/commit/3374ad461b0c3097102c013ed47b75646319fd2b))
+* 개발팀 자체평가(2라운드) — 독립 감사와 병행 ([#187](https://github.com/VinylStage/finance-tracker/issues/187)) ([5ebd030](https://github.com/VinylStage/finance-tracker/commit/5ebd030058a78ae3b7ac79a63c5a3c8d5856aa3d))
+* 마이크로카피/보이스톤 가이드 신설 ([#221](https://github.com/VinylStage/finance-tracker/issues/221)) ([633d83b](https://github.com/VinylStage/finance-tracker/commit/633d83bf4b180ea363e728d7a7e4769293a1cd54)), closes [#202](https://github.com/VinylStage/finance-tracker/issues/202)
+* 인증·세션 전략 ADR 신설 ([#189](https://github.com/VinylStage/finance-tracker/issues/189)) ([#230](https://github.com/VinylStage/finance-tracker/issues/230)) ([c334263](https://github.com/VinylStage/finance-tracker/commit/c3342634f10b6636ded21edd7abd3138c4e482a0))
+
+## [0.7.0](https://github.com/VinylStage/finance-tracker/compare/v0.6.0...v0.7.0) (2026-07-26)
+
+
+### Features
+
+* **#153:** Lighthouse 3회 측정 스크립트 도입, 성능 기준선 기록(C1~C3) ([#182](https://github.com/VinylStage/finance-tracker/issues/182)) ([275674a](https://github.com/VinylStage/finance-tracker/commit/275674aa79778700d616828f54f036ecba2c418b))
+* M5 잔여 이슈 3건 — 라우트 테스트/할부 자동완료/데이터 무결성/커버리지 계측 ([#183](https://github.com/VinylStage/finance-tracker/issues/183)) ([4f5cf46](https://github.com/VinylStage/finance-tracker/commit/4f5cf46594791b418b90a620b92489e56ab2963c))
+
+
+### Bug Fixes
+
+* **#139:** 거래내역 500건 클램프 근본해결 — 검색·집계 서버 파라미터화 (A안) ([#171](https://github.com/VinylStage/finance-tracker/issues/171)) ([9ca9efe](https://github.com/VinylStage/finance-tracker/commit/9ca9efe78ba6c63c2c5430e361ea526f700cc7f9))
+* **#140:** 설정 복원을 DELETE+INSERT에서 UPSERT로 전환, 확인 토큰 추가 ([#167](https://github.com/VinylStage/finance-tracker/issues/167)) ([6fb7b37](https://github.com/VinylStage/finance-tracker/commit/6fb7b3752b18bfb043abeb45621cc70719e09b56))
+* **#141:** 할부 청구액 계산을 대시보드와 통일, 집계 규칙/날짜 헬퍼 중복 제거 ([#168](https://github.com/VinylStage/finance-tracker/issues/168)) ([5174ffb](https://github.com/VinylStage/finance-tracker/commit/5174ffb9a0a1acf6f4baed547ff97f3e21b31495))
+* **#142:** 리볼빙/부채/백업임포트 금액 필드에 asInt 검증 적용 ([#169](https://github.com/VinylStage/finance-tracker/issues/169)) ([0cc89f8](https://github.com/VinylStage/finance-tracker/commit/0cc89f8a4987e900e808b6f355d61c94d08fe0f5))
+* **#143:** 할부 경과월 계산의 UTC 'now' 의존 제거(KST 자정~9시 오차) ([#170](https://github.com/VinylStage/finance-tracker/issues/170)) ([6874c1c](https://github.com/VinylStage/finance-tracker/commit/6874c1cceee594ca96c26a17e437102a1f953442))
+* **#144:** cashflow.js의 N+1 쿼리 제거, transactions.js와 rangeTotalsByDate 공유 ([#172](https://github.com/VinylStage/finance-tracker/issues/172)) ([64a35b1](https://github.com/VinylStage/finance-tracker/commit/64a35b1825bf2367f706364a2bfd06b72362853c))
+* **#145:** 비sargable WHERE를 범위 비교로 재작성, installments 인덱스 추가 ([#173](https://github.com/VinylStage/finance-tracker/issues/173)) ([36728f8](https://github.com/VinylStage/finance-tracker/commit/36728f84f8d8ffcacf8a890463346205dd04e3d0))
+* **#146:** /api/* 전용 404 핸들러 추가 ([#174](https://github.com/VinylStage/finance-tracker/issues/174)) ([4250bd4](https://github.com/VinylStage/finance-tracker/commit/4250bd46339cf5a4f56ae883e81fd5ef8e371b3c))
+* **#147:** GET /api/settings가 내부 에러 메시지를 노출하던 문제 수정 ([#175](https://github.com/VinylStage/finance-tracker/issues/175)) ([628983b](https://github.com/VinylStage/finance-tracker/commit/628983b72c91b238e6ffc9c5b4f5a67895003848))
+* **#150:** stocks.js가 모든 에러를 "미활성화"로 삼키고 로깅 안 하던 문제 수정 ([#176](https://github.com/VinylStage/finance-tracker/issues/176)) ([fdd96a1](https://github.com/VinylStage/finance-tracker/commit/fdd96a15c82329864303a20a959c06596fe29033))
+* **#151:** 폼 입력요소 79개 전체에 접근성 라벨 부여(FND-21) ([#180](https://github.com/VinylStage/finance-tracker/issues/180)) ([996c84c](https://github.com/VinylStage/finance-tracker/commit/996c84c5a9946a7e681cce53b9e6cbeef271dde4))
+* **ci:** 문법검사 게이트가 실패를 감지하지 못하는 문제 수정 ([#133](https://github.com/VinylStage/finance-tracker/issues/133)) ([#155](https://github.com/VinylStage/finance-tracker/issues/155)) ([c644282](https://github.com/VinylStage/finance-tracker/commit/c644282a008d3a118ef3fce39b714fd5ee3c18b5))
+* **security:** CSRF 방어 미들웨어 도입 ([#134](https://github.com/VinylStage/finance-tracker/issues/134)) ([#158](https://github.com/VinylStage/finance-tracker/issues/158)) ([2c660f1](https://github.com/VinylStage/finance-tracker/commit/2c660f1743ce87f3d8661a40cd1043437ec2584f))
+* **security:** export 라우트 Content-Disposition 헤더 인젝션 방지 ([#137](https://github.com/VinylStage/finance-tracker/issues/137)) ([#161](https://github.com/VinylStage/finance-tracker/issues/161)) ([aa0200f](https://github.com/VinylStage/finance-tracker/commit/aa0200f89451f1b72089be935dd9ff24b3674f53))
+* **security:** 보안 헤더 추가 + 전역 에러 미들웨어 + React ErrorBoundary ([#135](https://github.com/VinylStage/finance-tracker/issues/135)) ([#159](https://github.com/VinylStage/finance-tracker/issues/159)) ([a873ddd](https://github.com/VinylStage/finance-tracker/commit/a873dddd2ac72934f490e71bb49abbe45c5620b6))
+* **security:** 카드 임포트 업로드 파일 크기/형식 제한 ([#136](https://github.com/VinylStage/finance-tracker/issues/136)) ([#160](https://github.com/VinylStage/finance-tracker/issues/160)) ([0acf6f6](https://github.com/VinylStage/finance-tracker/commit/0acf6f6da383d427e58a7e5c497e3c12000434da))
+
+
+### Maintenance
+
+* **deps-dev:** bump @vitejs/plugin-react in /client ([#166](https://github.com/VinylStage/finance-tracker/issues/166)) ([8e59306](https://github.com/VinylStage/finance-tracker/commit/8e59306be221dd4540da12d28d3b1062a2f2cbf7))
+* **deps:** bump react-dom from 19.2.7 to 19.2.8 in /client ([#163](https://github.com/VinylStage/finance-tracker/issues/163)) ([17cf158](https://github.com/VinylStage/finance-tracker/commit/17cf158c5ccdd6dca22f6bdbd6559045d1e5a9d7))
+* **deps:** bump recharts from 3.10.0 to 3.10.1 in /client ([#165](https://github.com/VinylStage/finance-tracker/issues/165)) ([0e57fde](https://github.com/VinylStage/finance-tracker/commit/0e57fde99b2bd7b8d657dd098894e0eb3c97fdeb))
+* **security:** 공급망 게이트 추가 — dependabot.yml + CI npm audit ([#138](https://github.com/VinylStage/finance-tracker/issues/138)) ([#162](https://github.com/VinylStage/finance-tracker/issues/162)) ([647f858](https://github.com/VinylStage/finance-tracker/commit/647f85819ebef138d079b7e668686b41de4a903e))
+
+
+### Documentation
+
+* **#149:** 핵심 문서 3종의 라우트/페이지 목록을 코드 기준으로 갱신 ([#179](https://github.com/VinylStage/finance-tracker/issues/179)) ([fb2860b](https://github.com/VinylStage/finance-tracker/commit/fb2860b023ffa34c53aa973eb976ad267f3092a4))
+* **audit:** 2026-07 사이클1 독립 코드 감사 보고서 추가 ([4c40ccf](https://github.com/VinylStage/finance-tracker/commit/4c40ccf78f27bca891e4f83b80061273b34abdae))
+* **audit:** PDCA 1라운드 교차검토 — 감사팀↔개발팀 양방향 재검토 ([#184](https://github.com/VinylStage/finance-tracker/issues/184)) ([78cf793](https://github.com/VinylStage/finance-tracker/commit/78cf793e57236f64df1034ab44a7532062386cb2))
+
 ## [0.6.0](https://github.com/VinylStage/finance-tracker/compare/v0.5.0...v0.6.0) (2026-07-25)
 
 
