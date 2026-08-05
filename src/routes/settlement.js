@@ -32,6 +32,11 @@ router.post('/reclassify/preview', numericBody(NUMERIC), (req, res) => {
     res.json({
       target: plan.target,
       count: plan.count,
+      // 결제 방식이 바뀌면 청구월도 다시 정해진다(#289). `settlement` 은
+      // `billing_month` 의 입력이라, 건수만 말하고 넘어가면 사용자는 결제 방식만
+      // 바뀌는 줄 알고 승인한다 — ADR 0008 이 프리뷰에 요구하는 "부작용" 이다.
+      billing_month_filled: plan.billing_month_filled,
+      billing_month_cleared: plan.billing_month_cleared,
       samples: plan.samples,
       // 잔액이 어떻게 달라지는지(#289 의 명시 요건). 계좌별로 낸다 — 합계만
       // 주면 어느 통장 이야기인지 알 수 없어 사용자가 대조할 수 없다.

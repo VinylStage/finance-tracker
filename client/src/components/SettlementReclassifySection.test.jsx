@@ -27,8 +27,14 @@ const METHODS = [
 const PLAN = {
   target: { settlement: 'deferred', payment_method_id: 1, payment_method_name: '신용카드' },
   count: 3,
+  billing_month_filled: 0,
+  billing_month_cleared: 0,
   samples: [
-    { id: 11, date: '2026-07-05', merchant: '스타벅스', amount: 30000, before: 'immediate', after: 'deferred' },
+    {
+      id: 11, date: '2026-07-05', merchant: '스타벅스', amount: 30000,
+      before: 'immediate', after: 'deferred',
+      billing_month_before: null, billing_month_after: null,
+    },
   ],
   impact: [{
     accountId: 7, accountName: '주거래통장',
@@ -213,5 +219,66 @@ describe('D. 조사', () => {
     expect(withRo(null)).toBe('로');
     expect(withRo('')).toBe('로');
     expect(withRo(undefined)).not.toContain('undefined');
+  });
+});
+
+// 재분류는 `settlement` 을 바꾼다. 그런데 그 값은 `billing_month` 의 **입력**이라
+// (#289) 카드값이 **언제 빠지는지**가 같이 정해진다.
+//
+// 잔액 변화만 보여주면 사용자는 그 사실을 모른 채 승인한다. 이 도구의 목적이
+// "통장 잔액과 카드 미결제액을 맞추는 것" 인데, 청구월이 안 채워지면 추이 계산이
+// 여전히 그 돈을 못 본다 — 절반만 한 셈이 된다.
+describe('E. 청구월이 함께 바뀐다는 것을 알린다', () => {
+  it('E-1. 채워지는 청구월 건수를 프리뷰가 말한다', async () => {
+    post.mockResolvedValue({ ...PLAN, billing_month_filled: 3 });
+    setup();
+    await pickMethod();
+
+    expect(await screen.findByText(/청구월 3건이 채워져요/)).toBeTruthy();
+  });
+
+  it('E-2. 지워지는 청구월은 이유까지 말한다', async () => {
+    post.mockResolvedValue({ ...PLAN, billing_month_cleared: 3 });
+    setup();
+    await pickMethod();
+
+    expect(await screen.findByText(/청구월 3건이 지워져요/)).toBeTruthy();
+    expect(await screen.findByText(/카드 사용이 아니게 되면/)).toBeTruthy();
+  });
+
+  it('E-3. 확인 문구에도 들어간다 — 승인하는 것이 무엇인지 알아야 한다', async () => {
+    post.mockResolvedValue({ ...PLAN, billing_month_filled: 3 });
+    setup();
+    await pickMethod();
+    await screen.findByText(/3건을/);
+
+    await userEvent.click(screen.getByRole('button', { name: /3건 바꾸기/ }));
+
+    const dialog = await screen.findByText(/바꿀까요\?/);
+    expect(dialog.textContent).toContain('청구월 3건이 채워져요');
+  });
+
+  it('E-4. 안 바뀌면 청구월 이야기를 꺼내지 않는다', async () => {
+    setup();
+    await pickMethod();
+    await screen.findByText(/3건을/);
+
+    expect(screen.queryByText(/청구월/)).toBe(null);
+  });
+
+  it('E-5. 대표 사례에 청구월 전 → 후가 붙는다', async () => {
+    post.mockResolvedValue({
+      ...PLAN,
+      billing_month_filled: 1,
+      samples: [{
+        id: 11, date: '2026-07-05', merchant: '스타벅스', amount: 30000,
+        before: 'immediate', after: 'deferred',
+        billing_month_before: null, billing_month_after: '2026-07',
+      }],
+    });
+    setup();
+    await pickMethod();
+
+    expect(await screen.findByText(/청구월 없음 → 2026-07/)).toBeTruthy();
   });
 });

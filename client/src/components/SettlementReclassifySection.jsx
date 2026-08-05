@@ -43,6 +43,15 @@ export function toCriteria(c) {
 
 // 잔액이 어떻게 움직이는지 한 줄로. 부호를 글자로도 말한다 — 색이나 기호만으로
 // 방향을 구분하면 못 읽는 사용자가 생긴다(#191).
+// 청구월이 몇 건 채워지고 몇 건 지워지는지. 둘 다 0 이면 빈 문자열이라
+// 문장에 끼지 않는다 — 안 바뀌는 것을 말하면 사용자가 바뀐다고 읽는다.
+export function billingLine(plan) {
+  return [
+    plan.billing_month_filled > 0 ? `청구월 ${plan.billing_month_filled}건이 채워져요.` : null,
+    plan.billing_month_cleared > 0 ? `청구월 ${plan.billing_month_cleared}건이 지워져요.` : null,
+  ].filter(Boolean).join(' ');
+}
+
 export function impactLine(i) {
   const dir = i.balanceDelta > 0 ? '늘어요' : i.balanceDelta < 0 ? '줄어요' : '그대로예요';
   const amount = formatWon(Math.abs(i.balanceDelta));
@@ -109,8 +118,12 @@ export default function SettlementReclassifySection({ paymentMethods }) {
     // 확인 문구에 **잔액 변화**를 넣는다. 건수만 물으면 사용자는 무엇을
     // 승인하는지 모른 채 승인한다.
     const impact = (plan.impact || []).map(impactLine).join(' ');
+    // 결제 방식이 바뀌면 청구월도 따라 바뀐다(#289). 건수와 잔액만 물으면
+    // 사용자는 **카드값이 언제 빠지는지가 같이 정해진다는 것**을 모른 채
+    // 승인한다. 조사가 붙지 않는 문장으로 적는다 — 받침이 갈리는 자리다.
+    const billing = billingLine(plan);
     const ok = await confirm(
-      `${plan.count}건을 ${withRo(`'${settlementLabel(plan.target.settlement)}'`)} 바꿀까요? ${impact} 되돌리기로 되돌릴 수 있어요.`
+      `${plan.count}건을 ${withRo(`'${settlementLabel(plan.target.settlement)}'`)} 바꿀까요? ${impact}${billing ? ` ${billing}` : ''} 되돌리기로 되돌릴 수 있어요.`
     );
     if (!ok) return;
 
@@ -189,10 +202,25 @@ export default function SettlementReclassifySection({ paymentMethods }) {
                 <p key={i.accountId} className="text-sm text-body leading-relaxed">{impactLine(i)}</p>
               ))}
 
+              {plan.billing_month_filled > 0 && (
+                <p className="text-sm text-body leading-relaxed">
+                  카드값이 언제 빠지는지도 함께 정해져요 — 청구월 {plan.billing_month_filled}건이 채워져요.
+                </p>
+              )}
+
+              {plan.billing_month_cleared > 0 && (
+                <p className="text-sm text-warn-text leading-relaxed">
+                  청구월 {plan.billing_month_cleared}건이 지워져요. 카드 사용이 아니게 되면 청구월은 뜻이 없어요.
+                </p>
+              )}
+
               <ul className="text-xs text-caption space-y-1 border-t border-line pt-3">
                 {plan.samples.map((s) => (
                   <li key={s.id}>
                     {s.date} {s.merchant} {formatWon(s.amount)} — {settlementLabel(s.before)} → {settlementLabel(s.after)}
+                    {s.billing_month_before !== s.billing_month_after && (
+                      <> · 청구월 {s.billing_month_before || '없음'} → {s.billing_month_after || '없음'}</>
+                    )}
                   </li>
                 ))}
                 {plan.count > plan.samples.length && (

@@ -322,3 +322,222 @@ describe('D. 실행', () => {
     assert.match(label.action_label, /재분류/);
   });
 });
+
+// 재분류는 `settlement` 을 바꾼다. 그런데 그 값은 `billing_month` 의 **입력**이다
+// (#289). 거래 하나를 PUT 으로 고치는 경로는 입력이 바뀌면 청구월을 다시
+// 계산하는데, 대량 재분류에는 그게 없었다.
+//
+//   deferred 로 바꾸면      청구월이 빈 채로 남는다
+//   deferred 에서 벗어나면  옛 청구월이 그대로 남는다 — 뜻이 겹친다
+//
+// 청구월이 비면 `cardUnpaid` 가 `unassigned` 로 빼고 `projectBalance` 는 그
+// 거래를 추이에서 통째로 뺀다. **재분류의 목적이 바로 그 두 계산을 맞추는
+// 것**이라, 청구월을 안 채우면 절반만 한 셈이 된다.
+function billingRows() {
+  const db = new Database(server.dbPath, { readonly: true });
+  const rows = db.prepare(
+    "SELECT id, merchant, COALESCE(settlement,'immediate') AS settlement, billing_month"
+    + ' FROM transactions ORDER BY id'
+  ).all();
+  db.close();
+  return rows;
+}
+
+// 결제일 25 · 마감 12 인 카드를 만들어 대상 거래에 붙인다. 청구월이 실제로
+// 계산되려면 주기를 아는 카드가 있어야 한다.
+//
+// 이름을 케이스마다 다르게 준다. 같은 카드사에 같은 이름은 409 라, 고정 이름을
+// 쓰면 **두 번째 케이스부터 카드가 안 만들어지고 id 가 undefined 가 된다** —
+// 그러면 청구월이 안 붙는데 테스트는 "계산이 틀렸다" 처럼 보인다.
+let cycleCardSeq = 0;
+async function attachCycleCard() {
+  const { status, body: card } = await post('/api/card-products', {
+    payment_method_id: ids.cardPm, issuer: '테스트발급사',
+    product_name: `주기카드 ${++cycleCardSeq}`,
+    card_type: '신용', billing_cycle_day: 25, statement_close_day: 12,
+  });
+  assert.equal(status, 201, JSON.stringify(card));
+
+  const { body: remapPlan } = await post('/api/card-products/remap/preview', { card_product_id: card.id });
+  const applied = await post('/api/card-products/remap', {
+    card_product_id: card.id, preview_token: remapPlan.preview_token,
+  });
+  assert.equal(applied.status, 200, JSON.stringify(applied.body));
+  return card.id;
+}
+
+describe('E. 재분류가 청구월을 따라 고친다', () => {
+  test('E-1. deferred 로 바꾸면 청구월이 채워진다', async () => {
+    await seed();
+    await attachCycleCard();
+
+    const { body: plan } = await preview({ payment_method_id: ids.cardPm, settlement: 'deferred' });
+    assert.equal(plan.count, 3);
+    // 7/5 · 7/12 는 마감 12 기준 7월 마감 → 결제일 25 > 12 라 같은 달 = 2026-07.
+    // 8/1 은 8월 마감 → 2026-08.
+    assert.equal(plan.billing_month_filled, 3, '세 건 다 채워져야 한다');
+    assert.equal(plan.billing_month_cleared, 0);
+
+    const { status } = await execute({
+      payment_method_id: ids.cardPm, settlement: 'deferred', preview_token: plan.preview_token,
+    });
+    assert.equal(status, 200);
+
+    const rows = billingRows().filter((r) => r.settlement === 'deferred');
+    assert.equal(rows.length, 3);
+    assert.ok(rows.every((r) => /^\d{4}-\d{2}$/.test(r.billing_month || '')),
+      `청구월이 안 채워졌다: ${JSON.stringify(rows)}`);
+  });
+
+  test('E-2. deferred 에서 벗어나면 옛 청구월을 지운다', async () => {
+    // 즉시 결제에 청구월이 남아 있으면 뜻이 겹친다 — 청구월은 "무엇이 언제
+    // 청구되는가" 라서 인출 자체에 붙이면 이중으로 읽힌다.
+    await seed();
+    await attachCycleCard();
+    const { body: toDeferred } = await preview({ payment_method_id: ids.cardPm, settlement: 'deferred' });
+    await execute({
+      payment_method_id: ids.cardPm, settlement: 'deferred', preview_token: toDeferred.preview_token,
+    });
+    assert.ok(billingRows().some((r) => r.billing_month !== null));
+
+    const { body: back } = await preview({ payment_method_id: ids.cardPm, settlement: 'immediate' });
+    assert.equal(back.billing_month_cleared, 3);
+    assert.equal(back.billing_month_filled, 0);
+
+    const { status } = await execute({
+      payment_method_id: ids.cardPm, settlement: 'immediate', preview_token: back.preview_token,
+    });
+    assert.equal(status, 200);
+
+    const rows = billingRows().filter((r) => r.merchant && r.merchant.startsWith('카드결제'));
+    assert.ok(rows.every((r) => r.billing_month === null),
+      `옛 청구월이 남았다: ${JSON.stringify(rows)}`);
+  });
+
+  test('E-3. 카드 주기를 모르면 안 적는다 — 추측하지 않는다', async () => {
+    // 카드 상품이 안 붙은 거래는 주기를 알 수 없다. 추측한 청구월로 묶으면
+    // 사용자가 결제일에 빠질 금액을 잘못 본다(#290).
+    await seed();
+
+    const { body: plan } = await preview({ payment_method_id: ids.cardPm, settlement: 'deferred' });
+    assert.equal(plan.count, 3);
+    assert.equal(plan.billing_month_filled, 0);
+
+    await execute({
+      payment_method_id: ids.cardPm, settlement: 'deferred', preview_token: plan.preview_token,
+    });
+    const rows = billingRows().filter((r) => r.settlement === 'deferred');
+    assert.ok(rows.every((r) => r.billing_month === null));
+  });
+
+  test('E-4. 대표 사례가 청구월 전 → 후를 보여준다', async () => {
+    await seed();
+    await attachCycleCard();
+
+    const { body: plan } = await preview({ payment_method_id: ids.cardPm, settlement: 'deferred' });
+    const s = plan.samples[0];
+    assert.equal(s.billing_month_before, null);
+    assert.ok(/^\d{4}-\d{2}$/.test(s.billing_month_after), JSON.stringify(s));
+  });
+
+  // E-5 는 저장된 청구월이 움직여서 걸린다. 그것만으로는 **구매일·카드가 지문에
+  // 들어 있는지**를 증명하지 못한다 — 실제로 그 둘을 빼도 E-5 는 통과했다.
+  //
+  // 그래서 청구월을 손으로 고정한 채 입력만 옮긴다. 저장된 값이 안 움직이므로
+  // 각 입력이 지문에 담겼는지가 단독으로 드러난다.
+  test('E-5b. 청구월은 그대로인데 구매일만 바뀌어도 막는다', async () => {
+    await seed();
+    const cardId = await attachCycleCard();
+    const target = billingRows().find((r) => r.merchant === '카드결제1');
+
+    // 청구월을 **프리뷰 전에** 손으로 박아 둔다. 이렇게 해야 프리뷰 뒤의 수정이
+    // 저장된 청구월을 안 움직이고, 구매일만 달라진 상태가 만들어진다.
+    const pinned = (over) => json(`/api/transactions/${target.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        date: '2026-07-05', category_id: ids.cat, amount: 30000,
+        payment_method_id: ids.cardPm, card_product_id: cardId,
+        merchant: '카드결제1', billing_month: '2026-07', ...over,
+      }),
+    });
+    assert.equal((await pinned({})).status, 200);
+    assert.equal(billingRows().find((r) => r.id === target.id).billing_month, '2026-07');
+
+    const { body: plan } = await preview({ payment_method_id: ids.cardPm, settlement: 'deferred' });
+    assert.equal(plan.count, 3);
+
+    const edited = await pinned({ date: '2026-07-20' });
+    assert.equal(edited.status, 200, JSON.stringify(edited.body));
+    assert.equal(billingRows().find((r) => r.id === target.id).billing_month, '2026-07',
+      '저장된 청구월은 그대로여야 이 케이스가 성립한다');
+
+    const { status, body } = await execute({
+      payment_method_id: ids.cardPm, settlement: 'deferred', preview_token: plan.preview_token,
+    });
+    assert.equal(status, 409, JSON.stringify(body));
+  });
+
+  test('E-5c. 청구월은 그대로인데 카드만 바뀌어도 막는다', async () => {
+    await seed();
+    const cardId = await attachCycleCard();
+    const { status: bareStatus, body: bare } = await post('/api/card-products', {
+      payment_method_id: ids.cardPm, issuer: '테스트발급사',
+      product_name: `주기없는카드 ${++cycleCardSeq}`, card_type: '신용',
+    });
+    assert.equal(bareStatus, 201, JSON.stringify(bare));
+
+    const target = billingRows().find((r) => r.merchant === '카드결제1');
+    const pinned = (cardProductId) => json(`/api/transactions/${target.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        date: '2026-07-05', category_id: ids.cat, amount: 30000,
+        payment_method_id: ids.cardPm, card_product_id: cardProductId,
+        merchant: '카드결제1', billing_month: '2026-07',
+      }),
+    });
+    assert.equal((await pinned(cardId)).status, 200);
+    assert.equal(billingRows().find((r) => r.id === target.id).billing_month, '2026-07');
+
+    const { body: plan } = await preview({ payment_method_id: ids.cardPm, settlement: 'deferred' });
+    assert.equal(plan.count, 3);
+
+    // 주기를 모르는 카드로 옮기면 계산 결과가 null 이 된다 — 프리뷰가 예고한
+    // 값과 다르다. 저장된 청구월은 그대로라 카드가 지문에 없으면 통과한다.
+    const edited = await pinned(bare.id);
+    assert.equal(edited.status, 200, JSON.stringify(edited.body));
+    assert.equal(billingRows().find((r) => r.id === target.id).billing_month, '2026-07',
+      '저장된 청구월은 그대로여야 이 케이스가 성립한다');
+
+    const { status, body } = await execute({
+      payment_method_id: ids.cardPm, settlement: 'deferred', preview_token: plan.preview_token,
+    });
+    assert.equal(status, 409, JSON.stringify(body));
+  });
+
+  test('E-5. 프리뷰 뒤 청구월만 달라져도 지문이 막는다', async () => {
+    // #419 가 `C-3b` 로 잡은 것과 같은 계열이다. 지문이 `billing_month` 를
+    // 담지 않으면 건수도 id 목록도 그대로라 통과하고, 사용자가 본 적 없는
+    // 상태의 거래가 덮인다.
+    await seed();
+    const cardId = await attachCycleCard();
+
+    const { body: plan } = await preview({ payment_method_id: ids.cardPm, settlement: 'deferred' });
+    const target = billingRows().find((r) => r.merchant === '카드결제1');
+
+    const edited = await json(`/api/transactions/${target.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        date: '2026-07-05', category_id: ids.cat, amount: 30000,
+        payment_method_id: ids.cardPm, card_product_id: cardId,
+        merchant: '카드결제1', billing_month: '2026-12',
+      }),
+    });
+    assert.equal(edited.status, 200, JSON.stringify(edited.body));
+
+    const { status, body } = await execute({
+      payment_method_id: ids.cardPm, settlement: 'deferred', preview_token: plan.preview_token,
+    });
+    assert.equal(status, 409, JSON.stringify(body));
+    assert.equal(body.preview_stale, true);
+  });
+});
