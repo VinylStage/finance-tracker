@@ -32,6 +32,11 @@ jobs:
       # 브라우저에서 ReferenceError 로 죽은 적이 있다. 여기가 그 자리를 막는다.
       - name: Lint (no-undef)
         run: npm run lint
+      # 포트가 겹치면 단독 실행은 통과하고 전체 스위트에서만 간헐 실패한다.
+      # 재실행하면 통과해서 원인을 짚기 전까지 무엇이 문제인지 안 보인다.
+      # 실제로 두 번 냈고 둘 다 별도 서버를 `PORT + 1` 로 띄운 것이 원인이었다.
+      - name: Test ports do not collide
+        run: npm run test:ports
       # 릴리즈 아티팩트가 main 과 어긋난 채로 develop 이 굴러가면, develop → main
       # 릴리즈 PR 에서 네 파일이 충돌하고 소유자 bypass 를 쓰게 된다
       # (CONTRIBUTING.md 조건 1번). 세 릴리즈 연속 놓쳤던 자리라 사람 기억 대신
