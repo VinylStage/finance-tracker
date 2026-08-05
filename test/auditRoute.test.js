@@ -224,8 +224,11 @@ test('E-2. limit 이 범위를 벗어나면 잘라 준다', async () => {
   assert.strictEqual(bad.status, 200, '숫자가 아닌 값에도 500 이 나면 안 된다');
 });
 
+// PORT + 1 로 띄우면 다른 파일이 쓰는 포트와 겹친다. 실제로 34625 + 1·2 가
+// recurringRulesFields(34626)·cardBenefits(34627) 와 부딪혀 전체 스위트에서만
+// 간헐 실패했다. 파생 포트를 쓰지 않고 비어 있는 대역에서 고정한다.
 test('E-3. 되돌릴 것이 없으면 undoable 이 null 이다', async () => {
-  const fresh = await startTestServer({ port: PORT + 1 });
+  const fresh = await startTestServer({ port: 34800 });
   try {
     const r = await fetch(`${fresh.base}/api/audit/undoable`);
     assert.strictEqual(r.status, 200);
@@ -236,7 +239,7 @@ test('E-3. 되돌릴 것이 없으면 undoable 이 null 이다', async () => {
 });
 
 test('E-4. 되돌릴 것이 없는데 undo 를 부르면 400 이다', async () => {
-  const fresh = await startTestServer({ port: PORT + 2 });
+  const fresh = await startTestServer({ port: 34801 });
   try {
     const r = await fetch(`${fresh.base}/api/audit/undo`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
