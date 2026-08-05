@@ -7,8 +7,8 @@ const { serverError } = require('../utils/errors');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
 const { resolvePeriod } = require('../utils/period');
 const { isEditable, lockedMessage, findLocked, countLockedAll } = require('../services/transactionOrigin');
-const { resolveBillingMonth } = require('../services/settlementBilling');
 const { PAYMENT_STYLES, SETTLEMENTS, DEFAULT_SETTLEMENT } = require('../constants');
+const { resolveBillingMonth } = require('../services/settlementBilling');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
 const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
 
