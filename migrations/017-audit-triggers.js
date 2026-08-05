@@ -93,6 +93,31 @@ function rebuildAuditTriggers(db) {
   }
 }
 
+// 기대하는 트리거가 다 있는지 본다.
+//
+// 표마다 ins·upd·del 세 개다. 하나라도 없으면 그 표의 변경이 **조용히** 감사에서
+// 빠지고, `audit_log` 가 실행취소의 유일한 근거라 되돌릴 수도 없다.
+//
+// `rebuildAuditTriggers` 는 표마다 지우고 → 만든다. 중간에 던지면 지워진 채 남는데,
+// 예전에는 `appliedAny` 일 때만 재생성을 시도해서 **한 번의 일시적 실패가 영구적인
+// 감사 구멍**이 됐다. 이 함수가 그 상태를 매 기동에 발견한다.
+function auditTriggersComplete(db) {
+  const have = new Set(
+    db.prepare(`
+      SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'audit_%'
+    `).all().map((r) => r.name)
+  );
+
+  for (const table of targetTables(db)) {
+    const cols = db.prepare(`PRAGMA table_info("${table}")`).all();
+    if (cols.length === 0) continue;
+    for (const op of ['ins', 'upd', 'del']) {
+      if (!have.has(`audit_${table}_${op}`)) return false;
+    }
+  }
+  return true;
+}
+
 function up(db) {
   // 트리거가 읽을 컨텍스트. 단일 행이며 애플리케이션이 요청마다 갱신한다.
   // 기본값을 안전한 쪽(system)에 둬, 갱신을 빠뜨린 경로도 기록은 남되
@@ -110,4 +135,6 @@ function up(db) {
   rebuildAuditTriggers(db);
 }
 
-module.exports = { up, rebuildAuditTriggers, hasAuditInfrastructure, targetTables, EXCLUDED };
+module.exports = {
+  up, rebuildAuditTriggers, auditTriggersComplete, hasAuditInfrastructure, targetTables, EXCLUDED,
+};

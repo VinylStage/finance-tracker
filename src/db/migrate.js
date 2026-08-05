@@ -6,6 +6,7 @@ const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
 
 const {
   rebuildAuditTriggers,
+  auditTriggersComplete,
   hasAuditInfrastructure,
 } = require('../../migrations/017-audit-triggers');
 
@@ -44,9 +45,17 @@ function runMigrations(db) {
   // 그건 작성자가 그 호출을 기억해야 성립하는 보장이라, 017 이 컬럼을 PRAGMA 로
   // 읽어 자동 판별하게 만든 설계와도 어긋났다 — 호출 시점만 수동이었다(#346).
   //
-  // 새로 적용된 마이그레이션이 있을 때만 돈다. 매 기동마다 다시 만들 이유가 없다.
-  // 017 이전 상태의 DB 는 감사 인프라 자체가 없으므로 건너뛴다.
-  if (appliedAny && hasAuditInfrastructure(db)) rebuildAuditTriggers(db);
+  // 새로 적용된 마이그레이션이 있거나, 트리거가 하나라도 빠져 있으면 재생성한다.
+  //
+  // 전에는 `appliedAny` 만 봤다. 그래서 트리거가 한 번 빠지면 다음 기동이 상태를
+  // 아예 안 봐서 **영구히 안 돌아왔다**(#454). 커버리지를 같이 보면 원인이 무엇이든
+  // 자가치유된다.
+  //
+  // 트랜잭션으로 감싼다. 재생성은 표마다 지우고 → 만드는데, 중간에 던지면 그 표가
+  // 트리거 없이 남는다. SQLite 는 DDL 도 롤백하므로 통째로 되돌아간다.
+  if (hasAuditInfrastructure(db) && (appliedAny || !auditTriggersComplete(db))) {
+    db.transaction(() => rebuildAuditTriggers(db))();
+  }
 }
 
 module.exports = { runMigrations };
