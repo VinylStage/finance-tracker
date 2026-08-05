@@ -1,7 +1,7 @@
 'use strict';
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
+const { startTestServer } = require('./helpers/testServer');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -17,8 +17,7 @@ const os = require('node:os');
 
 const PORT = 34706;
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let serverOutput = '';
+let server;
 let dbPath;
 let catExpense, catIncome, pmCard, acctId;
 
@@ -34,26 +33,8 @@ async function json(pathname, options) {
 }
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-bal-settle-${process.pid}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (c, s) => { serverOutput += `\n[server exited] code=${c} signal=${s}\n`; });
-
-  const deadline = Date.now() + 15000;
-  let up = false;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) { up = true; break; }
-    } catch { /* 아직 기동 전 */ }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (!up) throw new Error(`서버가 15초 안에 기동하지 않음:\n${serverOutput}`);
+  server = await startTestServer({ port: PORT });
+  dbPath = server.dbPath;
 
   const cats = (await json('/api/categories')).body;
   const rows = Array.isArray(cats) ? cats : cats.data;
@@ -79,10 +60,7 @@ before(async () => {
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch { /* 이미 없을 수 있다 */ }
-  }
+  if (server) server.stop();
 });
 
 const addTx = (over) => json('/api/transactions', {
