@@ -37,6 +37,7 @@ let cashId;      // 카드 아닌 결제수단
 let cardA;       // 하나카드 아래 카드 두 장
 let cardB;
 let samsungCard; // 삼성카드 아래 카드
+let cycleCard;   // 청구 주기(결제일·마감일)가 설정된 카드
 
 // 서버가 쓰는 것과 같은 파일을 직접 열어 본다. 라우트를 거치지 않고 확인해야
 // "프리뷰가 DB 를 바꿨는가" 를 라우트의 주장이 아니라 파일로 판정할 수 있다.
@@ -94,6 +95,15 @@ before(async () => {
   cardA = await mk(hanaId, '하나 A카드');
   cardB = await mk(hanaId, '하나 B카드');
   samsungCard = await mk(samsungId, '삼성 iD ON');
+
+  // 청구 주기를 아는 카드. 위 셋은 주기가 없어 청구월이 안 나오므로, 청구월이
+  // 실제로 계산되는 경로를 보려면 주기가 있는 카드가 따로 필요하다.
+  const cycled = await post('/api/card-products', {
+    payment_method_id: hanaId, issuer: '테스트발급사', product_name: '하나 주기카드',
+    card_type: '신용', billing_cycle_day: 25, statement_close_day: 12,
+  });
+  assert.strictEqual(cycled.status, 201, JSON.stringify(cycled.body));
+  cycleCard = cycled.body.id;
 });
 
 after(() => {
@@ -422,5 +432,111 @@ describe('G. 실행취소', () => {
 
     const undoable = await json('/api/audit/undoable');
     assert.match(undoable.body.undoable.label, /하나 A카드/);
+  });
+});
+
+// 재매핑은 `card_product_id` 를 바꾼다. 그런데 그 값은 `billing_month` 의 **입력**
+// 이다(#289). 거래 하나를 PUT 으로 고치는 경로는 입력이 바뀌면 청구월을 다시
+// 계산하는데, 대량 재매핑에는 그게 없어서 **같은 입력 변화가 경로에 따라 다른
+// 결과**를 냈다.
+//
+// 청구월이 빈 채로 남으면 두 가지가 조용히 틀어진다.
+//
+//   cardUnpaid   그 건들이 `unassigned` 로 빠져 화면이 "청구월을 모르는 거래" 라 한다
+//   projectBalance  청구월 없는 deferred 를 추이에서 통째로 뺀다 — 앞으로 빠질
+//                   카드값이 없는 것처럼 보인다
+//
+// 인계문서 §2.3 의 "컬럼은 있는데 쓰는 쪽이 안 이어진 상태" 네 번째 사례였다.
+function billingRows() {
+  const db = openDb();
+  try {
+    return db.prepare('SELECT id, card_product_id, settlement, billing_month FROM transactions ORDER BY id').all();
+  } finally {
+    db.close();
+  }
+}
+
+describe('H. 재매핑이 청구월을 따라 고친다', () => {
+  test('H-1. 카드를 붙이면 청구월이 채워진다', async () => {
+    // 결제일 25 · 마감 12. 5/15 구매는 15 > 12 라 6월 마감이고, 25 > 12 라
+    // 그 달에 청구된다 → 2026-06.
+    await addTx({ payment_method_id: hanaId, settlement: 'deferred', date: '2026-05-15' });
+    assert.strictEqual(billingRows()[0].billing_month, null, '카드 미지정이면 비어 있다');
+
+    const p = await preview({ card_product_id: cycleCard });
+    await remap({ card_product_id: cycleCard, preview_token: p.body.preview_token });
+
+    assert.strictEqual(billingRows()[0].billing_month, '2026-06');
+  });
+
+  test('H-2. 프리뷰가 청구월이 몇 건 채워지는지 미리 말한다', async () => {
+    await addTx({ payment_method_id: hanaId, settlement: 'deferred', date: '2026-05-15' });
+    await addTx({ payment_method_id: hanaId, settlement: 'deferred', date: '2026-06-20' });
+    await addTx({ payment_method_id: hanaId, settlement: 'immediate', date: '2026-05-15' });
+
+    const p = await preview({ card_product_id: cycleCard });
+    assert.strictEqual(p.body.count, 3);
+    // 즉시 결제 건은 청구월이 없다. 건수에 섞으면 사용자가 3건이 묶인다고 읽는다.
+    assert.strictEqual(p.body.billing_month_filled, 2);
+    assert.strictEqual(p.body.billing_month_cleared, 0);
+
+    const deferredSample = p.body.samples.find((s) => s.billing_month_after !== null);
+    assert.strictEqual(deferredSample.billing_month_before, null);
+    assert.ok(/^\d{4}-\d{2}$/.test(deferredSample.billing_month_after));
+  });
+
+  test('H-3. 즉시 결제 거래에는 청구월을 붙이지 않는다', async () => {
+    await addTx({ payment_method_id: hanaId, settlement: 'immediate', date: '2026-05-15' });
+
+    const p = await preview({ card_product_id: cycleCard });
+    assert.strictEqual(p.body.billing_month_filled, 0);
+    await remap({ card_product_id: cycleCard, preview_token: p.body.preview_token });
+
+    assert.strictEqual(billingRows()[0].billing_month, null);
+  });
+
+  test('H-4. 주기를 모르는 카드로 옮기면 옛 청구월을 지운다', async () => {
+    // 옛 청구월은 **옛 카드의 주기**로 나온 값이다. 카드가 바뀌었는데 그대로
+    // 두면 거래가 근거 없는 달에 묶인 채 남는다. 모르면 비우는 것이 맞다.
+    const id = await addTx({ payment_method_id: hanaId, settlement: 'deferred', date: '2026-05-15' });
+    const assigned = await preview({ card_product_id: cycleCard });
+    await remap({ card_product_id: cycleCard, preview_token: assigned.body.preview_token });
+    assert.strictEqual(billingRows()[0].billing_month, '2026-06');
+
+    // cardA 는 결제일·마감일이 없다.
+    const p = await preview({ card_product_id: cardA, include_assigned: true });
+    assert.strictEqual(p.body.billing_month_cleared, 1);
+    const r = await remap({ card_product_id: cardA, include_assigned: true, preview_token: p.body.preview_token });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+
+    const after = billingRows()[0];
+    assert.strictEqual(after.id, id);
+    assert.strictEqual(after.card_product_id, cardA);
+    assert.strictEqual(after.billing_month, null);
+  });
+
+  test('H-5. 프리뷰 뒤 청구월만 달라져도 지문이 막는다', async () => {
+    // #419 의 C-3b 와 같은 구멍이다. id·금액·카드 지정만 지문에 담으면 **프리뷰
+    // 뒤에 청구월만 바뀐 경우** 건수도 id 목록도 그대로라 통과한다. 사용자가 본
+    // 적 없는 상태의 거래가 조용히 덮인다.
+    const id = await addTx({ payment_method_id: hanaId, settlement: 'deferred', date: '2026-05-15' });
+    const p = await preview({ card_product_id: cycleCard });
+    assert.strictEqual(p.status, 200);
+
+    const edited = await json(`/api/transactions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        date: '2026-05-15', category_id: categoryId, amount: 10000,
+        payment_method_id: hanaId, merchant: '가맹점',
+        settlement: 'deferred', billing_month: '2026-09',
+      }),
+    });
+    assert.strictEqual(edited.status, 200, JSON.stringify(edited.body));
+    assert.strictEqual(billingRows()[0].billing_month, '2026-09');
+
+    const r = await remap({ card_product_id: cycleCard, preview_token: p.body.preview_token });
+    assert.strictEqual(r.status, 409, JSON.stringify(r.body));
+    assert.strictEqual(r.body.preview_stale, true);
+    assert.strictEqual(billingRows()[0].billing_month, '2026-09', '막혔으면 그대로여야 한다');
   });
 });

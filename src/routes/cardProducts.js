@@ -122,6 +122,11 @@ router.post('/remap/preview', numericBody(['card_product_id', 'min_amount', 'max
       target: plan.target,
       count: plan.count,
       already_assigned: plan.already_assigned,
+      // 카드가 바뀌면 청구월도 다시 정해진다(#289). 건수만 말하고 넘어가면
+      // 사용자는 카드 지정만 바뀌는 줄 알고 승인한다 — ADR 0008 이 프리뷰에
+      // 요구하는 "부작용" 이 이것이다.
+      billing_month_filled: plan.billing_month_filled,
+      billing_month_cleared: plan.billing_month_cleared,
       samples: plan.samples,
       preview_token: plan.fingerprint,
       remaining_unassigned: countUnassigned(db),

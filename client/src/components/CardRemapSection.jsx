@@ -130,8 +130,16 @@ export default function CardRemapSection({ paymentMethods }) {
     const overwrite = plan.already_assigned > 0
       ? ` 그중 ${plan.already_assigned}건은 이미 다른 카드로 지정돼 있어요 — 그 지정을 덮어써요.`
       : '';
+    // 카드가 바뀌면 청구월도 따라 바뀐다. 건수만 물으면 사용자가 **무엇을
+    // 승인하는지 모른 채** 승인한다 — 청구월은 "이번 25일에 얼마 빠지나" 를
+    // 정하는 값이라 조용히 달라지면 안 된다.
+    const billing = [
+      plan.billing_month_filled > 0 ? `청구월 ${plan.billing_month_filled}건이 채워져요` : null,
+      plan.billing_month_cleared > 0 ? `청구월 ${plan.billing_month_cleared}건이 지워져요` : null,
+    ].filter(Boolean).join(', ');
     const ok = await confirm(
-      `${plan.count}건을 '${plan.target.product_name}' 로 옮길까요?${overwrite} 되돌리기로 되돌릴 수 있어요.`
+      `${plan.count}건을 '${plan.target.product_name}' 로 옮길까요?${overwrite}`
+      + `${billing ? ` ${billing}.` : ''} 되돌리기로 되돌릴 수 있어요.`
     );
     if (!ok) return;
 
@@ -279,6 +287,19 @@ export default function CardRemapSection({ paymentMethods }) {
             </p>
           )}
 
+          {plan && plan.billing_month_filled > 0 && (
+            <p className="text-xs text-caption">
+              카드값이 언제 빠지는지도 함께 정해져요 — 청구월 {plan.billing_month_filled}건이 채워져요.
+            </p>
+          )}
+
+          {plan && plan.billing_month_cleared > 0 && (
+            <p className="text-xs text-warn-text">
+              청구월 {plan.billing_month_cleared}건이 지워져요. 옮겨 갈 카드의 결제일·마감일을
+              몰라서예요 — 카드 설정에서 넣어 두면 다시 채워져요.
+            </p>
+          )}
+
           {plan && plan.samples.length > 0 && (
             <div className="space-y-1">
               <p className="text-[11px] text-caption">
@@ -293,6 +314,11 @@ export default function CardRemapSection({ paymentMethods }) {
                     <span className="text-caption">
                       {s.before || '미상'} → <strong className="text-body">{s.after}</strong>
                     </span>
+                    {s.billing_month_before !== s.billing_month_after && (
+                      <span className="text-caption">
+                        청구월 {s.billing_month_before || '없음'} → <strong className="text-body">{s.billing_month_after || '없음'}</strong>
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

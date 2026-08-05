@@ -1500,7 +1500,9 @@
 - **응답 스키마**:
   ```
   { "target": {...}, "count": "number", "already_assigned": "number",
-    "samples": [{ "id", "date", "merchant", "amount", "before", "after" }],
+    "billing_month_filled": "number", "billing_month_cleared": "number",
+    "samples": [{ "id", "date", "merchant", "amount", "before", "after",
+                  "billing_month_before", "billing_month_after" }],
     "preview_token": "string", "remaining_unassigned": "number", "undoable": true }
   ```
 - **에러 케이스**: 400 — 카드 미지정 / 없는 카드 / 기간 형식이 `YYYY-MM-DD` 아님 /
@@ -1518,6 +1520,12 @@
   기간 형식이 틀리면 400 이다. SQLite 의 문자열 비교라 `2026-8-1` 같은 값은 오류
   없이 조용히 0건이 되거나 엉뚱하게 걸린다 — 사용자는 조건을 걸었다고 믿는다.
 
+  **카드가 바뀌면 청구월도 바뀐다**(#421). `card_product_id` 는 `billing_month` 의
+  입력이라(#289) 재매핑이 그것도 다시 계산한다. `billing_month_filled` 는 비어
+  있던 것이 채워지는 건수, `billing_month_cleared` 는 옮겨 갈 카드의 결제일·마감일을
+  몰라 지워지는 건수다. 건수만 보여주면 사용자가 **무엇을 승인하는지 모른 채**
+  승인한다 — 청구월은 "이번 결제일에 얼마 빠지나" 를 정하는 값이다.
+
 ### POST /api/card-products/remap
 확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
 
@@ -1528,8 +1536,10 @@
   - 428: `preview_token` 없음 (`preview_required: true`)
   - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
 - **비고**: **화면에서만 막고 엔드포인트가 열려 있으면 원칙이 반쪽이 된다**(ADR 0008).
-  지문은 대상의 id 뿐 아니라 금액과 현재 카드까지 넣어 만든다 — id 만 넣으면 그 사이
-  같은 거래가 다른 카드로 지정된 것을 못 잡는다.
+  지문은 대상의 id 뿐 아니라 금액과 현재 카드, **현재 청구월**까지 넣어 만든다 —
+  id 만 넣으면 그 사이 같은 거래가 다른 카드로 지정된 것을 못 잡고, 청구월을 빼면
+  프리뷰 뒤에 청구월만 손으로 바뀐 경우 건수도 id 목록도 그대로라 지문이 통과한다
+  (#421, #419 의 `C-3b` 와 같은 구멍).
 
   재매핑 전체가 한 `action_id` 로 묶이고 `카드 재매핑 → <카드 이름>` 라벨이 붙어,
   `/api/audit/undo` 로 통째로 되돌아간다.

@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { asInt } = require('../utils/validate');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
+const { resolveBillingMonth } = require('./settlementBilling');
 
 // 기존 거래를 카드 상품에 붙이는 재매핑(#302 3단계).
 //
@@ -32,7 +33,7 @@ function remapFingerprint(targetId, rows) {
     target: targetId,
     rows: [...rows]
       .sort((a, b) => a.id - b.id)
-      .map((r) => ({ id: r.id, amount: r.amount, card_product_id: r.card_product_id })),
+      .map((r) => ({ id: r.id, amount: r.amount, card_product_id: r.card_product_id, billing_month: r.billing_month })),
   });
   return crypto.createHash('sha256').update(material).digest('hex').slice(0, 32);
 }
@@ -63,7 +64,8 @@ function planRemap(db, criteria = {}) {
 
   const target = db.prepare(`
     SELECT cp.id, cp.payment_method_id, cp.issuer, cp.product_name, cp.is_active,
-           p.name AS payment_method_name
+           p.name AS payment_method_name,
+           cp.billing_cycle_day, cp.statement_close_day
     FROM card_products cp
     LEFT JOIN payment_methods p ON p.id = cp.payment_method_id
     WHERE cp.id = ?
@@ -104,7 +106,8 @@ function planRemap(db, criteria = {}) {
 
   const rows = db.prepare(`
     SELECT t.id, t.date, t.merchant, t.amount, t.card_product_id,
-           cp.product_name AS card_product_name
+           cp.product_name AS card_product_name,
+           COALESCE(t.settlement, 'immediate') AS settlement, t.billing_month
     FROM transactions t
     LEFT JOIN card_products cp ON cp.id = t.card_product_id
     ${where}${scope}
@@ -113,12 +116,22 @@ function planRemap(db, criteria = {}) {
 
   const alreadyAssigned = rows.filter((r) => r.card_product_id !== null).length;
 
+  const cycle = {
+    billing_cycle_day: target.billing_cycle_day,
+    statement_close_day: target.statement_close_day,
+  };
+  const nextBillingMonth = (row) => resolveBillingMonth({
+    settlement: row.settlement, date: row.date, cardProduct: cycle,
+  });
+
   return {
     target,
     count: rows.length,
     // 다른 카드에서 옮겨 오는 건수. 미상을 채우는 것과 지정을 덮어쓰는 것은
     // 사용자에게 무게가 다르다 — 덮어쓰기는 이미 한 판단을 지운다.
     already_assigned: alreadyAssigned,
+    billing_month_filled: rows.filter((r) => r.billing_month === null && nextBillingMonth(r) !== null).length,
+    billing_month_cleared: rows.filter((r) => r.billing_month !== null && nextBillingMonth(r) === null).length,
     samples: rows.slice(0, SAMPLE_LIMIT).map((r) => ({
       id: r.id,
       date: r.date,
@@ -126,8 +139,11 @@ function planRemap(db, criteria = {}) {
       amount: r.amount,
       before: r.card_product_name || null,
       after: target.product_name,
+      billing_month_before: r.billing_month,
+      billing_month_after: nextBillingMonth(r),
     })),
     ids: rows.map((r) => r.id),
+    billing: rows.map((r) => ({ id: r.id, billing_month: nextBillingMonth(r) })),
     fingerprint: remapFingerprint(targetId, rows),
   };
 }
@@ -141,16 +157,28 @@ function planRemap(db, criteria = {}) {
 function applyRemap(db, plan) {
   if (!plan.ids.length) return 0;
 
+  // 카드가 바뀌면 청구월도 다시 정해진다. `card_product_id` 는 청구월의 입력이라
+  // 여기서 안 고치면 **거래가 옛 카드의 주기로 묶인 채 남는다**(#289). 거래 하나를
+  // PUT 으로 고치는 경로는 이미 그렇게 하고 있어서, 안 맞추면 같은 입력 변화가
+  // 경로에 따라 다른 결과를 낸다.
+  //
+  // `plan.billing` 이 없으면 계산을 안 한 계획이다. 그 상태로 쓰면 전 행의 청구월이
+  // 조용히 NULL 로 밀린다 — 없는 값을 "없다고 계산된 값" 으로 오해하는 것이라
+  // 여기서 막는다.
+  if (!Array.isArray(plan.billing)) {
+    throw new Error('applyRemap: plan.billing 이 없다. planRemap 이 만든 계획만 쓴다.');
+  }
+  const billing = new Map(plan.billing.map((b) => [b.id, b.billing_month]));
+
   let changed = 0;
   db.transaction(() => {
-    // SQLite 의 변수 상한(999)에 걸리지 않게 나눠 넣는다. 하나카드 260건은
-    // 지금 한 번에 들어가지만, 건수는 데이터가 쌓이면 늘어난다.
-    for (let i = 0; i < plan.ids.length; i += 500) {
-      const chunk = plan.ids.slice(i, i + 500);
-      const placeholders = chunk.map(() => '?').join(',');
-      changed += db.prepare(
-        `UPDATE transactions SET card_product_id = ? WHERE id IN (${placeholders})`
-      ).run(plan.target.id, ...chunk).changes;
+    // 청구월이 행마다 달라 한 문장으로 묶을 수 없다. 대신 행 단위로 돌므로
+    // SQLite 변수 상한(999)에 걸릴 일이 없어져 청크 분할이 필요 없다.
+    const stmt = db.prepare(
+      'UPDATE transactions SET card_product_id = ?, billing_month = ? WHERE id = ?'
+    );
+    for (const id of plan.ids) {
+      changed += stmt.run(plan.target.id, billing.get(id) ?? null, id).changes;
     }
   })();
   return changed;
