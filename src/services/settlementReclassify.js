@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { asInt } = require('../utils/validate');
 const { SETTLEMENTS } = require('../constants');
 const { computeBalance, cardUnpaid } = require('./accountBalance');
+const { resolveBillingMonth } = require('./settlementBilling');
 
 // 기존 거래의 결제 방식을 일괄로 다시 분류한다(#289).
 //
@@ -56,7 +57,18 @@ function fingerprintOf(target, rows) {
     payment_method_id: target.payment_method_id,
     rows: [...rows]
       .sort((a, b) => a.id - b.id)
-      .map((r) => ({ id: r.id, amount: r.amount, settlement: r.settlement })),
+      // 청구월은 date · card_product_id · settlement 에서 나온다(#289). 넷 다
+      // 담아야 프리뷰 뒤에 그중 하나가 바뀐 것을 잡는다 — 안 담으면 건수도
+      // id 목록도 그대로라 지문이 통과하고, 사용자가 본 적 없는 계산 결과가
+      // 적힌다.
+      .map((r) => ({
+        id: r.id,
+        amount: r.amount,
+        settlement: r.settlement,
+        date: r.date,
+        card_product_id: r.card_product_id,
+        billing_month: r.billing_month,
+      })),
   });
   return crypto.createHash('sha256').update(material).digest('hex').slice(0, 32);
 }
@@ -97,12 +109,23 @@ function planReclassify(db, criteria = {}) {
   }
 
   const rows = db.prepare(`
-    SELECT t.id, t.date, t.merchant, t.amount,
-           COALESCE(t.settlement, 'immediate') AS settlement
+    SELECT t.id, t.date, t.merchant, t.amount, t.card_product_id, t.billing_month,
+           COALESCE(t.settlement, 'immediate') AS settlement,
+           cp.billing_cycle_day, cp.statement_close_day
     FROM transactions t
+    LEFT JOIN card_products cp ON cp.id = t.card_product_id
     WHERE ${where.join(' AND ')}
     ORDER BY t.date DESC, t.id DESC
   `).all(...params);
+
+  const nextBillingMonth = (r) => resolveBillingMonth({
+    settlement,
+    date: r.date,
+    cardProduct: r.card_product_id === null ? null : {
+      billing_cycle_day: r.billing_cycle_day,
+      statement_close_day: r.statement_close_day,
+    },
+  });
 
   return {
     target: {
@@ -112,6 +135,8 @@ function planReclassify(db, criteria = {}) {
       payment_method_type: method.type,
     },
     count: rows.length,
+    billing_month_filled: rows.filter((r) => r.billing_month === null && nextBillingMonth(r) !== null).length,
+    billing_month_cleared: rows.filter((r) => r.billing_month !== null && nextBillingMonth(r) === null).length,
     samples: rows.slice(0, SAMPLE_LIMIT).map((r) => ({
       id: r.id,
       date: r.date,
@@ -119,8 +144,11 @@ function planReclassify(db, criteria = {}) {
       amount: r.amount,
       before: r.settlement,
       after: settlement,
+      billing_month_before: r.billing_month,
+      billing_month_after: nextBillingMonth(r),
     })),
     ids: rows.map((r) => r.id),
+    billing: rows.map((r) => ({ id: r.id, billing_month: nextBillingMonth(r) })),
     impact: impactOf(db, rows.map((r) => r.id), settlement),
     fingerprint: fingerprintOf({ settlement, payment_method_id: methodId }, rows),
   };
@@ -172,15 +200,22 @@ function impactOf(db, ids, settlement) {
 function applyReclassify(db, plan) {
   if (!plan.ids.length) return 0;
 
+  // `plan.billing` 이 없으면 계산을 안 한 계획이다. 그 상태로 쓰면 전 행의
+  // 청구월이 조용히 NULL 로 밀린다.
+  if (!Array.isArray(plan.billing)) {
+    throw new Error('applyReclassify: plan.billing 이 없다. planReclassify 가 만든 계획만 쓴다.');
+  }
+  const billing = new Map(plan.billing.map((b) => [b.id, b.billing_month]));
+
   let changed = 0;
   db.transaction(() => {
-    // SQLite 변수 상한(999)에 걸리지 않게 나눠 넣는다.
-    for (let i = 0; i < plan.ids.length; i += 500) {
-      const chunk = plan.ids.slice(i, i + 500);
-      const placeholders = chunk.map(() => '?').join(',');
-      changed += db.prepare(
-        `UPDATE transactions SET settlement = ? WHERE id IN (${placeholders})`
-      ).run(plan.target.settlement, ...chunk).changes;
+    // 청구월이 행마다 달라 한 문장으로 묶을 수 없다. 행 단위로 도니 SQLite
+    // 변수 상한(999)에 걸릴 일이 없어져 청크 분할이 필요 없다.
+    const stmt = db.prepare(
+      'UPDATE transactions SET settlement = ?, billing_month = ? WHERE id = ?'
+    );
+    for (const id of plan.ids) {
+      changed += stmt.run(plan.target.settlement, billing.get(id) ?? null, id).changes;
     }
   })();
   return changed;

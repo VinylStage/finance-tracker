@@ -1385,6 +1385,73 @@
   ```
 - **에러 케이스**: 없음
 
+## settlement.js
+
+기존 거래의 결제 방식(`settlement`)을 결제수단 단위로 일괄 재분류한다(#289).
+**프리뷰 → 확인 → 실행**(ADR 0008).
+
+021 은 기존 거래를 전부 `immediate` 로 남겼다. **자동 변환하지 않기로 한 결정**이다 —
+이 저장소는 실거래 2,212건 유실 사고가 있었고 조용한 대량 변경은 같은 범주의
+위험이다. 사용자가 직접 "이 카드로 쓴 건 전부 카드 사용" 을 지정하는 도구가 이것이다.
+
+### POST /api/settlement/reclassify/preview
+**DB 를 바꾸지 않는다.**
+
+- **요청 파라미터**:
+  - `payment_method_id` (required, 숫자검증): 대상 결제수단
+  - `settlement` (required): 바꿀 결제 방식. `immediate` / `deferred` / `settlement`
+  - `from` / `to` (optional): 기간. `YYYY-MM-DD`
+- **응답 스키마**:
+  ```
+  { "target": {...}, "count": "number",
+    "billing_month_filled": "number", "billing_month_cleared": "number",
+    "samples": [{ "id", "date", "merchant", "amount", "before", "after",
+                  "billing_month_before", "billing_month_after" }],
+    "impact": [{ "accountId", "accountName", "balanceBefore", "balanceAfter",
+                 "balanceDelta", "cardUnpaidBefore", "cardUnpaidAfter" }],
+    "preview_token": "string", "undoable": true }
+  ```
+- **에러 케이스**: 400 — 결제수단 미지정 / 없는 결제수단 / 모르는 결제 방식 /
+  기간 형식이 `YYYY-MM-DD` 아님 / 시작일이 종료일보다 뒤
+- **비고**: **잔액 영향을 손으로 유도하지 않는다.** 실제 `computeBalance` 를 두 번
+  돌린다(지금 행 / 바꾼 행). `deferred` 제외 · 수입지출 방향 · 기준일 · 개설일
+  경계가 얽혀 있어 약식 계산은 경계에서 틀린다.
+
+  **잔액이 늘었다고 돈이 생긴 게 아니다.** `deferred` 로 바꾸면 잔액이 늘지만 그만큼
+  카드 미결제액이 는다. 실거래 사본에서 두 숫자가 정확히 일치했다. 그래서
+  `cardUnpaidBefore` / `cardUnpaidAfter` 를 같이 낸다 — 잔액만 보여주면 사용자가
+  반대로 읽는다.
+
+  **결제 방식이 바뀌면 청구월도 바뀐다.** `settlement` 은 `billing_month` 의
+  입력이다(#289). `deferred` 로 바꾸면 채워지고, 벗어나면 지워진다 —
+  `billing_month_filled` / `billing_month_cleared` 가 그 건수다. 카드의 결제일·마감일을
+  모르면 채우지 않는다(#290). 그 경우 나중에
+  `POST /api/billing-month/backfill` 로 소급한다.
+
+  **잔액은 계좌 단위로 낸다.** "12만원 늘어난다" 만 보여주면 어느 통장 이야기인지
+  알 수 없고 사용자가 통장을 열어 대조할 수 없다.
+
+### POST /api/settlement/reclassify
+확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
+
+- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
+- **에러 케이스**:
+  - 400: 프리뷰와 같음
+  - 428: `preview_token` 없음 (`preview_required: true`)
+  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
+- **비고**: 지문에 각 행의 `id` · 금액 · **현재 `settlement`** · `date` ·
+  `card_product_id` · `billing_month` 를 전부 담는다.
+
+  현재 `settlement` 을 담는 이유는 뮤테이션 테스트가 찾아낸 진짜 구멍이다 — id·금액만
+  담으면 **프리뷰 뒤에 대상 중 한 건의 상태만 바뀐 경우** 건수도 id 목록도 그대로라
+  지문이 통과하고, 사용자가 본 적 없는 상태의 거래가 조용히 재분류된다.
+
+  나머지 셋은 청구월의 입력이라 같은 이유로 담는다. `test/settlementReclassify.test.js`
+  의 `E-5`~`E-5c` 가 각 입력을 고립시켜 잠근다.
+
+  재분류 전체가 한 `action_id` 로 묶이고 라벨이 붙어 `/api/audit/undo` 로 통째로
+  되돌아간다.
+
 ## audit.js
 
 모든 쓰기의 전후 값과 1단계 실행취소(#297, #300, #301). 캡처는 라우트가 아니라 DB
