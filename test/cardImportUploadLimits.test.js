@@ -60,3 +60,24 @@ test('FND-09: /single 라우트도 동일하게 크기 제한 적용', async () 
   const resp = await fetch(`${BASE}/api/card-import/single?preview=true`, { method: 'POST', body: form });
   assert.strictEqual(resp.status, 400);
 });
+
+// 크기와 확장자는 위에서 보는데 **파일을 아예 안 보낸 경우**가 두 라우트 다
+// 비어 있었다. 화면은 항상 파일을 붙여 보내지만, 선택 없이 버튼을 누르거나
+// API 를 직접 호출하면 이 경로로 온다.
+test('G-1. 파일 없이 보내면 400 이고 안내가 나온다', async () => {
+  const empty = new FormData();
+  const resp = await fetch(`${BASE}/api/card-import`, { method: 'POST', body: empty });
+  const body = await resp.json();
+  assert.strictEqual(resp.status, 400, JSON.stringify(body));
+  assert.ok(body.error, '거부 사유가 없다');
+  assert.ok(!body.error.includes('files'), `문구에 내부 필드명 노출: ${body.error}`);
+});
+
+test('G-2. /single 도 파일 없이 보내면 400 이다', async () => {
+  const empty = new FormData();
+  const resp = await fetch(`${BASE}/api/card-import/single`, { method: 'POST', body: empty });
+  const body = await resp.json();
+  assert.strictEqual(resp.status, 400, JSON.stringify(body));
+  assert.ok(body.error, '거부 사유가 없다');
+  assert.ok(!body.error.includes('req.file'), `문구에 내부 이름 노출: ${body.error}`);
+});
