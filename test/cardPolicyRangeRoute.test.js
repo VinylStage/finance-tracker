@@ -81,6 +81,14 @@ describe('B. 구간 검증', () => {
       input: { from_month: 4, to_month: 12, policy_type: '부분무이자', free_from_sequence: 4 },
       fails: false,
     },
+    // 경계값. 위 케이스들은 경계 바깥만 보고 있어서, 경계 자체를 배제하도록
+    // 부등호가 뒤집혀도(`<` 를 `<=` 로) 아무도 못 잡는다.
+    { name: '최소 개월수 자체는 통과', input: { from_month: 2, to_month: 12 }, fails: false },
+    { name: '최대 개월수 자체는 통과', input: { from_month: 2, to_month: 60 }, fails: false },
+    { name: '시작과 끝이 같은 한 달짜리 통과', input: { from_month: 6, to_month: 6 }, fails: false },
+    // 숫자가 아닌 입력. 화면은 select 로 막지만 API 는 직접 호출될 수 있다.
+    { name: '개월수가 문자열이면 거부', input: { from_month: '세달', to_month: 12 }, fails: true },
+    { name: '개월수가 소수면 거부', input: { from_month: 2, to_month: 12.5 }, fails: true },
   ];
 
   for (const c of cases) {
@@ -114,6 +122,32 @@ describe('C. 저장', () => {
 
     const list = await json(`/api/card-policies?payment_method_id=${id}`);
     assert.deepStrictEqual(list.body.data.map((p) => p.months).sort((a, b) => a - b), [2, 3]);
+  });
+
+  // B 묶음은 validateRange 를 직접 부른다. 그래서 **라우트가 그 결과를 400 으로
+  // 돌려주는지**는 아무도 보지 않았다. 실제로 `if (rangeError) return 400` 을 통째로
+  // 지워도 B 는 전부 통과했다(#434). 검증 함수가 맞는 것과 라우트가 그걸 쓰는 것은
+  // 다른 문제다.
+  test('C-0. 구간이 잘못되면 400 이고 아무것도 저장되지 않는다', async () => {
+    const id = await cardId();
+    const before = await json(`/api/card-policies?payment_method_id=${id}`);
+
+    const res = await json('/api/card-policies/range', {
+      method: 'POST',
+      body: JSON.stringify({
+        payment_method_id: id, from_month: 12, to_month: 3,
+        policy_type: '무이자', effective_from: '2026-01-01',
+      }),
+    });
+    assert.strictEqual(res.status, 400, JSON.stringify(res.body));
+    assert.ok(res.body.error, '거부 사유가 없다');
+    // 사용자에게 그대로 보이는 문구다. 내부 필드명이 있으면 안 된다(#231).
+    for (const bad of ['from_month', 'to_month', 'free_from_sequence']) {
+      assert.ok(!res.body.error.includes(bad), `문구에 내부 필드명 노출: ${res.body.error}`);
+    }
+
+    const after = await json(`/api/card-policies?payment_method_id=${id}`);
+    assert.strictEqual(after.body.data.length, before.body.data.length, '거부됐는데 저장됐다');
   });
 
   test('C-2. 겹치면 409 이고 아무것도 저장되지 않는다', async () => {
