@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
+import CardEstimateHint from './CardEstimateHint';
 import { localYMD, localYearMonth } from '../lib/date';
 import { remainingBudget, toSpentMap } from '../lib/quickEntry';
 import { formatWon } from '../lib/format';
@@ -249,6 +250,17 @@ export default function TransactionForm({ initial, categories, paymentMethods, c
           )}
         </div>
       </div>
+
+      {/* 카드 추천은 **가맹점까지 채운 뒤**에 둔다(#437). 금액만으로도 계산되지만
+          가맹점 지정 혜택이 걸리는지가 순위를 바꾸므로, 그 칸을 지나온 자리에서
+          보여줘야 사용자가 본 값이 실제로 적용될 값과 같다.
+
+          입력 흐름을 막지 않는 보조 정보다(#276) — 계산이 실패하면 조용히 사라진다. */}
+      <CardEstimateHint
+        amount={form.amount}
+        categoryId={form.category_id}
+        merchant={form.merchant}
+      />
 
       <div>
         <label htmlFor="tx-memo" className="block text-xs text-caption mb-1">메모</label>
