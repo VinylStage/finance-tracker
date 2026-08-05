@@ -111,3 +111,39 @@ test('FND-03: 백업에 없는 기존 카테고리는 삭제되지 않고 남아
   const after = await afterResp.json();
   assert.strictEqual(after.length, totalBefore, '백업에 없다고 기존 카테고리가 삭제되면 안 됨');
 });
+
+// 복원은 덮어쓰기다. 확인 문구가 맞아도 **내용이 비어 있으면 거부**해야 하는데
+// 그 분기가 비어 있었다. 빈 페이로드가 통과하면 기존 설정이 지워진 채로 아무것도
+// 안 들어온다.
+test('K-1. 확인 문구가 맞아도 복원할 내용이 없으면 400 이다', async () => {
+  const cases = [
+    { name: '완전히 빈 본문', body: { confirm: 'OVERWRITE_SETTINGS' } },
+    { name: '엉뚱한 키만', body: { confirm: 'OVERWRITE_SETTINGS', 없는키: [1, 2] } },
+  ];
+  for (const c of cases) {
+    const r = await fetch(`${BASE}/api/export/settings/restore`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(c.body),
+    });
+    const parsed = await r.json();
+    assert.strictEqual(r.status, 400, `${c.name}: ${JSON.stringify(parsed)}`);
+    assert.ok(parsed.error, `${c.name}: 거부 사유가 없다`);
+  }
+});
+
+test('K-2. 확인 문구가 틀리면 400 이고 설정이 안 바뀐다', async () => {
+  const before = await (await fetch(`${BASE}/api/categories`)).json();
+  const beforeCount = (Array.isArray(before) ? before : before.data).length;
+
+  for (const confirm of [undefined, '', 'overwrite_settings', 'YES']) {
+    const r = await fetch(`${BASE}/api/export/settings/restore`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm, categories: [{ name: '침입', major_type: '선택지출' }] }),
+    });
+    assert.strictEqual(r.status, 400, `confirm=${JSON.stringify(confirm)} 가 통과했다`);
+  }
+
+  const after = await (await fetch(`${BASE}/api/categories`)).json();
+  const afterCount = (Array.isArray(after) ? after : after.data).length;
+  assert.strictEqual(afterCount, beforeCount, '거부됐는데 카테고리가 바뀌었다');
+});
