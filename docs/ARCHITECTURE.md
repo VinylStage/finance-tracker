@@ -71,9 +71,9 @@ CSS 에서 사라진다.
 
 `Accounts` · `AuditLog` · `CardStrategy` · `Comparison` · `Dashboard` · `Debts` · `Guide` · `Installments` · `Revolving` · `Savings` · `Settings` · `Simulator` · `Transactions`
 
-### 프론트엔드 컴포넌트 (43개)
+### 프론트엔드 컴포넌트 (44개)
 
-`AnchorNav` · `BalanceProjection` · `BillingMonthBackfillSection` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `SavingsGoalBar` · `SettlementReclassifySection` · `SpendHeatmap` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
+`AnchorNav` · `BalanceProjection` · `BillingMonthBackfillSection` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `RetentionNotice` · `SavingsGoalBar` · `SettlementReclassifySection` · `SpendHeatmap` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
 ### 마이그레이션 (23개)
 
