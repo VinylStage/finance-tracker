@@ -41,9 +41,12 @@ test('guide 라우트 — GET /api/guide returning markdown content', async () =
 //
 // 문서를 실제로 치우는 대신 GUIDE_PATH 를 없는 경로로 주입한다. 테스트가 중간에
 // 죽어도 저장소 파일이 사라진 채 남지 않는다.
+//
+// 포트는 PORT + 1 로 만들지 않는다. 34601 + 1 은 savingsRoute 가 쓰는 34602 라
+// 전체 스위트에서만 간헐 실패한다. 같은 실수를 auditRoute 에서 실제로 냈다.
 test('guide 라우트 — 문서가 없으면 404 이고 내부 경로를 흘리지 않는다', async () => {
   const missing = path.join(os.tmpdir(), `no-such-guide-${process.pid}.md`);
-  const alt = await startTestServer({ port: PORT + 1, env: { GUIDE_PATH: missing } });
+  const alt = await startTestServer({ port: 34810, env: { GUIDE_PATH: missing } });
   try {
     const response = await fetch(`${alt.base}/api/guide`);
     assert.strictEqual(response.status, 404);
