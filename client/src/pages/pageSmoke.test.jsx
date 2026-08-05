@@ -136,6 +136,16 @@ const SHAPES = [
     total: 1,
   }],
   [/^\/api\/recurring-rules\/due/, { data: [] }],
+  // GET /api/recurring-rules 는 **배열을 그대로** 준다(`{data:[]}` 가 아니다).
+  // 객체를 주면 Settings 가 `rules.filter` 를 부르며 터진다 — 실제로 걸렸다.
+  [/^\/api\/recurring-rules/, [{
+    id: 1, name: '넷플릭스', category_id: 1, category_name: '식비',
+    merchant: '넷플릭스', amount: 17000, day_of_month: 15,
+    payment_method_id: 1, payment_method_name: '하나카드',
+    payment_style: '일시불', memo: null, is_active: 1,
+    freq: 'monthly', interval: 1, starts_on: '2026-01-01',
+    ends_on: null, month_of_year: null,
+  }]],
   // 카드 전략(#277). thresholds 는 배열을, comparison 은 비교 결과를 준다.
   // 목록을 비우면 카드 행을 그리는 코드가 한 줄도 안 돈다 — 한 건씩 채운다.
   [/^\/api\/card-strategy\/thresholds/, {
@@ -208,6 +218,14 @@ const SHAPES = [
       card_type: '신용', annual_fee: 0, payment_method_name: '하나카드',
     }],
   }],
+  [/^\/api\/savings/, {
+    data: [{
+      id: 1, name: '주택청약', monthly_contribution: 100000,
+      start_date: '2025-01-01', maturity_date: '2026-12-31',
+      expected_payout: 2500000, category_id: 1, category_name: '저축',
+      status: '진행중',
+    }],
+  }],
   [/^\/api\/accounts/, { data: [] }],
 ];
 
@@ -262,7 +280,35 @@ const PAGES = [
   // #400 으로 들어온 화면이라 감사 S2 가 센 미렌더 목록에는 없었다. 전용
   // 테스트(CardStrategy.test.jsx)는 흐린 표시를 보고, 여기서는 "열면 죽는가"만 본다.
   ['CardStrategy', () => import('./CardStrategy')],
+  // 감사 S2 가 목록을 만들 때 빠졌다. Savings 는 전용 테스트도 없어 커버리지가
+  // 전 항목 0% 였다(#466) — 이 페이지를 렌더하는 테스트가 하나도 없었다는 뜻이다.
+  ['Savings', () => import('./Savings')],
+  ['Settings', () => import('./Settings')],
+  // 전용 테스트가 있어도 목록에 넣는다. 전용 테스트는 그 화면의 동작을 보고,
+  // 여기서는 "열면 죽는가" 를 본다. 목적이 다르므로 서로를 대신하지 못한다.
+  ['Accounts', () => import('./Accounts')],
+  ['AuditLog', () => import('./AuditLog')],
 ];
+
+// 목록에서 빠진 페이지는 이 파일이 보호하지 못한다. 실제로 네 개가 빠져 있었고
+// 그중 Savings 는 전용 테스트도 없어 커버리지가 전 항목 0% 였다(#466).
+// 사람이 목록을 관리하면 또 빠지므로 파일 목록과 대조한다.
+//
+// 여기서 제외하려면 이유를 적는다. 지금은 없다.
+const SMOKE_EXEMPT = new Set([]);
+
+it('pages 디렉터리의 모든 페이지가 스모크 목록에 있다', async () => {
+  const mods = import.meta.glob('./*.jsx');
+  const onDisk = Object.keys(mods)
+    .map((f) => f.replace('./', '').replace('.jsx', ''))
+    .filter((n) => !n.endsWith('.test'))
+    .filter((n) => !SMOKE_EXEMPT.has(n));
+
+  const listed = new Set(PAGES.map(([name]) => name));
+  const missing = onDisk.filter((n) => !listed.has(n));
+
+  expect(missing, `스모크 목록에 없는 페이지: ${missing.join(', ')}`).toEqual([]);
+});
 
 describe('페이지 스모크 렌더', () => {
   for (const [name, load] of PAGES) {
