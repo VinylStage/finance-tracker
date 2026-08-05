@@ -16,10 +16,16 @@ function isInvalidDateParam(value) {
   return value !== undefined && value !== null && value !== '' && !DATE_RE.test(value);
 }
 
+// RFC 4180: 쉼표·따옴표·CR·LF 중 하나라도 있으면 따옴표로 감싸고 안쪽 따옴표는 겹친다.
+//
+// **`\r` 을 빠뜨리면 안 된다.** 카드사 엑셀 임포트가 실제로 개행이 든 가맹점명을
+// 들여온다(`cardExcelImport.test.js` 의 `'스타벅스\r\n강남점'`). CRLF 는 `\n` 때문에
+// 걸리지만 **CR 단독은 안 걸려** 감싸지 않은 채 나가고, 그러면 리더에 따라 그 행이
+// 거기서 잘린다 — 내보낸 파일이 조용히 짧아진다.
 function csvEscape(val) {
   if (val === null || val === undefined) return '';
   const s = String(val);
-  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
   return s;
 }
 
