@@ -43,21 +43,16 @@ before(() => {
   db.exec(`
     CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
     CREATE TABLE payment_methods (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
-    CREATE TABLE card_installment_policies (
-      id INTEGER PRIMARY KEY,
-      payment_method_id INTEGER NOT NULL REFERENCES payment_methods(id),
-      months INTEGER NOT NULL,
-      policy_type TEXT NOT NULL,
-      annual_rate REAL NOT NULL DEFAULT 0,
-      free_months INTEGER NOT NULL DEFAULT 0,
-      effective_from TEXT NOT NULL,
-      effective_to TEXT,
-      memo TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(payment_method_id, months, effective_from)
-    );
     INSERT INTO payment_methods (id, name) VALUES (1, '하나카드');
     INSERT INTO categories (id, name) VALUES (1, '온라인쇼핑'), (2, '교통');
+  `);
+
+  // card_installment_policies 는 **소유한 마이그레이션이 만든다.** 손으로 적은
+  // 사본은 006 이 컬럼을 늘려도 따라가지 않는다 — 015 가 그 위에 컬럼을 더하는
+  // 테스트인데 밑판이 실제와 다르면 무엇을 검증했는지 알 수 없다.
+  require('../migrations/006-add-card-installment-policies').up(db);
+
+  db.exec(`
     INSERT INTO card_installment_policies
       (payment_method_id, months, policy_type, annual_rate, free_months, effective_from)
     VALUES (1, 6, '무이자', 0, 0, '2026-01-01');

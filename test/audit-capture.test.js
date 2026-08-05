@@ -15,23 +15,13 @@ before(() => {
   const dbPath = path.join(tmpdir, 'test.db');
   db = new Database(dbPath);
 
-  // audit_log 테이블 생성
-  db.exec(`
-    CREATE TABLE audit_log (
-      id INTEGER PRIMARY KEY,
-      ts TEXT NOT NULL,
-      actor TEXT NOT NULL,
-      action_id TEXT NOT NULL,
-      action_label TEXT,
-      op TEXT NOT NULL,
-      table_name TEXT NOT NULL,
-      row_id INTEGER,
-      before_json TEXT,
-      after_json TEXT,
-      undone_at TEXT,
-      undo_of TEXT
-    );
-  `);
+  // audit_log 는 **소유한 마이그레이션이 만든다.**
+  //
+  // 손으로 같은 CREATE TABLE 을 적어 두면 010 이 컬럼을 늘려도 이 테스트는 자기
+  // 사본을 계속 쓰며 통과한다. 017 의 트리거는 PRAGMA table_info 로 컬럼을 읽어
+  // 만들어지므로, 스키마가 어긋나면 **테스트와 프로덕션이 서로 다른 트리거를
+  // 검증하게 된다** — 통과가 아무것도 보장하지 않는 상태가 된다.
+  require('../migrations/010-add-audit-log').up(db);
 
   // 검증 대상 테이블 categories 생성
   db.exec(`
