@@ -19,6 +19,7 @@ import AnchorNav from '../components/AnchorNav';
 import CardPolicySection from '../components/CardPolicySection';
 import CardProductSection from '../components/CardProductSection';
 import CardRemapSection from '../components/CardRemapSection';
+import CardBenefitSection from '../components/CardBenefitSection';
 import SettlementReclassifySection from '../components/SettlementReclassifySection';
 import { formatWon } from '../lib/format';
 
@@ -85,6 +86,12 @@ export default function Settings() {
           <Anchor id="card-product">
             <CardProductSection paymentMethods={paymentMethods} />
           </Anchor>
+          {/* 혜택은 카드를 등록한 **바로 다음**이다(#435). 카드만 등록하고 혜택을
+              안 넣으면 추천 계산이 모든 카드를 똑같이 봐서 M8 전체가 무의미해진다 —
+              등록 화면 바로 아래에 두어 이어지게 한다. */}
+          <Anchor id="card-benefit">
+            <CardBenefitSection categories={categories} />
+          </Anchor>
           {/* 재매핑은 카드를 등록한 **다음** 할 일이다(#302 3단계). 등록 화면
               바로 아래에 두어 "카드를 넣었으니 지난 거래도 붙이자" 가 이어지게 한다.
               위에 두면 옮길 카드가 없는 상태에서 도구부터 만나게 된다. */}
@@ -142,6 +149,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'category', label: '카테고리 관리' },
   { id: 'payment', label: '결제수단 관리' },
   { id: 'card-product', label: '보유 카드' },
+  { id: 'card-benefit', label: '카드 혜택' },
   { id: 'card-remap', label: '지난 거래 카드 지정' },
   { id: 'settlement-reclassify', label: '결제방식 재분류' },
   { id: 'card-policy', label: '카드 할부 정책' },
