@@ -26,6 +26,8 @@ function collectDeclarations() {
 const EXPECTED = [
   { file: 'accounts.js', method: 'POST', routePath: '/', fields: ['opening_balance', 'credit_limit'] },
   { file: 'accounts.js', method: 'PUT', routePath: '/:id', fields: ['opening_balance', 'credit_limit', 'is_active'] },
+  { file: 'billingMonth.js', method: 'POST', routePath: '/backfill/preview', fields: ['card_product_id'] },
+  { file: 'billingMonth.js', method: 'POST', routePath: '/backfill', fields: ['card_product_id'] },
   { file: 'cardBenefits.js', method: 'POST', routePath: '/', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
   { file: 'cardBenefits.js', method: 'PUT', routePath: '/:id', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
   { file: 'cardPolicies.js', method: 'POST', routePath: '/range', fields: ['payment_method_id', 'from_month', 'to_month', 'free_from_sequence', 'category_id'] },

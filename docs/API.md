@@ -1574,6 +1574,79 @@
 - **비고**: 삭제해도 거래는 남는다. `card_product_id` 가 NULL 로 돌아가 "미상" 이
   될 뿐이다 — 거래를 지우면 가계부 기록이 사라지므로 그럴 수 없다.
 
+## billingMonth.js
+
+청구월 소급(#289). 카드 주기를 **나중에** 넣거나 고쳤을 때 기존 거래의 청구월을
+다시 맞춘다.
+
+`resolveBillingMonth` 는 카드의 결제일·마감일을 모르면 아무것도 안 적는다(#290).
+그런데 사용자는 카드를 등록한 뒤에 그 값을 채워 넣는다 — 명세서를 찾아봐야 알 수
+있어서 나중에 들어온다. 그 사이에 쌓인 거래는 청구월이 빈 채로 남고 **스스로
+되살아나지 않는다.** `PUT /api/card-products/:id` 는 `card_products` 만 UPDATE 한다.
+
+비어 있으면 `cardUnpaid` 가 `unassigned` 로 빼고, `projectBalance` 는 청구월 없는
+`deferred` 를 추이에서 **통째로 뺀다** — 앞으로 빠질 카드값이 없는 것처럼 보인다.
+
+### GET /api/billing-month/missing-count
+- **응답 스키마**: `{ "missing": "number" }`
+- **비고**: 청구월이 비어 있는 `deferred` 거래 수. 소급이 필요한 상태인지 화면을
+  열기 전에 알 수 있어야 한다. 즉시 결제는 청구월이 없는 것이 정상이라 안 센다.
+
+### POST /api/billing-month/backfill/preview
+**DB 를 바꾸지 않는다** — ADR 0008 의 프리뷰 단계다.
+
+- **요청 파라미터**:
+  - `mode` (optional): `fill`(기본) 또는 `recompute`
+  - `card_product_id` (optional, 숫자검증): 그 카드 거래만. 안 주면 전체
+- **응답 스키마**:
+  ```
+  { "mode": "string", "card": {...} | null,
+    "scanned": "number", "count": "number",
+    "filled": "number", "cleared": "number", "rewritten": "number",
+    "skipped_written": "number",
+    "samples": [{ "id", "date", "merchant", "amount", "card_product_name",
+                  "before", "after" }],
+    "preview_token": "string", "undoable": true }
+  ```
+- **에러 케이스**: 400 — 모르는 `mode` / 없는 카드
+- **비고**: **두 모드가 있는 이유는 손으로 적은 값을 구분할 컬럼이 없기 때문이다.**
+  라우트가 `billing_month` 를 직접 받으므로 명세서를 보고 넣은 값이 섞여 있을 수 있다.
+
+  | 모드 | 무엇을 하나 |
+  |---|---|
+  | `fill` (기본) | 비어 있는 것만 채운다. 적힌 값은 지나치고 `skipped_written` 로 센다 |
+  | `recompute` | 전부 다시 계산한다. 마감일을 고쳤을 때 쓴다 |
+
+  `fill` 이 기본인 이유는 **되돌릴 수 없는 쪽이 더 비싸기 때문이다.** 손으로 넣은
+  값이 지워지면 사용자는 그것이 무엇이었는지 알 방법이 없다. 덜 채워진 것은 다시
+  돌리면 된다.
+
+  대상은 `deferred` 만이 아니라 **청구월이 적힌 행 전부**다. 즉시 결제·카드대금
+  인출에는 청구월이 없어야 하는데(#289) 재분류로 `deferred` 를 벗은 거래에 값이
+  남을 수 있다. 대상에서 빼면 그 찌꺼기를 치울 방법이 없어진다.
+
+  `cleared` 가 0 이 아니면 옮겨 갈 카드의 결제일·마감일을 모른다는 뜻이다. 근거
+  없는 달에 묶인 채 남는 것보다 "아직 모른다" 가 낫다(#290).
+
+### POST /api/billing-month/backfill
+확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
+
+- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
+- **응답 스키마**: `{ "ok": true, "updated": "number", "missing": "number", "mode": "string", "card": {...} | null }`
+- **에러 케이스**:
+  - 400: 프리뷰와 같음
+  - 428: `preview_token` 없음 (`preview_required: true`)
+  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
+- **비고**: 지문은 **바뀔 값과 그 입력 전부**를 담는다 — `id` · `date` ·
+  `settlement` · `card_product_id` · 지금 `billing_month`. 청구월은 앞의 셋에서
+  나오므로 하나라도 빠지면, 프리뷰 뒤에 그 입력이 바뀌었을 때 **건수도 id 목록도
+  그대로라 지문이 통과하고** 사용자가 본 적 없는 계산 결과가 적힌다(#419 의
+  `C-3b` 와 같은 구멍). `test/billingMonthBackfillRoute.test.js` 의 `G-1b`~`G-1e`
+  가 네 입력을 각각 고립시켜 잠근다.
+
+  소급 전체가 한 `action_id` 로 묶이고 `청구월 소급` 라벨이 붙어
+  `/api/audit/undo` 로 통째로 되돌아간다.
+
 ## cardBenefits.js
 
 카드별 할인·적립 조건(#274).

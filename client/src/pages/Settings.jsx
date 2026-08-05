@@ -20,6 +20,7 @@ import CardPolicySection from '../components/CardPolicySection';
 import CardProductSection from '../components/CardProductSection';
 import CardRemapSection from '../components/CardRemapSection';
 import SettlementReclassifySection from '../components/SettlementReclassifySection';
+import BillingMonthBackfillSection from '../components/BillingMonthBackfillSection';
 import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
@@ -97,6 +98,13 @@ export default function Settings() {
           <Anchor id="settlement-reclassify">
             <SettlementReclassifySection paymentMethods={paymentMethods} />
           </Anchor>
+          {/* 청구월 소급은 그 **다음**이다. 청구월은 `card_product_id` 와
+              `settlement` 둘 다에서 나오므로, 카드를 붙이고 결제방식을 정한
+              뒤라야 채울 것이 제대로 잡힌다. 순서를 앞당기면 아직 즉시 결제인
+              거래가 대상에서 빠져 두 번 돌려야 한다. */}
+          <Anchor id="billing-backfill">
+            <BillingMonthBackfillSection />
+          </Anchor>
           {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
           <Anchor id="card-policy">
             <CardPolicySection paymentMethods={paymentMethods} />
@@ -144,6 +152,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'card-product', label: '보유 카드' },
   { id: 'card-remap', label: '지난 거래 카드 지정' },
   { id: 'settlement-reclassify', label: '결제방식 재분류' },
+  { id: 'billing-backfill', label: '청구월 소급' },
   { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
   { id: 'history', label: '변경 이력' },
