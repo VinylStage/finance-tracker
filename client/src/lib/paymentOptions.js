@@ -68,9 +68,19 @@ export function parseSelection(value, cardProducts = []) {
 // optgroup 을 중첩할 수 없기 때문이고, 카드사는 어차피 각 항목에 붙는다.
 //
 // 반환: [{ label, options: [{ value, label }] }]
-export function buildPaymentOptions(paymentMethods = [], cardProducts = []) {
+export function buildPaymentOptions(paymentMethods = [], cardProducts = [], options = {}) {
+  const { keepCardProductId = null } = options;
+
+  // 더 안 쓰기로 한 카드는 새 거래에서 고를 수 없다(#410). 다만 **지금 그 카드로
+  // 지정된 거래를 수정하는 중이면 남긴다** — 목록에서 빼면 선택이 비고, 저장하는
+  // 순간 그 지정이 지워진다. 비활성 결제수단에 달린 상품을 남기는 것과 같은 이유다.
+  const selectable = cardProducts.filter(
+    (p) => p.is_active === undefined || p.is_active === null || p.is_active
+      || String(p.id) === String(keepCardProductId)
+  );
+
   const byMethod = new Map();
-  for (const product of cardProducts) {
+  for (const product of selectable) {
     if (!byMethod.has(product.payment_method_id)) byMethod.set(product.payment_method_id, []);
     byMethod.get(product.payment_method_id).push(product);
   }

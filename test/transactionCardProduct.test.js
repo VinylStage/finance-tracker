@@ -194,7 +194,13 @@ describe('C. 카드 아닌 결제수단은 그대로다', () => {
 });
 
 describe('D. 카드사 참조는 깨지지 않는다', () => {
-  test('D-1. 카드를 지워도 거래는 남고 카드사 참조가 유지된다', async () => {
+  // 전에는 카드를 지우면 card_product_id 가 NULL 로 돌아갔다. 그래서 NULL 이
+  // "한 번도 지정 안 됨" 과 "지운 카드" 둘을 뜻했고, 전략 계산의 되짚기가 후자를
+  // 전자로 오해해 지운 카드의 지출을 남은 카드로 넘겼다(#410).
+  //
+  // 이제 지우기는 비활성화다. **지정은 그대로 남는다** — 그래야 NULL 이 다시
+  // 한 가지 뜻만 갖는다.
+  test('D-1. 카드를 지워도 거래의 카드 지정이 그대로 남는다', async () => {
     const product = await post('/api/card-products', {
       payment_method_id: cardIssuerId,
       issuer: '테스트카드사',
@@ -206,10 +212,28 @@ describe('D. 카드사 참조는 깨지지 않는다', () => {
 
     const deleted = await json(`/api/card-products/${product.body.id}`, { method: 'DELETE' });
     assert.strictEqual(deleted.status, 200);
+    assert.strictEqual(deleted.body.kept, 1, '그 카드에 남은 거래 수를 알려야 한다');
 
     const saved = await readTx(created.body.id);
     assert.ok(saved, '카드를 지웠다고 거래가 사라지면 안 된다');
-    assert.strictEqual(saved.card_product_id, null);
+    assert.strictEqual(saved.card_product_id, product.body.id, '지정이 유지돼야 한다');
     assert.strictEqual(saved.payment_method_id, cardIssuerId);
+  });
+
+  test('D-2. 비활성 카드는 미상 건수에 포함되지 않는다', async () => {
+    // 미상은 이제 "한 번도 지정 안 됨" 하나만 뜻한다.
+    const before = (await json('/api/card-products/unassigned-count')).body.unassigned;
+
+    const product = await post('/api/card-products', {
+      payment_method_id: cardIssuerId,
+      issuer: '테스트카드사',
+      product_name: '미상집계 확인용',
+      card_type: '신용',
+    });
+    await post('/api/transactions', tx({ payment_method_id: cardIssuerId, card_product_id: product.body.id }));
+    await json(`/api/card-products/${product.body.id}`, { method: 'DELETE' });
+
+    const after = (await json('/api/card-products/unassigned-count')).body.unassigned;
+    assert.strictEqual(after, before, '비활성화가 미상 건수를 늘리면 안 된다');
   });
 });

@@ -73,9 +73,18 @@ function cardIdResolver(cards) {
 }
 
 function loadCards() {
+  // **비활성 카드도 함께 싣는다.** 과거 거래가 그 카드를 가리키고 있어서,
+  // 빼면 "실제로 그 카드로 얼마를 받았나" 를 계산할 수 없다(#410).
+  //
+  // 되짚기(cardIdResolver)도 이 목록을 쓴다. 비활성 카드가 후보에 남아 있어야
+  // "그 결제수단에 상품이 딱 하나" 조건이 성립하지 않고, 그래서 지운 카드의
+  // 과거 지출이 남은 카드로 넘어가지 않는다.
+  //
+  // 추천 후보에서 빼는 것은 계산 쪽(compareCards)의 몫이다 — 못 쓰는 카드를
+  // "이걸 썼어야 한다" 로 권할 수는 없다.
   const cards = db.prepare(`
     SELECT id, payment_method_id, issuer, product_name, card_type, prev_month_threshold,
-           billing_cycle_day, statement_close_day
+           billing_cycle_day, statement_close_day, is_active
     FROM card_products
     ORDER BY issuer, product_name
   `).all();

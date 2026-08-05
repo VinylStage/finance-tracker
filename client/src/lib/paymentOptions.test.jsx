@@ -125,6 +125,48 @@ describe('buildPaymentOptions', () => {
     });
   });
 
+  // 더 안 쓰기로 한 카드(#410). 새 거래에서는 못 고르지만, 그 카드로 지정된
+  // 과거 거래를 수정할 때 목록에서 빠지면 저장하는 순간 지정이 지워진다.
+  describe('D2. 비활성 카드', () => {
+    const WITH_INACTIVE = [
+      { id: 11, payment_method_id: 1, issuer: '하나카드', product_name: '하나 A카드', is_active: 1 },
+      { id: 12, payment_method_id: 1, issuer: '하나카드', product_name: '하나 B카드', is_active: 0 },
+    ];
+
+    it('D2-1. 비활성 카드는 기본적으로 빠진다', () => {
+      const groups = buildPaymentOptions(METHODS, WITH_INACTIVE);
+      expect(valuesOf(groups, CARD_GROUP_LABEL)).not.toContain('cp:12');
+    });
+
+    it('D2-2. 활성 카드는 그대로 나온다', () => {
+      const groups = buildPaymentOptions(METHODS, WITH_INACTIVE);
+      expect(valuesOf(groups, CARD_GROUP_LABEL)).toContain('cp:11');
+    });
+
+    it('D2-3. 지금 지정된 카드면 비활성이어도 남는다', () => {
+      const groups = buildPaymentOptions(METHODS, WITH_INACTIVE, { keepCardProductId: 12 });
+      expect(valuesOf(groups, CARD_GROUP_LABEL)).toContain('cp:12');
+    });
+
+    it('D2-4. 문자열로 넘어온 id 도 같게 본다 — 폼 상태는 문자열이다', () => {
+      const groups = buildPaymentOptions(METHODS, WITH_INACTIVE, { keepCardProductId: '12' });
+      expect(valuesOf(groups, CARD_GROUP_LABEL)).toContain('cp:12');
+    });
+
+    it('D2-5. is_active 가 없는 목록은 전부 활성으로 본다 — 예전 응답 호환', () => {
+      const groups = buildPaymentOptions(METHODS, PRODUCTS);
+      expect(valuesOf(groups, CARD_GROUP_LABEL)).toContain('cp:12');
+    });
+
+    it('D2-6. 비활성만 남은 카드사는 미지정 항목만 남는다', () => {
+      const onlyInactive = [{ id: 12, payment_method_id: 1, issuer: '하나카드', product_name: '하나 B카드', is_active: 0 }];
+      const groups = buildPaymentOptions(METHODS, onlyInactive);
+      const labels = labelsOf(groups, CARD_GROUP_LABEL);
+      expect(labels).toContain('하나카드');
+      expect(labels).not.toContain('하나 B카드 · 하나카드');
+    });
+  });
+
   describe('E. 빈 입력', () => {
     it('E-1. 인자가 없어도 빈 배열을 낸다', () => {
       expect(buildPaymentOptions()).toEqual([]);
