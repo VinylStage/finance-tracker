@@ -162,7 +162,10 @@ function parseWithSpec(csvText, spec) {
   const transactions = [];
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    if (row.length === 0) continue;
+    // 빈 줄은 `[]` 가 아니라 `[""]` 다. `row.length === 0` 은 절대 참이 되지
+    // 않아, 빈 줄이 오류 행으로 미리보기에 떴다(#463). 파일 끝 개행 하나로
+    // 생기는 마지막 줄까지 여기서 걸러진다.
+    if (row.every((f) => String(f).trim() === '')) continue;
 
     const parsedDate = normalizeDate(row[dateIndex]);
     const parsedAmount = parseAmount(row[amountIndex]);

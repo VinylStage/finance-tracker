@@ -118,3 +118,57 @@ describe('C. 삭제', () => {
     assert.equal(res.status, 404);
   });
 });
+
+// 같은 이름으로 두 번 만들면 409 를 내는 자리가 비어 있었다. 계좌 이름은 UNIQUE
+// 라 두 번째 INSERT 가 예외를 던지는데, 그 예외를 409 로 바꾸는 분기가
+// 확인되지 않았다. 안 잡히면 사용자에게 500 이 나간다.
+test('J-1. 같은 이름의 계좌를 또 만들면 409 다', async () => {
+  const name = `중복검증-${Date.now()}`;
+  const body = { name, type: '입출금', opening_balance: 0, opening_date: '2026-01-01' };
+
+  const first = await json('/api/accounts', { method: 'POST', body: JSON.stringify(body) });
+  assert.strictEqual(first.status, 201, JSON.stringify(first.body));
+
+  const second = await json('/api/accounts', { method: 'POST', body: JSON.stringify(body) });
+  assert.strictEqual(second.status, 409, JSON.stringify(second.body));
+  assert.ok(second.body.error, '거부 사유가 없다');
+  assert.ok(!/UNIQUE|constraint|SQLITE/i.test(second.body.error),
+    `DB 오류가 그대로 노출됐다: ${second.body.error}`);
+});
+
+test('J-2. 필수 값이 빠지면 400 이다', async () => {
+  const full = { name: `필수검증-${Date.now()}`, type: '입출금', opening_date: '2026-01-01' };
+  for (const drop of ['name', 'type', 'opening_date']) {
+    const b = { ...full };
+    delete b[drop];
+    const r = await json('/api/accounts', { method: 'POST', body: JSON.stringify(b) });
+    assert.strictEqual(r.status, 400, `${drop} 를 빼도 통과했다: ${JSON.stringify(r.body)}`);
+    for (const bad of ['opening_date', 'name', 'type']) {
+      assert.ok(!r.body.error.includes(bad), `문구에 내부 필드명 노출: ${r.body.error}`);
+    }
+  }
+});
+
+// 생성뿐 아니라 **수정**에도 같은 UNIQUE 처리가 있는데 그쪽이 비어 있었다.
+// 이미 있는 이름으로 바꾸면 사용자에게 500 이 나간다.
+test('J-3. 다른 계좌와 같은 이름으로 바꾸면 409 다', async () => {
+  const stamp = Date.now();
+  const a = await json('/api/accounts', {
+    method: 'POST',
+    body: JSON.stringify({ name: `A-${stamp}`, type: '입출금', opening_date: '2026-01-01' }),
+  });
+  const b = await json('/api/accounts', {
+    method: 'POST',
+    body: JSON.stringify({ name: `B-${stamp}`, type: '입출금', opening_date: '2026-01-01' }),
+  });
+  assert.strictEqual(a.status, 201, JSON.stringify(a.body));
+  assert.strictEqual(b.status, 201, JSON.stringify(b.body));
+
+  const r = await json(`/api/accounts/${b.body.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name: `A-${stamp}`, type: '입출금', opening_date: '2026-01-01' }),
+  });
+  assert.strictEqual(r.status, 409, JSON.stringify(r.body));
+  assert.ok(r.body.error, '거부 사유가 없다');
+  assert.ok(!/UNIQUE|constraint|SQLITE/i.test(r.body.error), `DB 오류 노출: ${r.body.error}`);
+});

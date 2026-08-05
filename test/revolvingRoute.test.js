@@ -87,3 +87,67 @@ test('revolving 라우트 — 생성/중복거부/조회/수정/삭제와 잔액
   assert.strictEqual(list4.data.length, 1);
   assert.strictEqual(list4.data[0].id, id1);
 });
+
+// 거부 경로와 조회 필터가 통째로 비어 있었다(분기 70.6%). 리볼빙은 이월 잔액이
+// 다음 달로 넘어가는 구조라, 잘못된 입력이 저장되면 그 뒤 달이 전부 어긋난다.
+test('H-1. 필수 값이 빠지면 400 이고 저장되지 않는다', async () => {
+  const pms = await (await fetch(`${BASE}/api/payment-methods`)).json();
+  const pmId = (Array.isArray(pms) ? pms : pms.data)[0].id;
+
+  const before = await (await fetch(`${BASE}/api/revolving`)).json();
+
+  const cases = [
+    { name: '월 없음', body: { payment_method_id: pmId, paid_amount: 10000 } },
+    { name: '결제수단 없음', body: { month: '2026-07', paid_amount: 10000 } },
+    { name: '결제금액 없음', body: { month: '2026-07', payment_method_id: pmId } },
+  ];
+  for (const c of cases) {
+    const r = await fetch(`${BASE}/api/revolving`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(c.body),
+    });
+    const body = await r.json();
+    assert.strictEqual(r.status, 400, `${c.name}: ${JSON.stringify(body)}`);
+    assert.ok(body.error, `${c.name}: 거부 사유가 없다`);
+    for (const bad of ['payment_method_id', 'paid_amount']) {
+      assert.ok(!body.error.includes(bad), `문구에 내부 필드명 노출: ${body.error}`);
+    }
+  }
+
+  const after = await (await fetch(`${BASE}/api/revolving`)).json();
+  assert.strictEqual(after.data.length, before.data.length, '거부됐는데 저장됐다');
+});
+
+test('H-2. 없는 내역을 수정하면 404 다', async () => {
+  const r = await fetch(`${BASE}/api/revolving/999999`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paid_amount: 50000 }),
+  });
+  const body = await r.json();
+  assert.strictEqual(r.status, 404, JSON.stringify(body));
+  assert.ok(body.error, '거부 사유가 없다');
+});
+
+// from/to 필터는 화면의 기간 선택이 쓴다. 필터가 조용히 무시되면 사용자가 고른
+// 기간과 다른 목록을 보게 되는데, 리볼빙은 월 단위 이월이라 알아채기 어렵다.
+test('H-3. 월 범위 필터가 실제로 걸러 준다', async () => {
+  const pms = await (await fetch(`${BASE}/api/payment-methods`)).json();
+  const pmId = (Array.isArray(pms) ? pms : pms.data)[0].id;
+
+  for (const month of ['2027-01', '2027-02', '2027-03']) {
+    await fetch(`${BASE}/api/revolving`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month, payment_method_id: pmId, carried_amount: 100000, paid_amount: 30000, fee: 1000, rate: 19.9 }),
+    });
+  }
+
+  const all = await (await fetch(`${BASE}/api/revolving?payment_method_id=${pmId}`)).json();
+  const in2027 = all.data.filter((r) => r.month.startsWith('2027'));
+  assert.ok(in2027.length >= 3, `준비한 3건이 안 보인다: ${in2027.length}`);
+
+  const ranged = await (await fetch(`${BASE}/api/revolving?payment_method_id=${pmId}&from=2027-02&to=2027-02`)).json();
+  const months = ranged.data.map((r) => r.month);
+  assert.ok(months.includes('2027-02'), `범위 안 항목이 빠졌다: ${months}`);
+  assert.ok(!months.includes('2027-01'), `from 이 안 걸렸다: ${months}`);
+  assert.ok(!months.includes('2027-03'), `to 가 안 걸렸다: ${months}`);
+});
