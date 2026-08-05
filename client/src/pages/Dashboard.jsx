@@ -51,11 +51,17 @@ function CategoryComparison() {
   const [chartType, setChartType] = useState('bar');
   const [rows, setRows] = useState([]);
 
-  const range = useMemo(() => ({ from: period.from, to: period.to }), [period.from, period.to]);
+  // includeDerived 도 의존성에 넣는다. 빼면 토글이 URL 만 바꾸고 숫자는 그대로다 —
+  // 눌러도 아무 일이 없는 컨트롤은 없는 것보다 나쁘다.
+  const range = useMemo(
+    () => ({ from: period.from, to: period.to, includeDerived: period.includeDerived }),
+    [period.from, period.to, period.includeDerived],
+  );
 
   const { loading, error, reload } = useLoader(async () => {
     if (!range.from || !range.to) { setRows([]); return; }
-    const d = await api.get(`/api/transactions/summary/category-breakdown?from=${range.from}&to=${range.to}`);
+    const derived = range.includeDerived ? '' : '&derived=off';
+    const d = await api.get(`/api/transactions/summary/category-breakdown?from=${range.from}&to=${range.to}${derived}`);
     setRows(d.data || []);
   }, [range]);
 
