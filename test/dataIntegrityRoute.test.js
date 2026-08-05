@@ -1,45 +1,19 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const { startTestServer } = require('./helpers/testServer');
 
 // 데이터 무결성 점검 기능 테스트
 
 const PORT = 34604; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-
-let serverOutput = '';
+let server;
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 test('데이터 무결성 점검 — 정상 데이터일 때 모든 항목 count=0', async () => {
@@ -56,7 +30,7 @@ test('데이터 무결성 점검 — 정상 데이터일 때 모든 항목 count
 test('데이터 무결성 점검 — 각 이상 유형 테스트', async () => {
   // 직접 DB에 이상 데이터 삽입. transactions.category_id는 NOT NULL + FK라
   // 유효한 카테고리를 먼저 만들어야 한다.
-  const db = require('better-sqlite3')(dbPath);
+  const db = require('better-sqlite3')(server.dbPath);
   const catId = db.prepare("INSERT INTO categories (name, major_type) VALUES ('테스트카테고리', '선택지출')").run().lastInsertRowid;
 
   // 1. 비ISO 날짜 형식
