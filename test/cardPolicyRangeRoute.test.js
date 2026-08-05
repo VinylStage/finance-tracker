@@ -1,10 +1,7 @@
 'use strict';
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const { startTestServer } = require('./helpers/testServer');
 
 const { expandRange, validateRange } = require('../src/services/cardPolicy');
 
@@ -13,9 +10,7 @@ const { expandRange, validateRange } = require('../src/services/cardPolicy');
 
 const PORT = 34606; // 다른 테스트와 겹치지 않는 포트
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-let serverOutput = '';
+let server;
 
 async function json(pathname, options) {
   const r = await fetch(`${BASE}${pathname}`, {
@@ -26,30 +21,12 @@ async function json(pathname, options) {
 }
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-cprange-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음:\n${serverOutput}`);
+  server = await startTestServer({ port: PORT });
+  // 기존 before 안에 있던 나머지 준비 작업은 이 아래에 그대로 남긴다
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 async function cardId() {
