@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { api } from '../lib/api';
+import RetentionNotice from '../components/RetentionNotice';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
@@ -66,6 +67,10 @@ export default function AuditLog() {
 
   return (
     <div className="space-y-4">
+      {/* 보존 정책이 이번 기동에 무엇을 지웠는지 알린다(#445). 지워진 것이 이
+          화면에 있던 데이터라, "예전 이력이 안 보이네" 하는 순간에 답이 되는 자리다. */}
+      <RetentionNotice />
+
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-ink">변경 이력</h1>
         <div className="flex gap-1" role="group" aria-label="작업 주체 필터">
