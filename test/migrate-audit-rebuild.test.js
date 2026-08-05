@@ -74,14 +74,30 @@ describe('B. 러너가 체인 끝에서 재생성한다', () => {
     }
   });
 
-  test('B-2. 적용할 마이그레이션이 없으면 재생성하지 않는다', () => {
-    // 매 기동마다 트리거를 다시 만들 이유가 없다. 이 테이블은 다음 마이그레이션이
-    // 붙을 때까지 덮이지 않아야 한다.
+  test('B-2. 커버리지가 완전하면 재생성하지 않는다', () => {
+    // 매 기동마다 트리거를 다시 만들 이유가 없다 — 그 목표는 그대로다.
+    //
+    // 다만 판정 기준이 바뀌었다(#454). 전에는 **적용된 마이그레이션이 없으면**
+    // 건너뛰었는데, 그러면 트리거가 한 번 빠진 DB 가 상태를 아예 안 봐서 **영구히
+    // 안 돌아왔다.** 지금은 커버리지를 보고, 완전하면 건너뛴다.
+    //
+    // 그래서 이 테스트는 "새 표를 만들어도 안 덮인다" 대신 **"멀쩡하면 안 건드린다"**
+    // 를 잠근다. 전자는 감사 구멍을 정상 동작으로 굳히는 단언이었다.
+    const before = [...triggers()].sort();
+
+    runMigrations(db); // 전부 적용됐고 커버리지도 완전한 상태
+
+    assert.deepStrictEqual([...triggers()].sort(), before, '멀쩡한데 재생성이 돌았다');
+  });
+
+  test('B-2b. 트리거가 빠져 있으면 적용할 게 없어도 되살린다', () => {
+    // #454 의 본체. 이 표는 마이그레이션 밖에서 생겼지만, 감사 대상 표에 트리거가
+    // 없다는 사실은 원인과 무관하게 구멍이다.
     db.exec('CREATE TABLE IF NOT EXISTS zz_untouched (id INTEGER PRIMARY KEY)');
 
-    runMigrations(db); // 전부 적용된 상태 → appliedAny=false
+    runMigrations(db); // appliedAny=false 지만 커버리지가 불완전하다
 
-    assert.ok(!triggers().has('audit_zz_untouched_ins'), '적용된 게 없는데 재생성이 돌았다');
+    assert.ok(triggers().has('audit_zz_untouched_ins'), '빠진 트리거가 안 되살아났다');
   });
 
   test('B-3. 재생성이 두 번 돌아도 트리거가 늘지 않는다', () => {
