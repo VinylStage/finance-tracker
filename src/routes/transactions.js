@@ -8,6 +8,7 @@ const { buildTransactionFilters } = require('../utils/transactionFilters');
 const { resolvePeriod } = require('../utils/period');
 const { isEditable, lockedMessage, findLocked, countLockedAll, derivedFilter } = require('../services/transactionOrigin');
 const { PAYMENT_STYLES, SETTLEMENTS, DEFAULT_SETTLEMENT } = require('../constants');
+const { resolveBillingMonth } = require('../services/settlementBilling');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
 const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
 
@@ -388,6 +389,15 @@ function validateTxBody(body) {
   return null;
 }
 
+// 청구월을 정할 때 쓸 카드의 결제 주기. 상품을 모르면 null 이고, 그러면
+// resolveBillingMonth 가 청구월을 안 적는다(#289).
+function cycleOf(cardProductId) {
+  if (cardProductId == null) return null;
+  return db.prepare(
+    'SELECT billing_cycle_day, statement_close_day FROM card_products WHERE id = ?'
+  ).get(asInt(cardProductId)) || null;
+}
+
 // 카드상품과 카드사가 어긋나지 않게 막는다(#302 2단계). 화면은 둘을 한 선택지로
 // 고르지만 API 는 따로 받으므로, 여기서 확인하지 않으면 "삼성카드로 결제한 하나
 // A카드" 같은 거래가 저장된다 — 카드 전략 계산이 그걸 그대로 믿는다.
@@ -424,7 +434,10 @@ router.post('/', (req, res) => {
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
            card_product_id != null ? asInt(card_product_id) : null,
            payment_style, merchant || null, memo || null,
-           settlement, account_id != null ? asInt(account_id) : null, billing_month || null);
+           settlement, account_id != null ? asInt(account_id) : null,
+           resolveBillingMonth({
+             settlement, date, billingMonth: billing_month, cardProduct: cycleOf(card_product_id),
+           }));
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
     serverError(res, e, 'transactions');
@@ -438,7 +451,7 @@ router.put('/:id', (req, res) => {
     if (err) return res.status(400).json({ error: err });
 
     // 파생 거래는 거래내역에서 고칠 수 없다(#268). 원본을 고쳐야 계산과 맞는다.
-    const target = db.prepare('SELECT id, origin FROM transactions WHERE id=?').get(req.params.id);
+    const target = db.prepare('SELECT id, origin, settlement, date, card_product_id, billing_month FROM transactions WHERE id=?').get(req.params.id);
     if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
 
@@ -454,17 +467,41 @@ router.put('/:id', (req, res) => {
     // 와 같은 규칙을 따라야 하고(카드사를 바꾸면 카드도 다시 정해져야 한다),
     // 무엇보다 "카드사는 알지만 어느 카드인지 모른다"(#306 의 미상) 로 되돌릴 길이
     // 없어진다 — COALESCE 면 null 을 보내도 옛 값이 남는다.
+    //
+    // billing_month 는 date·card_product_id·settlement 에서 나오는 **파생값**이다.
+    // 그래서 두 요구가 부딪힌다.
+    //
+    //   구매일을 고쳤는데 옛 청구월이 남으면 → 엉뚱한 달에 묶인 채로 남고
+    //     사용자는 25일에 빠질 금액을 잘못 본다
+    //   메모만 고쳤는데 청구월이 지워지면   → 사용자가 손으로 넣은 값이 사라진다
+    //
+    // 그래서 **입력이 실제로 바뀐 경우에만** 다시 계산한다. 파생값은 자기 입력을
+    // 따라가되, 입력이 그대로면 건드리지 않는다.
+    const nextSettlement = settlement || target.settlement;
+    const nextCardProduct = card_product_id != null ? asInt(card_product_id) : null;
+    const billingInputsChanged = date !== target.date
+      || nextCardProduct !== target.card_product_id
+      || nextSettlement !== target.settlement;
+
+    const nextBillingMonth = billing_month
+      ? billing_month
+      : (billingInputsChanged
+        ? resolveBillingMonth({
+          settlement: nextSettlement, date, cardProduct: cycleOf(card_product_id),
+        })
+        : target.billing_month);
     const result = db.prepare(`
       UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?, card_product_id=?,
         payment_style=?, merchant=?, memo=?,
         settlement=COALESCE(?, settlement),
         account_id=COALESCE(?, account_id),
-        billing_month=COALESCE(?, billing_month)
+        billing_month=?
       WHERE id=?
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
            card_product_id != null ? asInt(card_product_id) : null,
            payment_style || '일시불', merchant || null, memo || null,
-           settlement || null, account_id != null ? asInt(account_id) : null, billing_month || null,
+           settlement || null, account_id != null ? asInt(account_id) : null,
+           nextBillingMonth,
            req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
@@ -477,7 +514,7 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     // 파생 거래는 거래내역에서 지울 수 없다(#268). 원본을 지워야 함께 사라진다.
-    const target = db.prepare('SELECT id, origin FROM transactions WHERE id=?').get(req.params.id);
+    const target = db.prepare('SELECT id, origin, settlement, date, card_product_id, billing_month FROM transactions WHERE id=?').get(req.params.id);
     if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
 
