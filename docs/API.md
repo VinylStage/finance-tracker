@@ -472,11 +472,26 @@
   - 409: 프리뷰 이후 대상이 바뀜 (`preview_stale`)
   - 428: 프리뷰 없이 지우기 시도 (`preview_required`)
 
+### GET /api/installments/duplicates/dismissed
+"중복 아님" 으로 지나친 후보 목록.
+
+- **응답 스키마**:
+  ```
+  { "data": [{ "transaction_id", "dismissed_at", "date", "merchant", "amount" }] }
+  ```
+- **비고**: `GET /api/installments/duplicates` 는 지나친 것을 **걸러내고** 목록에 안
+  낸다. 그게 맞는 동작이지만, 그래서 실수로 지나친 것을 사용자가 다시 찾을 방법이
+  없었다 — 서버에 `restore` 가 있는데 **목록이 없어 손이 닿지 않았다**(#445 §2).
+
+  거래 정보(날짜·가맹점·금액)를 같이 낸다. 거래 id 만 주면 사용자가 무엇을
+  지나쳤는지 판단할 수 없다.
+
 ### POST /api/installments/duplicates/restore
 "중복 아님" 판단을 되돌린다. 다시 목록에 나온다.
 
 - **요청 파라미터**: `ids` (body)
 - **응답 스키마**: `{ "ok": true, "restored": "number" }`
+- **비고**: 되돌릴 대상은 `GET /api/installments/duplicates/dismissed` 로 찾는다.
 
 ### POST /api/installments/:id/derived/preview
 회차 재생성 미리보기. **DB 를 바꾸지 않는다.**

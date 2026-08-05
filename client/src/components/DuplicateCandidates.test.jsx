@@ -27,8 +27,13 @@ const candidate = (over = {}) => ({
   ...over,
 });
 
-function setup(rows) {
-  get.mockResolvedValue({ data: rows });
+// 두 엔드포인트를 구분해서 답한다. 같은 값을 둘 다에 주면 지나친 목록에 후보가
+// 그대로 나타나 **테스트가 잘못된 상태를 통과시킨다**(#445 §2 배선 뒤 실제로 그랬다).
+function setup(rows, dismissed = []) {
+  get.mockImplementation((path) => {
+    if (path === '/api/installments/duplicates/dismissed') return Promise.resolve({ data: dismissed });
+    return Promise.resolve({ data: rows });
+  });
   return render(<ConfirmProvider><DuplicateCandidates /></ConfirmProvider>);
 }
 
@@ -82,6 +87,86 @@ describe('표시', () => {
     get.mockRejectedValue(new Error('서버에 연결할 수 없습니다.'));
     render(<ConfirmProvider><DuplicateCandidates /></ConfirmProvider>);
     expect(await screen.findByRole('alert')).toBeTruthy();
+  });
+});
+
+// 지나친 판단을 되돌리는 동선(#445 §2).
+//
+// 서버에는 `undismiss` 가 처음부터 있었는데 화면이 안 불러서 **실수로 "중복 아님" 을
+// 누르면 사용자 입장에서는 영구**였다. 무엇을 지나쳤는지 볼 방법도 없었다.
+describe('지나친 것 되돌리기', () => {
+  it('후보가 0건이어도 지나친 것이 있으면 화면이 남는다', async () => {
+    const dismissed = [{ transaction_id: 11, dismissed_at: '2026-05-20 10:00:00',
+      date: '2026-05-15', merchant: '쿠팡', amount: 300000 }];
+    setup([], dismissed);
+    expect(await screen.findByText(/중복 아니라고 한 것 1건/)).toBeTruthy();
+    // 다 지나친 뒤에 화면이 사라지면 되돌릴 방법도 같이 사라진다
+  });
+
+  it('후보도 지나친 것도 없으면 자리를 차지하지 않는다', async () => {
+    const { container } = setup([], []);
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    expect(container.textContent).toBe('');
+  });
+
+  it('접혀 있다가 눌러야 펼쳐진다', async () => {
+    const dismissed = [{ transaction_id: 11, dismissed_at: '2026-05-20 10:00:00',
+      date: '2026-05-15', merchant: '쿠팡', amount: 300000 }];
+    setup([candidate()], dismissed);
+    
+    // 처음에는 쿠팡 이 안 보인다
+    expect(screen.queryByText(/쿠팡/)).toBeNull();
+    
+    // "중복 아니라고 한 것" 이 든 버튼을 누르면 쿠팡 이 보인다
+    const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
+    await button.click();
+    expect(screen.getByText(/쿠팡/)).toBeTruthy();
+  });
+
+  it('무엇을 지나쳤는지 알아볼 수 있다', async () => {
+    const dismissed = [{ transaction_id: 11, dismissed_at: '2026-05-20 10:00:00',
+      date: '2026-05-15', merchant: '쿠팡', amount: 300000 }];
+    setup([candidate()], dismissed);
+    
+    const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
+    await button.click();
+    
+    // 날짜와 금액이 보인다
+    expect(await screen.findByText(/2026-05-15/)).toBeTruthy();
+    expect(screen.getByText(/300,000/)).toBeTruthy();
+    // 거래 id 만 보여주면 사용자가 판단할 수 없다
+  });
+
+  it('다시 보기를 누르면 restore 를 부른다', async () => {
+    const dismissed = [{ transaction_id: 11, dismissed_at: '2026-05-20 10:00:00',
+      date: '2026-05-15', merchant: '쿠팡', amount: 300000 }];
+    setup([candidate()], dismissed);
+    post.mockResolvedValue({ ok: true, restored: 1 });
+
+    const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
+    await button.click();
+    
+    const restoreButton = await screen.findByText(/다시 보기/);
+    await restoreButton.click();
+
+    expect(post).toHaveBeenCalledWith('/api/installments/duplicates/restore', { ids: [11] });
+  });
+
+  it('되돌린 뒤 목록을 다시 싣는다', async () => {
+    const dismissed = [{ transaction_id: 11, dismissed_at: '2026-05-20 10:00:00',
+      date: '2026-05-15', merchant: '쿠팡', amount: 300000 }];
+    setup([candidate()], dismissed);
+    post.mockResolvedValue({ ok: true, restored: 1 });
+
+    const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
+    await button.click();
+    
+    const restoreButton = await screen.findByText(/다시 보기/);
+    const callCount = get.mock.calls.length;
+    await restoreButton.click();
+
+    await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(callCount));
+    // 되돌렸는데 목록이 그대로면 사용자는 눌린 줄 모른다
   });
 });
 

@@ -13,7 +13,7 @@ const {
   PreviewRequiredError, PreviewMismatchError,
 } = require('../services/derivedTransactions');
 const {
-  findDuplicateCandidates, planResolve, dismiss, undismiss,
+  findDuplicateCandidates, planResolve, dismiss, undismiss, listDismissed,
 } = require('../services/installmentDuplicates');
 const { estimateBilling, billingBasis } = require('../services/installmentBilling');
 const { resolvePolicy } = require('../services/cardPolicy');
@@ -211,6 +211,18 @@ router.post('/duplicates/resolve', (req, res) => {
 
     const kept = keep_ids.length ? dismiss(db, keep_ids) : 0;
     res.json({ ok: true, deleted, kept });
+  } catch (e) {
+    serverError(res, e, 'installments');
+  }
+});
+
+// GET /api/installments/duplicates/dismissed — 지나친 후보 목록.
+//
+// 되돌리려면 무엇을 지나쳤는지 먼저 볼 수 있어야 한다. 이 목록이 없어서 restore
+// 엔드포인트에 손이 닿지 않았다(#445 §2).
+router.get('/duplicates/dismissed', (_req, res) => {
+  try {
+    res.json({ data: listDismissed(db) });
   } catch (e) {
     serverError(res, e, 'installments');
   }
