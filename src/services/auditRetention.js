@@ -63,7 +63,15 @@ function purgeAuditLog(db, options = {}) {
   } catch {
     // 후보를 못 찾는 것이 정리를 막을 이유는 아니다. 다만 그때는 아무것도
     // 예외로 두지 않으므로, 실패하면 보수적으로 정리를 건너뛴다.
-    return { deleted: 0, cutoff, days, keptActionId: null, ran: false };
+    //
+    // `error` 를 같이 낸다. 이 경로는 **정리가 안 된 것**이라 사용자가 알아야
+    // 한다 — 모르면 이력이 계속 쌓이고, #367 이 막으려던 상태로 돌아간다.
+    // `ran: false` 만 돌려주면 화면이 "표가 없어서 할 일이 없었다"(위의 hasTable
+    // 경로)와 구분할 수 없어 조용히 넘어간다.
+    return {
+      deleted: 0, cutoff, days, keptActionId: null, ran: false,
+      error: '되돌릴 수 있는 항목을 확인하지 못해 정리를 건너뛰었어요.',
+    };
   }
 
   // ts 는 'YYYY-MM-DD HH:MM:SS' 라 date() 로 잘라 날짜만 비교한다.
