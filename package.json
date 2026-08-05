@@ -12,7 +12,9 @@
     "test": "node --test",
     "test:coverage": "c8 --all --src src --reporter=text --reporter=html --check-coverage --lines 80 --branches 75 --functions 85 --statements 80 node --test",
     "perf:baseline": "npm run build && node scripts/lighthouse-baseline.mjs",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "docs:inventory": "node scripts/gen-inventory.js",
+    "docs:inventory:check": "node scripts/gen-inventory.js --check"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.0",

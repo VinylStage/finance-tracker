@@ -30,43 +30,64 @@ CSS 에서 사라진다.
 
 ## 컴포넌트 구조
 
-### 백엔드 라우트 (17개 파일 / API 마운트 18개 — 파일 기반 17개 + 인라인 헬스체크 1개):
-- `cardImport.js`
-- `cashflow.js`
-- `categories.js`
-- `csvImport.js`
-- `data.js`
-- `debts.js`
-- `exchange.js`
-- `export.js`
-- `guide.js`
-- `installments.js`
-- `paymentMethods.js`
-- `recurringRules.js`
-- `revolving.js`
-- `savings.js`
-- `settings.js`
-- `stocks.js`
-- `transactions.js`
+<!-- inventory:start -->
 
-### 프론트엔드 페이지 (10개):
-- `Comparison.jsx`
-- `Dashboard.jsx`
-- `Debts.jsx`
-- `Guide.jsx`
-- `Installments.jsx`
-- `Revolving.jsx`
-- `Savings.jsx`
-- `Settings.jsx`
-- `Simulator.jsx`
-- `Transactions.jsx`
+### 백엔드 라우트 (26개 파일 / API 마운트 26개)
 
-### 프론트엔드 공용 컴포넌트 (5개):
-- `ConfirmProvider.jsx`
-- `ErrorBoundary.jsx`
-- `LoadError.jsx`
-- `TransactionForm.jsx`
-- `TransactionList.jsx`
+| 마운트 | 파일 |
+|---|---|
+| `/api/accounts` | `accounts.js` |
+| `/api/audit` | `audit.js` |
+| `/api/billing-month` | `billingMonth.js` |
+| `/api/card-benefits` | `cardBenefits.js` |
+| `/api/card-import` | `cardImport.js` |
+| `/api/card-policies` | `cardPolicies.js` |
+| `/api/card-products` | `cardProducts.js` |
+| `/api/card-strategy` | `cardStrategy.js` |
+| `/api/cashflow` | `cashflow.js` |
+| `/api/categories` | `categories.js` |
+| `/api/csv-import` | `csvImport.js` |
+| `/api/data` | `data.js` |
+| `/api/data-integrity` | `dataIntegrity.js` |
+| `/api/debts` | `debts.js` |
+| `/api/exchange` | `exchange.js` |
+| `/api/export` | `export.js` |
+| `/api/guide` | `guide.js` |
+| `/api/installments` | `installments.js` |
+| `/api/payment-methods` | `paymentMethods.js` |
+| `/api/recurring-rules` | `recurringRules.js` |
+| `/api/revolving` | `revolving.js` |
+| `/api/savings` | `savings.js` |
+| `/api/settings` | `settings.js` |
+| `/api/settlement` | `settlement.js` |
+| `/api/stocks` | `stocks.js` |
+| `/api/transactions` | `transactions.js` |
+
+### 서비스 (27개)
+
+`accountBalance.js` · `auditRetention.js` · `billingMonthBackfill.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurringCatchup.js` · `settlementBilling.js` · `settlementReclassify.js` · `transactionOrigin.js` · `undo.js`
+
+### 프론트엔드 페이지 (13개)
+
+`Accounts` · `AuditLog` · `CardStrategy` · `Comparison` · `Dashboard` · `Debts` · `Guide` · `Installments` · `Revolving` · `Savings` · `Settings` · `Simulator` · `Transactions`
+
+### 프론트엔드 컴포넌트 (43개)
+
+`AnchorNav` · `BalanceProjection` · `BillingMonthBackfillSection` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `SavingsGoalBar` · `SettlementReclassifySection` · `SpendHeatmap` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
+
+### 마이그레이션 (23개)
+
+최신: `023-card-product-active`
+
+
+<!-- inventory:end -->
+
+> 위 목록은 `npm run docs:inventory` 가 **코드에서 생성**한다. 손으로 고치지 마라 —
+> 고쳐도 다음 생성에서 덮인다.
+>
+> 손으로 유지하다 세 번 낡았다. 감사 FND-17(2026-07)이 같은 지적을 하며 "문서 목록을
+> 코드에서 생성" 을 첫 권고로 냈는데 그때는 PR 템플릿 체크박스로 갈음했고 **또
+> 낡았다**(라우트 17 → 실제 26). CI 가 `--check` 로 막는다.
 
 ## 데이터 흐름
 

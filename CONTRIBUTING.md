@@ -64,7 +64,7 @@
 
 ## 문서 업데이트 체크
 
-- 기능을 추가하거나 변경할 때, 관련 문서(`docs/API.md`, `docs/DATA_MODEL.md`, `docs/ROADMAP.md`, `CHANGELOG.md` 등)를 함께 업데이트했는지 PR 전에 확인한다.
+- 기능을 추가하거나 변경할 때, 관련 문서(`docs/API.md`, `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md` 등)를 함께 업데이트했는지 PR 전에 확인한다. `CHANGELOG.md` 는 release-please 가 만들므로 손으로 고치지 않는다. 진행 상태는 GitHub 마일스톤·이슈가 정본이라 문서에 따로 적지 않는다.
 
 ## 문서 변경 승인 게이트 (confirm-chain)
 
