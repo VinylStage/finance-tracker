@@ -131,10 +131,14 @@ function withThresholds(cards, asOf) {
 router.get('/thresholds', (req, res) => {
   try {
     const asOf = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.asOf || '')) ? req.query.asOf : localYMD();
+    // 더 안 쓰는 카드도 함께 내린다(#410). 감추면 "지난달 이 카드로 30만원
+    // 썼는데 목록에 없다" 가 되고, 소프트 삭제로 과거를 보존한 목적이 반쯤
+    // 사라진다. 화면이 흐리게 표시하고 추천에서만 빼도록 표시만 붙인다.
     const data = withThresholds(loadCards(), asOf).map((c) => ({
       cardProductId: c.id,
       issuer: c.issuer,
       productName: c.product_name,
+      isActive: c.is_active === undefined ? true : !!c.is_active,
       ...c.threshold,
     }));
     res.json({ data, asOf });
@@ -177,11 +181,16 @@ router.get('/estimate', (req, res) => {
         cardProductId: card.id,
         issuer: card.issuer,
         productName: card.product_name,
+        isActive: card.is_active === undefined ? true : !!card.is_active,
         thresholdMet: card.thresholdMet,
         thresholdEstimated: card.threshold.estimated,
         ...r,
       };
-    }).sort((a, b) => b.benefit - a.benefit);
+    })
+      // 더 안 쓰는 카드는 추천 후보가 아니다. 지금 결제할 카드를 고르는
+      // 화면이라 못 쓰는 카드를 1위로 올리면 그대로 틀린 답이 된다(#410).
+      .filter((c) => c.isActive)
+      .sort((a, b) => b.benefit - a.benefit);
 
     res.json({
       data,
