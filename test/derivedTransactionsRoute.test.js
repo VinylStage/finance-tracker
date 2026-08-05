@@ -1,10 +1,7 @@
 'use strict';
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const { startTestServer } = require('./helpers/testServer');
 
 // #269 의 HTTP 경로 검증. 서비스 단위 테스트(derived-transactions.test.js)가
 // 계산을 고정한다면 여기서는 "API 를 직접 호출해 프리뷰를 건너뛸 수 있는가" 를
@@ -12,10 +9,9 @@ const os = require('node:os');
 
 const PORT = 34605; // 다른 테스트와 겹치지 않는 포트 (현재 최대는 34604)
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-let serverOutput = '';
+let server;
 
+// Get current date for tests
 const today = new Date();
 const CUR_MONTH = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 const TODAY = `${CUR_MONTH}-${String(today.getDate()).padStart(2, '0')}`;
@@ -33,35 +29,19 @@ async function json(pathname, options) {
 }
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-derived-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음:\n${serverOutput}`);
+  server = await startTestServer({ port: PORT });
+  
+  // 기존 before 안에 있던 나머지 준비 작업
+  const { body } = await json('/api/payment-methods');
+  globalThis.paymentMethodId = (Array.isArray(body) ? body : body.data).find((p) => p.name === '신용카드').id;
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 async function firstCardId() {
-  const { body } = await json('/api/payment-methods');
-  return (body.data || body).find((p) => p.name === '신용카드').id;
+  return globalThis.paymentMethodId;
 }
 
 async function createInstallment(over = {}) {
@@ -320,10 +300,11 @@ describe('F. 기존 집계가 움직이지 않는다', () => {
     // FND-13 이 단일 상수로 뽑은 규칙이 세 곳에 다시 적혀 있었고, #269 가
     // 부채이자를 제외하면서 한쪽만 고쳐지는 문제가 실제로 났다.
     // 소스를 훑어 재발을 막는다 — 새 라우트가 규칙을 복사해 붙이면 여기서 걸린다.
-    const routesDir = path.join(__dirname, '..', 'src', 'routes');
+    const routesDir = require('node:path').join(__dirname, '..', 'src', 'routes');
+    const fs = require('node:fs');
     const offenders = [];
     for (const file of fs.readdirSync(routesDir).filter((f) => f.endsWith('.js'))) {
-      const text = fs.readFileSync(path.join(routesDir, file), 'utf8');
+      const text = fs.readFileSync(require('node:path').join(routesDir, file), 'utf8');
       if (text.includes("payment_style NOT IN ('할부','리볼빙')")) offenders.push(file);
     }
     assert.deepStrictEqual(offenders, [],
