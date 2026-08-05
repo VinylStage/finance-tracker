@@ -25,7 +25,35 @@ import { ConfirmProvider } from '../components/ConfirmProvider';
 //   1. 로딩이 걷힐 때까지 기다린다        → 본문이 실제로 렌더된다
 //   2. 에러 화면이 아니어야 한다          → 응답 모양이 맞아 본문이 끝까지 돈다
 // 둘 중 하나만 보면 다시 빈 통과로 돌아간다.
+//
 // ─────────────────────────────────────────────────────────────────────────
+// 차트 라이브러리는 스텁으로 바꾼다 (#429)
+//
+// Dashboard 가 전체 스위트에서만 5초 상한을 넘겨 플레이키였다. 단독 실행은
+// 통과하는데, 파일 47개가 각자 jsdom 을 세우고 병렬로 도는 동안 느려졌다.
+//
+// 비용을 분해해 재보니 import 만 409ms 이고 그중 recharts 가 244ms(60%)였다.
+// 스텁으로 바꾸면 165ms 로 떨어진다.
+//
+//   recharts 실제  IMPORT_MS=409
+//   recharts 스텁  IMPORT_MOCKED_MS=165
+//
+// 여기서 잡으려는 것은 **우리 코드가 열다가 죽는가** 다. 차트가 화면에 어떻게
+// 그려지는지는 이 파일의 몫이 아니고, 서드파티 렌더까지 돌리느라 상한을 넘기면
+// 코드와 무관한 빨간불이 된다. 스텁으로 바꿔도 페이지 본문은 그대로 다 돈다 —
+// 훅 규칙 위반, 빠뜨린 import, 없는 필드 참조는 여전히 잡힌다(돌연변이로 확인).
+// ─────────────────────────────────────────────────────────────────────────
+
+vi.mock('recharts', () => {
+  const Stub = () => null;
+  return {
+    ResponsiveContainer: Stub, Tooltip: Stub,
+    AreaChart: Stub, Area: Stub, LineChart: Stub, Line: Stub,
+    BarChart: Stub, Bar: Stub, ComposedChart: Stub,
+    XAxis: Stub, YAxis: Stub, CartesianGrid: Stub,
+    PieChart: Stub, Pie: Stub, Cell: Stub, Legend: Stub,
+  };
+});
 
 const { get, post, put, del } = vi.hoisted(() => ({
   get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(),
