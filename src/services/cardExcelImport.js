@@ -12,6 +12,18 @@ function firstInt(s) {
   const m = String(s).match(/\d+/);
   return m ? Number(m[0]) : null;
 }
+// 금액 셀을 숫자로 읽는다.
+//
+// 카드사 엑셀은 금액을 숫자로 주기도 하고 '12,345' 같은 문자열로 주기도 한다.
+// `Number('12,345')` 는 NaN 이고, NaN 은 INSERT 에서 NOT NULL 위반으로 떨어져
+// **그 행만 조용히 빠진다** — 사용자는 "저장하지 못했습니다" 만 보고 원인을
+// 알 수 없다.
+//
+// 문자열일 때만 콤마를 뗀다. 숫자·null·undefined 는 Number 에 그대로 넘겨
+// 기존 동작을 바꾸지 않는다 (Number(null) === 0, Number(undefined) === NaN).
+function amountOf(v) {
+  return typeof v === 'string' ? Number(v.replace(/,/g, '')) : Number(v);
+}
 // 워크북에서 첫 시트를 안전하게 가져온다. 시트가 없으면 throw.
 function firstSheet(workbook) {
   const name = workbook.SheetNames[0];
@@ -42,7 +54,7 @@ function parseNonghyupExcel(buffer) {
     if (!cell(row, 1) || !/^\d{4}\/\d{2}\/\d{2}/.test(cell(row, 1))) break;
     
     const date = cell(row, 1).split(' ')[0].replaceAll('/', '-');
-    const amount = Number(row[10]);
+    const amount = amountOf(row[10]);
     const merchant = row[14];
     const is_installment = row[18] === '할부';
     const installment_months = firstInt(cell(row, 21));
@@ -75,7 +87,7 @@ function parseLotteExcel(buffer) {
     
     const date = cell(row, 0).replaceAll('.', '-');
     const merchant = row[3];
-    const amount = Number(row[5]);
+    const amount = amountOf(row[5]);
     const is_installment = row[6] === '할부';
     const installment_months = cell(row, 7) === '-' ? null : firstInt(cell(row, 7));
     const cancelled = row[9] !== 'N';
@@ -109,7 +121,7 @@ function parseSamsungExcel(buffer) {
 
     const date = cell(row, 2).replaceAll('.', '-');
     const merchant = row[4];
-    const amount = Number(row[5]);
+    const amount = amountOf(row[5]);
     const is_installment = row[6] === '할부';
     const installment_months = row[7] === '0' ? null : Number(row[7]);
     const cancelled = row[9] !== '-';
@@ -158,7 +170,7 @@ function parseHanaExcel(buffer) {
 
     const date = cell(row, 0).replaceAll('.', '-');
     const merchant = row[4];
-    const amount = Number(row[5]);
+    const amount = amountOf(row[5]);
     const is_installment = row[7] === '할부';
     const installment_months = cell(row, 8) === '-' ? null : firstInt(cell(row, 8));
     const cancelled = row[13] === '취소';
@@ -204,11 +216,11 @@ function parseHyundaiExcel(buffer) {
     if (usdSuffix) {
       const cut = usdSuffix.index + usdSuffix[0].length;
       merchant = rawMerchant.slice(0, cut);
-      amount = Number(rawMerchant.slice(cut).replace(/,/g, ''));
+      amount = amountOf(rawMerchant.slice(cut));
     } else {
       const amountSuffix = rawMerchant.match(/([\d,]+)$/);
       merchant = amountSuffix ? rawMerchant.slice(0, amountSuffix.index) : rawMerchant;
-      amount = amountSuffix ? Number(amountSuffix[1].replace(/,/g, '')) : 0;
+      amount = amountSuffix ? amountOf(amountSuffix[1]) : 0;
     }
     const installment_months = cell(row, 3) && cell(row, 3).includes('/') ? firstInt(cell(row, 3)) : null;
     
