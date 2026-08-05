@@ -14,7 +14,8 @@
     "perf:baseline": "npm run build && node scripts/lighthouse-baseline.mjs",
     "lint": "eslint .",
     "docs:inventory": "node scripts/gen-inventory.js",
-    "docs:inventory:check": "node scripts/gen-inventory.js --check"
+    "docs:inventory:check": "node scripts/gen-inventory.js --check",
+    "test:ports": "node scripts/check-test-ports.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.0",
