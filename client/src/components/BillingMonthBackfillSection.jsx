@@ -48,13 +48,32 @@ export default function BillingMonthBackfillSection() {
 
   useEffect(() => { load(); }, [load]);
 
+  // 사용자가 조건을 만졌는가. 만지기 전에는 **채울 것이 있을 때만** 프리뷰를
+  // 돈다 — 설정 화면을 여는 것만으로 서버 호출이 나가면 안 된다.
+  const [touched, setTouched] = useState(false);
+
   const set = (k, v) => {
     setCriteria((c) => ({ ...c, [k]: v }));
+    setTouched(true);
     setDone(null);
   };
 
+  // 프리뷰를 언제 도는가.
+  //
+  // 재매핑과 달리 **카드를 안 골라도** 돈다. 소급은 "어느 카드가 빠졌는지" 를
+  // 사용자가 모르는 채로 시작하는 일이라, 고르기 전에도 전체 건수가 보여야 한다.
+  //
+  // 다만 **채울 것이 없으면 안 돈다.** 이 섹션은 설정 화면에 늘 떠 있어서,
+  // 무조건 돌면 설정을 열 때마다 전체 거래를 훑는 POST 가 나간다. 사용자가
+  // 아무것도 안 했는데 쓰기처럼 보이는 호출이 나가는 것도 좋지 않다.
+  //
+  // `recompute` 는 남은 건수가 0 이어도 할 일이 있을 수 있다(적힌 청구월이 틀린
+  // 경우). 그건 사용자가 모드를 바꾼 뒤이므로 `touched` 로 열린다.
+  const shouldPreview = touched || missing > 0;
+
   const seq = useRef(0);
   useEffect(() => {
+    if (!shouldPreview) return undefined;
     const mine = ++seq.current;
     const timer = setTimeout(async () => {
       setPreviewing(true);
@@ -77,7 +96,7 @@ export default function BillingMonthBackfillSection() {
       }
     }, PREVIEW_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [criteria]);
+  }, [criteria, shouldPreview]);
 
   const run = async () => {
     if (!plan || plan.count === 0) return;

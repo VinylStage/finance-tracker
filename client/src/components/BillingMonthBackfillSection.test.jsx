@@ -109,6 +109,34 @@ describe('B. 남은 건수', () => {
       expect(screen.getByTestId('backfill-missing').textContent).toContain('260건');
     });
   });
+
+  it('B-3. 채울 것이 없으면 프리뷰를 부르지 않는다', async () => {
+    // 이 섹션은 설정 화면에 늘 떠 있다. 무조건 프리뷰를 돌면 설정을 여는 것만으로
+    // 전체 거래를 훑는 POST 가 나간다 — 사용자가 아무것도 안 했는데 쓰기처럼
+    // 보이는 호출이 나가는 것도 좋지 않다.
+    mockLoad({ missing: 0 });
+    setup();
+    await screen.findByTestId('backfill-missing');
+    await new Promise((r) => setTimeout(r, 400));
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('B-4. 채울 것이 없어도 모드를 바꾸면 센다', async () => {
+    // `recompute` 는 남은 건수가 0 이어도 할 일이 있을 수 있다 — 적힌 청구월이
+    // 틀린 경우다. 사용자가 그걸 확인할 길을 막으면 안 된다.
+    const user = userEvent.setup();
+    mockLoad({ missing: 0 });
+    setup();
+    await screen.findByTestId('backfill-missing');
+
+    await user.click(screen.getByLabelText(/전부 다시 계산해요/));
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith('/api/billing-month/backfill/preview',
+        expect.objectContaining({ mode: 'recompute' }));
+    });
+  });
 });
 
 describe('C. 프리뷰 — 카드를 안 골라도 돈다', () => {
