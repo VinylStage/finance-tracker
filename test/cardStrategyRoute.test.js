@@ -260,3 +260,62 @@ describe('E. 한 결제수단에 상품이 둘이면 특정하지 않는다', ()
     assert.ok(body.unknownCard >= 4, `특정 불가 건을 안 셌다: ${body.unknownCard}`);
   });
 });
+
+describe('F. 더 안 쓰는 카드는 표시만 남기고 추천에서 뺀다', () => {
+  // 소프트 삭제(#410)로 과거 실적은 보존된다. 그렇다고 화면에서 감추면 "지난달
+  // 이 카드로 30만원 썼는데 목록에 없다" 가 되어 보존한 의미가 반쯤 사라진다.
+  //
+  // 그래서 응답에는 남기되 isActive 로 구분해 준다 — 화면이 흐리게 그리고,
+  // "지금 이걸 쓰라" 는 추천에서는 뺀다.
+
+  let deactivatedId;
+
+  test('F-1. 활성 카드는 isActive 가 true 다', async () => {
+    const { body } = await json('/api/card-strategy/thresholds?asOf=2026-08-04');
+    const row = body.data.find((c) => c.cardProductId === ids.card);
+    assert.equal(row.isActive, true);
+  });
+
+  test('F-2. 비활성으로 바꿔도 목록에서 사라지지 않는다', async () => {
+    const created = await post('/api/card-products', {
+      payment_method_id: ids.cardPm, issuer: '테스트카드', product_name: '그만쓸카드',
+      card_type: '신용', statement_close_day: 6,
+    });
+    deactivatedId = created.body.id;
+
+    const off = await json(`/api/card-products/${deactivatedId}`, { method: 'DELETE' });
+    assert.equal(off.body.deactivated, true, '전제가 깨졌다 — 비활성화가 안 됐다');
+
+    const { body } = await json('/api/card-strategy/thresholds?asOf=2026-08-04');
+    const row = body.data.find((c) => c.cardProductId === deactivatedId);
+    assert.ok(row, '비활성 카드가 목록에서 사라졌다 — 과거 실적을 볼 길이 없어진다');
+    assert.equal(row.isActive, false);
+  });
+
+  test('F-3. 추천 후보에서는 빠진다', async () => {
+    const { body } = await json(
+      '/api/card-strategy/estimate?amount=50000&merchant=테스트'
+    );
+    const ids2 = (body.data || []).map((c) => c.cardProductId);
+    assert.equal(ids2.includes(deactivatedId), false,
+      '못 쓰는 카드를 지금 결제 추천에 올렸다');
+  });
+
+  test('F-4. 추천에 남은 카드는 전부 활성이다', async () => {
+    const { body } = await json(
+      '/api/card-strategy/estimate?amount=50000&merchant=테스트'
+    );
+    assert.ok((body.data || []).length > 0, '추천 후보가 아예 비었다');
+    assert.ok((body.data || []).every((c) => c.isActive === true));
+  });
+
+  test('F-5. 다시 쓰기로 하면 추천 후보로 돌아온다', async () => {
+    await json(`/api/card-products/${deactivatedId}/reactivate`, { method: 'POST' });
+
+    const { body } = await json(
+      '/api/card-strategy/estimate?amount=50000&merchant=테스트'
+    );
+    assert.ok((body.data || []).map((c) => c.cardProductId).includes(deactivatedId),
+      '다시 쓰기로 했는데 추천 후보로 안 돌아왔다');
+  });
+});

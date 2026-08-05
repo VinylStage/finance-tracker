@@ -83,15 +83,35 @@ function ThresholdRow({ card }) {
   const line = thresholdLine(card);
   if (!line) return null;
 
+  // 더 안 쓰기로 한 카드(#410). 감추지 않고 흐리게 둔다 — 지난달 그 카드로 쓴
+  // 실적이 여기 있는데 목록에서 사라지면 사용자는 숫자가 어디 갔는지 모른다.
+  // 대신 "지금 이 카드를 쓰라" 로 읽히지 않게 표시를 붙인다.
+  const inactive = card.isActive === false;
+
   return (
-    <li className="py-3 border-b border-line last:border-0">
+    <li
+      className={`py-3 border-b border-line last:border-0${inactive ? ' opacity-60' : ''}`}
+      data-testid={inactive ? 'inactive-threshold-row' : undefined}
+    >
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-medium text-ink">{card.productName}</span>
+        <span className={`text-sm font-medium ${inactive ? 'text-caption' : 'text-ink'}`}>
+          {card.productName}
+        </span>
         <span className={`text-xs px-2 py-0.5 rounded-control ${TONE_STYLE[line.tone]}`}>
           {line.label}
         </span>
+        {inactive && (
+          <span className="text-xs px-2 py-0.5 rounded-control bg-surface-sunken text-caption">
+            더 안 쓰는 카드
+          </span>
+        )}
       </div>
       <p className="text-xs text-caption mt-1 leading-relaxed">{line.text}</p>
+      {inactive && (
+        <p className="text-[11px] text-caption mt-1">
+          새 거래에서 고를 수 없어요. 지난 실적은 그대로 보여드려요.
+        </p>
+      )}
     </li>
   );
 }
@@ -127,9 +147,13 @@ export default function CardStrategy() {
         )}
         {!loading && thresholds.length > 0 && (
           <ul>
-            {thresholds.map((c) => (
-              <ThresholdRow key={c.cardProductId} card={c} />
-            ))}
+            {/* 쓰는 카드를 위로 모은다. 섞여 있으면 지금 고를 수 있는 카드가
+                무엇인지 매번 읽어야 한다. 순서만 바꾸고 감추지는 않는다. */}
+            {[...thresholds]
+              .sort((a, b) => (a.isActive === false ? 1 : 0) - (b.isActive === false ? 1 : 0))
+              .map((c) => (
+                <ThresholdRow key={c.cardProductId} card={c} />
+              ))}
           </ul>
         )}
       </Section>
