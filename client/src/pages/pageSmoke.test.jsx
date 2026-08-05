@@ -108,6 +108,27 @@ const SHAPES = [
     total: 1,
   }],
   [/^\/api\/recurring-rules\/due/, { data: [] }],
+  // 카드 전략(#277). thresholds 는 배열을, comparison 은 비교 결과를 준다.
+  // 목록을 비우면 카드 행을 그리는 코드가 한 줄도 안 돈다 — 한 건씩 채운다.
+  [/^\/api\/card-strategy\/thresholds/, {
+    data: [{
+      cardProductId: 1, issuer: '하나카드', productName: '하나 원더카드',
+      isActive: true, required: 300000, spend: 320000, met: true, estimated: false,
+    }],
+    asOf: '2026-08-05',
+  }],
+  [/^\/api\/card-strategy\/comparison/, {
+    comparable: true,
+    totalGap: 12000,
+    byCard: [{ cardId: 1, productName: '하나 원더카드', gapIfUsed: 12000 }],
+    details: [{
+      id: 1, date: '2026-07-13', merchant: '스타벅스', amount: 4500,
+      actualCard: '하나 원더카드', bestCard: '하나 트래블로그', gap: 300,
+    }],
+    unknownCard: 0,
+    period: { from: '2026-05-05', to: '2026-08-05' },
+    thresholdEstimated: false,
+  }],
   // 파생 거래는 별도 엔드포인트다. 일반 목록 패턴보다 **먼저** 와야 한다 —
   // 뒤에 두면 할부 행이 파생 거래 자리에 실려 렌더가 터진다.
   // 중복 후보는 한 건이 { transaction, confidence, ... } 다. 일반 목록 모양을
@@ -210,6 +231,9 @@ const PAGES = [
   ['Comparison', () => import('./Comparison')],
   ['Simulator', () => import('./Simulator')],
   ['Guide', () => import('./Guide')],
+  // #400 으로 들어온 화면이라 감사 S2 가 센 미렌더 목록에는 없었다. 전용
+  // 테스트(CardStrategy.test.jsx)는 흐린 표시를 보고, 여기서는 "열면 죽는가"만 본다.
+  ['CardStrategy', () => import('./CardStrategy')],
 ];
 
 describe('페이지 스모크 렌더', () => {
