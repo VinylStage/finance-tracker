@@ -48,4 +48,38 @@ function countLockedAll(db) {
   ).get(...LOCKED_ORIGINS).c;
 }
 
-module.exports = { isEditable, lockedMessage, findLocked, countLockedAll };
+// ─────────────────────────────────────────────────────────────────────────
+// 집계에서 파생 거래를 뺄 것인가(#272)
+//
+// 기간 필터의 "할부·리볼빙 등 자동 생성 내역 포함" 토글이 여기로 온다.
+//
+// **기본값은 포함이다.** #269 가 B안(원금+이자를 회차별 거래로 생성, 구매 시점
+// 거래는 사용자가 넣지 않는다)으로 확정됐다. 파생 행이 **실제 지출 기록 그
+// 자체**라서, 빼면 할부 지출이 합계에서 통째로 사라진다.
+//
+// 잠금 판정과 같은 집합을 쓴다. `recurring` 은 여기 없다 — 반복거래는 사용자가
+// 등록한 실제 결제고 거래내역에서 고칠 수도 있다. 그걸 "자동 생성" 으로 묶어
+// 빼면 공과금·구독료가 합계에서 사라진다.
+
+// 집계 쿼리에 끼울 조건. 포함이면 빈 문자열이라 쿼리가 그대로다.
+//
+// @returns {{sql: string, params: string[]}}
+function derivedFilter(query = {}) {
+  // 'off' 만 제외로 본다. 값이 없거나 이상하면 포함이다 — 조용히 빼면 사용자가
+  // 왜 합계가 줄었는지 알 수 없다.
+  if ((query || {}).derived !== 'off') return { sql: '', params: [] };
+
+  const placeholders = LOCKED_ORIGINS.map(() => '?').join(',');
+  // COALESCE 를 두는 이유는 옛 데이터가 아니다 — 007 이 origin 을
+  // `NOT NULL DEFAULT 'manual'` 로 넣어서 NULL 인 행은 존재할 수 없다.
+  //
+  // 이 조각이 **LEFT JOIN 의 ON 이 아니라 WHERE 로 옮겨질 때**를 막는다.
+  // 그때는 매칭 안 된 쪽의 t.origin 이 NULL 이고, `NULL NOT IN (...)` 은 NULL
+  // 이라 그 행이 조용히 빠진다. 카테고리가 통째로 사라지는데 원인이 안 보인다.
+  return {
+    sql: `AND COALESCE(t.origin, 'manual') NOT IN (${placeholders})`,
+    params: [...LOCKED_ORIGINS],
+  };
+}
+
+module.exports = { isEditable, lockedMessage, findLocked, countLockedAll, derivedFilter };

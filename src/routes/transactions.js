@@ -6,7 +6,7 @@ const { asInt, missingFields, escapeLike } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
 const { resolvePeriod } = require('../utils/period');
-const { isEditable, lockedMessage, findLocked, countLockedAll } = require('../services/transactionOrigin');
+const { isEditable, lockedMessage, findLocked, countLockedAll, derivedFilter } = require('../services/transactionOrigin');
 const { PAYMENT_STYLES, SETTLEMENTS, DEFAULT_SETTLEMENT } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
 const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
@@ -621,18 +621,24 @@ router.get('/summary/dashboard', (req, res) => {
 // GET /api/transactions/summary/category-breakdown?from=&to= — 임의 기간 카테고리별 지출
 router.get('/summary/category-breakdown', (req, res) => {
   try {
-    const { from, to } = req.query;
-    if (!from || !to) return res.status(400).json({ error: '조회할 기간을 선택해 주세요.' });
+    // 기간 검증을 여기서도 resolvePeriod 로 돌린다. 라우트마다 직접 비교하면
+    // "시작이 종료보다 뒤" 같은 판정이 엔드포인트마다 달라진다(#272).
+    const period = resolvePeriod(req.query);
+    if (period.error) return res.status(400).json({ error: period.error });
+    if (!period.from || !period.to) return res.status(400).json({ error: '조회할 기간을 선택해 주세요.' });
+
+    const derived = derivedFilter(req.query);
     const data = db.prepare(`
       SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total
       FROM categories c
       LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date <= ?
         AND ${EXPENSE_ROW}
+        ${derived.sql}
       WHERE c.is_active = 1 AND c.major_type != '수입'
       GROUP BY c.id
       HAVING total > 0
       ORDER BY total DESC
-    `).all(from, to);
+    `).all(period.from, period.to, ...derived.params);
     res.json({ data });
   } catch (e) {
     serverError(res, e, 'transactions');
