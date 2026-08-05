@@ -1,22 +1,10 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const os = require('node:os');
-
-// 감사·되돌리기 라우트의 HTTP 테스트(#301).
-//
-// undo.test.js 는 서비스 함수를 직접 부른다. 그 층은 감사 행이 이미 있다고
-// 가정하고 시작하므로, **라우트가 실제로 감사 행을 남기는지는 검증되지 않는다.**
-// 트리거·컨텍스트·라우트가 다 맞물려야 되돌리기가 되는데 그 조합은 여기서만 깨진다.
-//
-// #300 에서 감사 테스트가 통과하는데도 실제로는 아무것도 안 거치던 일이 있었다.
-// 이 파일은 반드시 HTTP 를 타고, 결과를 DB 가 아니라 응답으로 확인한다.
+const { startTestServer } = require('./helpers/testServer');
 
 const PORT = 34625;
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let serverOutput = '';
+let server;
 
 async function api(method, url, body) {
   const res = await fetch(`${BASE}${url}`, {
@@ -34,26 +22,8 @@ async function api(method, url, body) {
 let catA; let catB; let pm;
 
 before(async () => {
-  const dbPath = path.join(os.tmpdir(), `finance-audit-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-
-  const deadline = Date.now() + 15000;
-  let up = false;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) { up = true; break; }
-    } catch { /* 아직 기동 전 */ }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (!up) throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
+  // 기존 before 안에 있던 나머지 준비 작업은 이 아래에 그대로 남긴다
 
   const cats = await api('GET', '/api/categories');
   const rows = Array.isArray(cats.body) ? cats.body : cats.body.data;
@@ -65,7 +35,7 @@ before(async () => {
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
+  if (server) server.stop();
 });
 
 function tx(over = {}) {
