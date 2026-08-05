@@ -107,6 +107,52 @@ describe('A. 기간 기준으로 지운다', () => {
   });
 });
 
+// 정리가 "안 돌았다" 는 두 가지 뜻이다(#445 §1 후속).
+//
+//   표가 없다        할 일이 없었다. 알릴 것이 없다
+//   조회가 실패했다  정리를 건너뛰었다. 이력이 계속 쌓이므로 알려야 한다
+//
+// `ran: false` 만 보면 둘이 같아 보인다. 그래서 뒤쪽에만 `error` 를 실었다.
+// 이 구분이 무너지면 화면이 조용히 넘어가고, #367 이 막으려던 상태로 돌아간다.
+describe('E. 정리를 건너뛴 이유를 구분한다', () => {
+  test('E-1. audit_log 표가 없으면 조용히 건너뛴다', () => {
+    db.prepare('DROP TABLE IF EXISTS audit_log').run();
+    const r = purgeAuditLog(db);
+    assert.strictEqual(r.ran, false);
+    assert.strictEqual(r.error, undefined);
+  });
+
+  test('E-2. 후보 조회가 실패하면 이유를 실어 보낸다', () => {
+    // `findUndoable` 만 실패시켜야 한다. 표를 통째로 지우면 위의 hasTable 경로로
+    // 빠져 다른 갈래를 재게 된다. 그래서 **표는 남기고 그 쿼리가 참조하는 컬럼만**
+    // 지운다 — `undone_at` 이 없으면 조회는 던지고 표는 그대로 있다.
+    // 인덱스가 그 컬럼을 참조하면 SQLite 가 DROP COLUMN 을 막는다. 먼저 치운다.
+    db.exec('DROP INDEX IF EXISTS idx_audit_undoable');
+    db.exec('ALTER TABLE audit_log DROP COLUMN undone_at');
+
+    const r = purgeAuditLog(db);
+
+    assert.strictEqual(r.ran, false);
+    // 정리가 안 됐다는 것을 사용자가 알아야 이력 증가를 막을 수 있다. `ran:false`
+    // 만 돌려주면 화면이 "할 일이 없었다"(E-1)와 구분하지 못해 조용히 넘어간다.
+    assert.strictEqual(typeof r.error, 'string');
+    assert.ok(r.error.length > 0);
+  });
+
+  test('E-3. 정상 정리에는 error 가 없다', () => {
+    userAction('a');
+    const r = purgeAuditLog(db);
+    assert.strictEqual(r.ran, true);
+    assert.strictEqual(r.error, undefined);
+  });
+
+  test('E-4. 건너뛴 경우 지운 건수가 0 이다', () => {
+    db.prepare('DROP TABLE IF EXISTS audit_log').run();
+    const r = purgeAuditLog(db);
+    assert.strictEqual(r.deleted, 0);
+  });
+});
+
 describe('B. 되돌릴 수 있는 것은 지우지 않는다 — 핵심', () => {
   test('B-1. 최근 미취소 그룹은 기간이 지나도 남는다', () => {
     // 오래 앱을 안 켠 사용자다. 마지막 작업이 기간 밖에 있어도 되돌릴 수 있어야 한다.
