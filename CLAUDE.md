@@ -34,6 +34,21 @@ Node 내장 러너(`node --test`). 각 테스트가 `mkdtemp` 로 임시 DB 를 
 
 커버리지 게이트는 `npm run test:coverage` (lines 80 / branches 75 / functions 85 / statements 80).
 
+## 마이그레이션 번호
+
+**새 마이그레이션 번호는 모든 원격 브랜치를 확인하고 딴다.**
+
+```bash
+git fetch origin && git ls-remote --heads origin | ... # 또는 각 브랜치의 migrations/ 확인
+```
+
+`develop` 만 보면 동시 진행 중인 다른 브랜치가 같은 번호를 쓴다. 이 저장소에서
+실제로 3번 겪었다. 머지 순서에 따라 한쪽 마이그레이션이 조용히 건너뛰어진다.
+
+`rebuildAuditTriggers` 는 **부르지 않는다.** 예전에는 표를 만든 마이그레이션이 각자
+불렀지만, #346(PR #356)이 그 책임을 `runMigrations()` 로 옮겼다
+(`src/db/migrate.js`). 지금 부르면 중복이다.
+
 ## 브랜치
 
 **브랜치는 항상 `origin/develop` 에서 딴다.**

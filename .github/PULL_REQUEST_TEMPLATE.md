@@ -15,4 +15,4 @@ closes #
 - [ ] 브라우저 콘솔 에러 없음
 - [ ] 연관 이슈의 인수 기준 전부 충족
 - [ ] 데이터 파일(*.db, *.xlsx) 커밋 안 됨
-- [ ] 라우트/페이지를 추가·삭제했다면 `docs/ARCHITECTURE.md` · `docs/ROADMAP.md` · `docs/audit/IMPLEMENTATION_AUDIT.md`의 목록도 같이 갱신함(FND-17 재발 방지)
+- [ ] 라우트/페이지를 추가·삭제했다면 `npm run docs:inventory` 를 돌려 `docs/ARCHITECTURE.md` 목록을 갱신함 (FND-17 재발 방지 — 체크박스만으로는 세 번 놓쳤다)

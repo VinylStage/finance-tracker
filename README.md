@@ -63,4 +63,13 @@ finace-tracker/
 
 ## 로드맵
 
-[docs/ROADMAP.md](docs/ROADMAP.md) 참조
+**GitHub 이 정본이다.**
+
+- [마일스톤](https://github.com/VinylStage/finance-tracker/milestones) — 무엇을 언제까지
+- [열린 이슈](https://github.com/VinylStage/finance-tracker/issues) — 지금 무엇이 남았나
+- [백로그 #442](https://github.com/VinylStage/finance-tracker/issues/442) — 아직 이슈가 아닌 것
+
+전에는 `docs/ROADMAP.md` 가 마일스톤 진행과 구현 목록을 따로 적었는데, 손으로
+갱신하는 문서라 **계속 어긋났다.** 마일스톤 번호가 GitHub 과 달라졌고, 마이그레이션
+규칙 하나는 코드가 바뀐 뒤에도 옛 내용이 남아 정반대를 지시하고 있었다. 상태를 두 곳에
+적으면 한 곳은 반드시 낡는다.

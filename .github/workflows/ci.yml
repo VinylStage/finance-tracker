@@ -22,6 +22,11 @@ jobs:
         working-directory: client
       - name: Check JS syntax
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      # ARCHITECTURE.md 의 라우트·페이지·컴포넌트 목록은 코드에서 생성한다.
+      # 손으로 유지하다 세 번 낡았고(FND-17), PR 템플릿 체크박스로는 또 놓쳤다.
+      - name: Docs inventory matches code
+        run: npm run docs:inventory:check
       # node --check 는 문법만 보고 서버 src/ 만 본다. 정의되지 않은 식별자는
       # 잡지 못해, import 를 빠뜨린 코드가 테스트 전부 초록인 채로 배포됐다가
       # 브라우저에서 ReferenceError 로 죽은 적이 있다. 여기가 그 자리를 막는다.
