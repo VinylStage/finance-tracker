@@ -205,7 +205,26 @@ function undismiss(db, ids) {
   ).run(...unique).changes;
 }
 
+// 사용자가 "중복 아님" 으로 지나친 후보를 되돌려 볼 수 있게 목록으로 낸다(#445 §2).
+//
+// `findDuplicateCandidates` 는 지나친 것을 **걸러내고** 목록에 안 낸다. 그게 맞는
+// 동작이지만, 그래서 실수로 지나친 것을 사용자가 다시 찾을 방법이 없었다 — 서버에는
+// `undismiss` 가 있는데 손이 닿지 않았다.
+//
+// 거래가 지워지면 dismissals 도 CASCADE 로 같이 지워진다. 그래도 JOIN 을 쓰는 것은
+// 여기서 거래 정보(날짜·가맹점·금액)를 같이 내야 사용자가 무엇을 지나쳤는지
+// 알아볼 수 있기 때문이다 — 거래 id 만 보여주면 판단할 수 없다.
+function listDismissed(db) {
+  return db.prepare(`
+    SELECT d.transaction_id, d.dismissed_at,
+           t.date, t.merchant, t.amount
+    FROM installment_duplicate_dismissals d
+    JOIN transactions t ON t.id = d.transaction_id
+    ORDER BY d.dismissed_at DESC, d.transaction_id DESC
+  `).all();
+}
+
 module.exports = {
   normalizeMerchant, merchantMatches, daysApart, findDuplicateCandidates,
-  planResolve, resolveFingerprint, dismiss, undismiss, CONFIDENCE,
+  planResolve, resolveFingerprint, dismiss, undismiss, listDismissed, CONFIDENCE,
 };

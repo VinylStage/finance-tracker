@@ -24,6 +24,8 @@ const CONFIDENCE_LABEL = {
 
 export default function DuplicateCandidates() {
   const [rows, setRows] = useState(null);
+  const [dismissed, setDismissed] = useState([]);
+  const [showDismissed, setShowDismissed] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -31,8 +33,12 @@ export default function DuplicateCandidates() {
 
   const load = async () => {
     try {
-      const res = await api.get('/api/installments/duplicates');
+      const [res, gone] = await Promise.all([
+        api.get('/api/installments/duplicates'),
+        api.get('/api/installments/duplicates/dismissed'),
+      ]);
       setRows(res.data || []);
+      setDismissed(gone.data || []);
       setSelected(new Set());
       setError(null);
     } catch (err) {
@@ -87,7 +93,21 @@ export default function DuplicateCandidates() {
     try {
       const res = await api.post('/api/installments/duplicates/resolve', { keep_ids: ids });
       await load();
-      await alert(`${res.kept}건을 중복이 아닌 것으로 표시했어요. 목록에서 빠집니다.`);
+      await alert(`${res.kept}건을 중복이 아닌 것으로 표시했어요. 목록에서 빠지지만 '중복 아니라고 한 것' 에서 되돌릴 수 있어요.`);
+    } catch (err) {
+      await alert(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 지나친 판단을 되돌린다. 서버에는 처음부터 길이 있었는데 화면이 안 불러서
+  // **실수로 지나치면 사용자 입장에서는 영구**였다(#445 §2).
+  const handleRestore = async (id) => {
+    setBusy(true);
+    try {
+      await api.post('/api/installments/duplicates/restore', { ids: [id] });
+      await load();
     } catch (err) {
       await alert(err.message);
     } finally {
@@ -103,13 +123,18 @@ export default function DuplicateCandidates() {
     );
   }
   if (rows === null) return null;
-  // 후보가 없으면 자리를 차지하지 않는다. 없는 게 정상이다.
-  if (!rows.length) return null;
+  // 후보도 없고 지나친 것도 없으면 자리를 차지하지 않는다. 없는 게 정상이다.
+  //
+  // 지나친 것이 있으면 후보가 0 건이어도 남는다 — 다 지나친 뒤에 되돌릴 화면이
+  // 사라지면 되돌릴 방법도 같이 사라진다.
+  if (!rows.length && !dismissed.length) return null;
 
   return (
     <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-body">중복일 수 있는 거래 {rows.length}건</h2>
+        <h2 className="text-sm font-semibold text-body">
+          {rows.length > 0 ? `중복일 수 있는 거래 ${rows.length}건` : '중복 확인'}
+        </h2>
         {selected.size > 0 && (
           <div className="flex gap-2">
             <button
@@ -164,6 +189,39 @@ export default function DuplicateCandidates() {
           );
         })}
       </ul>
+
+      {dismissed.length > 0 && (
+        <div className="border-t border-line pt-3 space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowDismissed((v) => !v)}
+            aria-expanded={showDismissed}
+            className="text-xs text-caption hover:text-ink"
+          >
+            중복 아니라고 한 것 {dismissed.length}건 {showDismissed ? '접기' : '보기'}
+          </button>
+
+          {showDismissed && (
+            <ul className="space-y-1">
+              {dismissed.map((d) => (
+                <li key={d.transaction_id} className="text-xs text-caption flex flex-wrap items-baseline gap-x-2">
+                  <span className="tabular-nums">{d.date}</span>
+                  <span>{d.merchant || '(가맹점 없음)'}</span>
+                  <span className="tabular-nums">{formatWon(d.amount)}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRestore(d.transaction_id)}
+                    disabled={busy}
+                    className="text-xs text-caption underline hover:text-ink disabled:opacity-60"
+                  >
+                    다시 보기
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
