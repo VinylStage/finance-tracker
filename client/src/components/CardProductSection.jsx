@@ -71,7 +71,9 @@ export default function CardProductSection({ paymentMethods }) {
 
   const load = async () => {
     try {
-      const res = await api.get('/api/card-products');
+      // 비활성 카드까지 받는다. 목록에서 아예 안 보이면 사용자는 그 카드가
+      // 어디 갔는지, 왜 같은 이름으로 다시 등록이 막히는지 알 수 없다(#410).
+      const res = await api.get('/api/card-products?include_inactive=1');
       setProducts(res.data || []);
       setLoadError(null);
     } catch (e) {
@@ -129,6 +131,28 @@ export default function CardProductSection({ paymentMethods }) {
       setEditingId(null);
       await load();
     } catch (err) {
+      // 이미 등록했다가 더 안 쓰기로 한 카드면, 새로 만드는 대신 되살리도록
+      // 묻는다. 그 카드는 목록에 안 보이므로 그냥 거절만 하면 사용자는 등록이
+      // 막힌 이유를 알 수 없다(#410).
+      const dup = err.body || {};
+      if (dup.reactivatable && dup.duplicate_id) {
+        const ok = await confirm(`${err.message} 다시 쓰기로 하면 예전 혜택 설정도 그대로 돌아와요.`);
+        if (ok) {
+          try {
+            await api.post(`/api/card-products/${dup.duplicate_id}/reactivate`, {});
+            setShowForm(false);
+            setForm(EMPTY_FORM);
+            setEditingId(null);
+            await load();
+            return;
+          } catch (e2) {
+            setSaveError(e2.message);
+            return;
+          }
+        }
+        setSaveError(err.message);
+        return;
+      }
       // 같은 카드사에 같은 상품명이면 서버가 막는다. 문구를 그대로 보여준다.
       setSaveError(err.message);
     } finally {
@@ -136,23 +160,43 @@ export default function CardProductSection({ paymentMethods }) {
     }
   };
 
-  const remove = async (p) => {
-    // 혜택이 CASCADE 로 함께 지워진다. 되돌릴 수 없으니 확인을 받는다.
-    const ok = await confirm(`'${p.product_name}' 을 지울까요? 등록한 혜택도 함께 지워져요.`);
+  // 지우지 않고 비활성화한다(#410). 과거 거래의 카드 지정은 그대로 남는다 —
+  // 지우면 그 지정이 NULL 로 돌아가 지운 카드의 지출이 남은 카드로 넘어갔다.
+  const deactivate = async (p) => {
+    const ok = await confirm(
+      `'${p.product_name}' 을 더 안 쓰기로 할까요? 새 거래에서 고를 수 없게 되고, 이미 이 카드로 기록한 거래는 그대로 남아요.`
+    );
     if (!ok) return;
     try {
-      await api.del(`/api/card-products/${p.id}`);
+      const res = await api.del(`/api/card-products/${p.id}`);
+      await load();
+      if (res && res.kept > 0) {
+        await alert(`이 카드로 기록한 거래 ${res.kept}건은 그대로 남아 있어요.`);
+      }
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  const reactivate = async (p) => {
+    try {
+      await api.post(`/api/card-products/${p.id}/reactivate`, {});
       await load();
     } catch (err) {
       await alert(err.message);
     }
   };
 
-  // 카드사로 묶는다.
+  // 활성 카드만 카드사로 묶는다. 비활성은 아래 별도 묶음으로 뺀다 — 섞어 놓으면
+  // 지금 고를 수 있는 카드가 무엇인지 매번 읽어야 한다.
+  const isActive = (p) => p.is_active === undefined || p.is_active === null || !!p.is_active;
+  const activeProducts = products.filter(isActive);
+  const inactiveProducts = products.filter((p) => !isActive(p));
+
   const grouped = cards
-    .map((c) => ({ card: c, items: products.filter((p) => p.payment_method_id === c.id) }))
+    .map((c) => ({ card: c, items: activeProducts.filter((p) => p.payment_method_id === c.id) }))
     .filter((g) => g.items.length > 0);
-  const orphan = products.filter((p) => !cards.some((c) => c.id === p.payment_method_id));
+  const orphan = activeProducts.filter((p) => !cards.some((c) => c.id === p.payment_method_id));
 
   const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
 
@@ -278,13 +322,41 @@ export default function CardProductSection({ paymentMethods }) {
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <button type="button" onClick={() => openEdit(p)} className="text-xs text-brand-text hover:underline">수정</button>
-                  <button type="button" onClick={() => remove(p)} className="text-xs text-caption hover:text-loss-text">삭제</button>
+                  <button type="button" onClick={() => deactivate(p)} className="text-xs text-caption hover:text-loss-text">더 안 씀</button>
                 </div>
               </li>
             ))}
           </ul>
         </div>
       ))}
+
+      {inactiveProducts.length > 0 && (
+        // 더 안 쓰기로 한 카드. 감추지 않는다 — 과거 거래가 이 카드를 가리키고
+        // 있고, 같은 이름으로 다시 등록하려 할 때 왜 막히는지도 여기서 읽힌다.
+        <div>
+          <h4 className="text-xs font-medium text-caption mb-1.5">더 안 쓰는 카드</h4>
+          <ul className="space-y-1.5">
+            {inactiveProducts.map((p) => (
+              <li
+                key={p.id}
+                data-testid="inactive-card"
+                className="flex items-center justify-between gap-3 bg-surface-sunken border border-line rounded-control px-3 py-2 opacity-60"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-caption truncate">{p.product_name}</p>
+                  <p className="text-[11px] text-caption">새 거래에서 고를 수 없어요. 지난 거래는 그대로 남아 있어요.</p>
+                </div>
+                <button
+                  type="button" onClick={() => reactivate(p)}
+                  className="text-xs text-brand-text hover:underline shrink-0"
+                >
+                  다시 쓰기
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {orphan.length > 0 && (
         // 결제수단이 지워졌거나 카드가 아닌 수단에 붙은 경우. 숨기면 사용자는
@@ -295,7 +367,7 @@ export default function CardProductSection({ paymentMethods }) {
             {orphan.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3 bg-surface border border-line rounded-control px-3 py-2">
                 <p className="text-sm text-ink truncate">{p.product_name}</p>
-                <button type="button" onClick={() => remove(p)} className="text-xs text-caption hover:text-loss-text shrink-0">삭제</button>
+                <button type="button" onClick={() => deactivate(p)} className="text-xs text-caption hover:text-loss-text shrink-0">더 안 씀</button>
               </li>
             ))}
           </ul>

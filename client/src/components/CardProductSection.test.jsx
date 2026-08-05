@@ -183,7 +183,7 @@ describe('등록', () => {
   });
 });
 
-describe('수정·삭제', () => {
+describe('수정·비활성화', () => {
   it('수정하면 기존 값이 채워진다', async () => {
     const user = userEvent.setup();
     get.mockResolvedValue({ data: PRODUCTS });
@@ -206,29 +206,87 @@ describe('수정·삭제', () => {
     expect(put.mock.calls[0][0]).toBe('/api/card-products/10');
   });
 
-  it('삭제는 혜택도 지워진다고 알리고 확인받는다', async () => {
+  it('더 안 씀 을 누르면 확인을 받는다', async () => {
     const user = userEvent.setup();
     get.mockResolvedValue({ data: PRODUCTS });
     setup();
     await screen.findByText('하나 A');
-    await user.click(screen.getAllByText('삭제')[0]);
-    expect(await screen.findByText(/등록한 혜택도 함께 지워져요/)).toBeTruthy();
+    await user.click(screen.getAllByText('더 안 씀')[0]);
+    expect(await screen.findByText(/더 안 쓰기로 할까요/)).toBeTruthy();
     // 확인 전에는 지우지 않는다
     expect(del).not.toHaveBeenCalled();
   });
 
-  // 확인 뒤에 실제로 지우는지를 아무도 보지 않아서, api 에 없는 이름을
-  // (api.delete) 부르는 코드가 통과했다. 브라우저에서는 TypeError 로 삭제가
-  // 아예 안 됐다. 앞 케이스의 "확인 전에는 안 지운다" 만으로는 부족하다.
-  it('확인하면 그 카드를 실제로 지운다', async () => {
+  it('확인하면 비활성화 요청을 보낸다', async () => {
     const user = userEvent.setup();
     get.mockResolvedValue({ data: PRODUCTS });
     setup();
     await screen.findByText('하나 A');
-    await user.click(screen.getAllByText('삭제')[0]);
+    await user.click(screen.getAllByText('더 안 씀')[0]);
     await user.click(await screen.findByText('확인'));
 
     await waitFor(() => expect(del).toHaveBeenCalled());
     expect(del.mock.calls[0][0]).toBe('/api/card-products/10');
+  });
+
+  it('취소하면 아무 요청도 안 보낸다', async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue({ data: PRODUCTS });
+    setup();
+    await screen.findByText('하나 A');
+    await user.click(screen.getAllByText('더 안 씀')[0]);
+    await user.click(await screen.findByText('취소'));
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('남은 거래 건수를 알려준다', async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue({ data: PRODUCTS });
+    del.mockResolvedValue({ ok: true, deactivated: true, kept: 3 });
+    setup();
+    await screen.findByText('하나 A');
+    await user.click(screen.getAllByText('더 안 씀')[0]);
+    await user.click(await screen.findByText('확인'));
+    expect(await screen.findByText(/거래 3건은 그대로 남아 있어요/)).toBeTruthy();
+  });
+
+  it('비활성 카드는 따로 묶여서 보인다', async () => {
+    get.mockResolvedValue({ data: [{ ...PRODUCTS[0], is_active: 0 }] });
+    setup();
+    expect(await screen.findByText('더 안 쓰는 카드')).toBeTruthy();
+    expect(screen.getByTestId('inactive-card')).toBeTruthy();
+  });
+
+  it('다시 쓰기를 누르면 재활성화 요청을 보낸다', async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue({ data: [{ ...PRODUCTS[0], is_active: 0 }] });
+    post.mockResolvedValue({ ok: true });
+    setup();
+    await screen.findByText('더 안 쓰는 카드');
+    await user.click(screen.getByText('다시 쓰기'));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0][0]).toBe('/api/card-products/10/reactivate');
+  });
+
+  it('이미 등록했던 카드면 다시 쓸지 묻고 되살린다', async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue({ data: PRODUCTS });
+    const err = new Error('전에 등록했다가 더 안 쓰기로 한 카드예요. 다시 쓰시겠어요?');
+    err.body = { reactivatable: true, duplicate_id: 10 };
+    post.mockRejectedValueOnce(err);
+    setup();
+    await user.click(screen.getByText('+ 카드 등록'));
+    await user.selectOptions(screen.getByLabelText('카드사 *'), '1');
+    await user.type(screen.getByLabelText('카드 이름 *'), '하나 A');
+    await user.type(screen.getByLabelText('발급사 *'), '하나');
+    await user.click(screen.getByText('저장'));
+
+    // 확인창이 뜬다
+    expect(await screen.findByText(/전에 등록했다가 더 안 쓰기로 한 카드예요/)).toBeTruthy();
+    // 확인 시 재활성화 요청을 보낸다
+    await user.click(screen.getByText('확인'));
+    await waitFor(() =>
+      expect(post.mock.calls.some(([p]) => p === '/api/card-products/10/reactivate')).toBe(true)
+    );
   });
 });
