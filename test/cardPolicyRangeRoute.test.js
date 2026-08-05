@@ -240,3 +240,106 @@ describe('D. 구간 삭제', () => {
     assert.strictEqual(res.body.deleted, 0);
   });
 });
+
+// 조회 필터와 삭제·등록의 필수값 검증이 비어 있었다(분기 74.5%). 필터가 조용히
+// 무시되면 사용자가 고른 조건과 다른 정책 목록을 보게 되고, 그 목록을 보고 카드
+// 사용 계획을 세운다.
+describe('E. 조회 필터와 필수값', () => {
+  test('E-1. months 필터가 실제로 걸러 준다', async () => {
+    const id = await cardId();
+    // 앞 묶음이 2~6 을 이미 쓴다. 겹치면 409 라 다른 대역을 쓴다.
+    const created = await json('/api/card-policies/range', {
+      method: 'POST',
+      body: JSON.stringify({
+        payment_method_id: id, from_month: 20, to_month: 24,
+        policy_type: '무이자', effective_from: '2026-01-01',
+      }),
+    });
+    assert.strictEqual(created.status, 201, JSON.stringify(created.body));
+
+    const only22 = await json(`/api/card-policies?payment_method_id=${id}&months=22`);
+    assert.ok(only22.body.data.length > 0, 'months 필터가 전부 걸러 버렸다');
+    assert.ok(only22.body.data.every((p) => p.months === 22),
+      `months 필터가 안 걸렸다: ${only22.body.data.map((p) => p.months)}`);
+  });
+
+  test('E-2. on 필터가 그 시점에 유효한 것만 남긴다', async () => {
+    const id = await cardId();
+    await json('/api/card-policies/range', {
+      method: 'POST',
+      body: JSON.stringify({
+        payment_method_id: id, from_month: 30, to_month: 30,
+        policy_type: '유이자', annual_rate: 15.9,
+        effective_from: '2026-01-01', effective_to: '2026-06-30',
+      }),
+    });
+
+    const during = await json(`/api/card-policies?payment_method_id=${id}&months=30&on=2026-03-01`);
+    assert.ok(during.body.data.length > 0, '유효 기간 안인데 안 나온다');
+
+    const after = await json(`/api/card-policies?payment_method_id=${id}&months=30&on=2026-12-01`);
+    assert.strictEqual(after.body.data.length, 0,
+      `끝난 정책이 그대로 나온다: ${JSON.stringify(after.body.data.map((p) => p.effective_to))}`);
+  });
+
+  test('E-3. 구간 삭제에 조건이 빠지면 400 이다', async () => {
+    const id = await cardId();
+    const full = { payment_method_id: id, from_month: 20, to_month: 24, effective_from: '2026-01-01' };
+    for (const drop of ['payment_method_id', 'from_month', 'to_month', 'effective_from']) {
+      const q = { ...full };
+      delete q[drop];
+      const qs = new URLSearchParams(q).toString();
+      const r = await json(`/api/card-policies/range?${qs}`, { method: 'DELETE' });
+      assert.strictEqual(r.status, 400, `${drop} 를 빼도 통과했다: ${JSON.stringify(r.body)}`);
+      assert.ok(r.body.error, `${drop}: 거부 사유가 없다`);
+    }
+  });
+
+  test('E-4. 단건 등록에 필수값이 빠지면 400 이다', async () => {
+    const id = await cardId();
+    const full = {
+      payment_method_id: id, months: 40, policy_type: '무이자', effective_from: '2026-01-01',
+    };
+    for (const drop of ['payment_method_id', 'months', 'policy_type', 'effective_from']) {
+      const b = { ...full };
+      delete b[drop];
+      const r = await json('/api/card-policies', { method: 'POST', body: JSON.stringify(b) });
+      assert.strictEqual(r.status, 400, `${drop} 를 빼도 통과했다: ${JSON.stringify(r.body)}`);
+    }
+  });
+});
+
+// 위 E-3·E-4 는 삭제와 단건 등록을 덮는다. 같은 모양의 검증이 두 곳 더 있는데
+// 그쪽은 여전히 비어 있었다 — `GET /effective` 와 `POST /range` 다.
+// 네 곳 다 문구가 비슷해서 하나만 보고 넘어가기 쉬운 자리다.
+describe('F. 나머지 두 라우트의 필수값', () => {
+  test('F-1. 유효 정책 조회에 조건이 빠지면 400 이다', async () => {
+    const id = await cardId();
+    const full = { payment_method_id: id, months: 3, on: '2026-03-01' };
+    for (const drop of ['payment_method_id', 'months', 'on']) {
+      const q = { ...full };
+      delete q[drop];
+      const qs = new URLSearchParams(q).toString();
+      const r = await json(`/api/card-policies/effective?${qs}`);
+      assert.strictEqual(r.status, 400, `${drop} 를 빼도 통과했다: ${JSON.stringify(r.body)}`);
+      assert.ok(r.body.error, `${drop}: 거부 사유가 없다`);
+    }
+
+    const ok = await json(`/api/card-policies/effective?${new URLSearchParams(full)}`);
+    assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
+  });
+
+  test('F-2. 구간 등록에 필수값이 빠지면 400 이다', async () => {
+    const id = await cardId();
+    const full = {
+      payment_method_id: id, from_month: 50, to_month: 52,
+      policy_type: '무이자', effective_from: '2026-01-01',
+    };
+    for (const drop of ['payment_method_id', 'from_month', 'to_month', 'policy_type', 'effective_from']) {
+      const b = { ...full };
+      delete b[drop];
+      const r = await json('/api/card-policies/range', { method: 'POST', body: JSON.stringify(b) });
+      assert.strictEqual(r.status, 400, `${drop} 를 빼도 통과했다: ${JSON.stringify(r.body)}`);
+    }
+  });
+});
