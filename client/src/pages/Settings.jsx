@@ -19,6 +19,7 @@ import AnchorNav from '../components/AnchorNav';
 import CardPolicySection from '../components/CardPolicySection';
 import CardProductSection from '../components/CardProductSection';
 import CardRemapSection from '../components/CardRemapSection';
+import SettlementReclassifySection from '../components/SettlementReclassifySection';
 import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
@@ -90,6 +91,12 @@ export default function Settings() {
           <Anchor id="card-remap">
             <CardRemapSection paymentMethods={paymentMethods} />
           </Anchor>
+          {/* 결제방식 재분류는 재매핑 **다음**이다(#289). 어느 카드인지 먼저
+              붙여야 "이 카드로 쓴 건 전부 카드 사용" 이 성립한다. 순서를
+              뒤집으면 상품 미상인 채로 결제방식만 바꾸게 된다. */}
+          <Anchor id="settlement-reclassify">
+            <SettlementReclassifySection paymentMethods={paymentMethods} />
+          </Anchor>
           {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
           <Anchor id="card-policy">
             <CardPolicySection paymentMethods={paymentMethods} />
@@ -136,6 +143,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'payment', label: '결제수단 관리' },
   { id: 'card-product', label: '보유 카드' },
   { id: 'card-remap', label: '지난 거래 카드 지정' },
+  { id: 'settlement-reclassify', label: '결제방식 재분류' },
   { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
   { id: 'history', label: '변경 이력' },
