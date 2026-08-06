@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PRESETS, MAX_FUTURE_DAYS, rangeForPreset, rangeForMonth, validateRange,
-  parsePeriodQuery, toPeriodQuery, periodLabel, monthShorthand,
+  parsePeriodQuery, toPeriodQuery, periodLabel, monthShorthand, CONTROL_PRESETS,
 } from './periodFilter';
 
 // 전역 기간 필터(#272).
@@ -41,9 +41,17 @@ describe('A. 프리셋은 달 경계에 맞는다', () => {
 
   it('A-6. 모든 프리셋이 목록에 있다', () => {
     // 목록과 구현이 갈라지면 화면에 버튼은 있는데 눌러도 아무 일이 없다.
+    //
+    // **양쪽으로 검사한다.** 범위를 계산하는 프리셋은 null 이면 안 되고,
+    // 컨트롤을 여는 프리셋(`month`·`custom`)은 null 이어야 한다. 한 방향만
+    // 보면 구현을 빠뜨린 버튼을 "컨트롤형이라서" 로 넘길 수 있다.
     for (const p of PRESETS) {
-      if (p.key === 'custom') continue;
-      expect(rangeForPreset(p.key, TODAY), p.key).not.toBeNull();
+      const r = rangeForPreset(p.key, TODAY);
+      if (CONTROL_PRESETS.has(p.key)) {
+        expect(r, `${p.key} 는 컨트롤형이라 범위를 계산하지 않는다`).toBeNull();
+      } else {
+        expect(r, p.key).not.toBeNull();
+      }
     }
   });
 });
