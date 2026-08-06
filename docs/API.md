@@ -1806,3 +1806,153 @@
 
   `starts_on` 을 API 에서 선택으로 둔 이유는 생략한 기존 호출을 400 으로 만들면 이미
   있는 경로가 깨지기 때문이다. 화면은 필수로 받는다.
+
+## cardImport.js
+
+카드사 이용내역 엑셀을 거래로 넣는다(#34, #102). 파싱은 `services/cardImport` 가 하고
+카드사 판별도 그쪽이다 — 이 라우트는 업로드·미리보기 분기·집계만 한다.
+
+**한 파일이 실패해도 나머지는 계속 처리한다.** 실패를 예외로 올리면 30개 중 하나가
+깨졌을 때 전부 헛수고가 된다. 파일별 결과에 `ok: false` 로 담고 사유를 함께 준다.
+
+`actor` 를 `import` 로 구분한다(#298). 파일에서 들어온 대량 삽입은 사용자가 한 건씩
+넣은 것과 실행취소 단위가 다르다.
+
+### POST /api/card-import
+- **요청**: `multipart/form-data`, 필드 `files` (최대 30개, 파일당 10MB)
+- **요청 파라미터**: `preview` (query) — `true` 면 저장하지 않고 건수만 센다
+- **응답 스키마**:
+  ```
+  {
+    "results": [
+      { "filename": "string", "ok": true,
+        "cardCompanyLabel": "string", "count": "number", "skipped": "number" },
+      { "filename": "string", "ok": false, "error": "string" }
+    ],
+    "totals": { "files": "number", "succeeded": "number", "failed": "number",
+                "count": "number", "skipped": "number", "imported": "number" }
+  }
+  ```
+- **비고**: `count`/`skipped` 는 미리보기, `imported`/`skipped` 는 실제 저장에서 채워진다.
+  `totals` 는 성공한 파일만 합산한다. 파일이 없으면 400, 용량 초과도 400.
+
+### POST /api/card-import/single
+`file` 필드 하나를 받는 하위호환 경로. 새 화면은 위 경로를 쓴다.
+
+- **요청**: `multipart/form-data`, 필드 `file`
+- **응답 스키마**: 위 `results` 한 건과 같은 모양(`filename` 없이 파싱 결과 그대로)
+- **비고**: 여기서는 실패를 400 으로 올린다. 파일이 하나뿐이라 부분 성공이 없다.
+
+## csvImport.js
+
+신한카드는 엑셀 내보내기를 지원하지 않아 CSV 본문을 텍스트로 받는다. 그래서 엑셀
+경로(`/api/card-import`)와 달리 `multipart` 가 아니라 JSON 본문이다.
+
+### POST /api/csv-import
+- **요청 파라미터**: `preview` (query) — `true` 면 저장하지 않는다
+- **요청 본문**: `{ "cardCompany": "string", "csvText": "string" }`
+- **응답 스키마**
+  - 미리보기: `{ "cardCompany", "cardCompanyLabel", "count", "skipped", "invalid" }`
+  - 저장: `{ "imported", "skipped", "invalid", "errors": ["string"] }`
+- **비고**: `invalid` 는 파싱 단계에서 걸러진 행이다 — 저장 대상에서 아예 빠진다.
+  `errors` 는 저장 중 실패한 행의 요약이며, **예외 원문을 담지 않는다**(#231).
+  둘 중 하나라도 빠지면 400.
+
+## data.js
+
+거래내역 전용 백업·복원. 설정 백업(`/api/export/settings`)과는 다른 경로다 —
+그쪽은 카테고리·결제수단·설정값만 다룬다.
+
+### GET /api/data/export
+- **응답 스키마**: `{ "exported_at": "ISO8601", "schema_version": 4, "transactions": [...] }`
+- **비고**: `Content-Disposition: attachment` 로 내려준다. 파일명은
+  `finance-backup-YYYYMMDD.json`. `schema_version` 은 `origin` 3필드가 늘면서 4 가
+  됐다(#268) — 이걸 안 내보내면 복원 시 파생 거래가 전부 `manual` 이 되어 잠금이 풀린다.
+  `exported_at` 은 의도적으로 UTC 다(메타데이터이지 로컬 날짜가 아니다).
+
+### POST /api/data/import
+- **요청 본문**: `{ "mode": "append" | "overwrite", "transactions": [...], "confirm": "string" }`
+- **응답 스키마**: `{ "ok": true, "imported", "skipped", "deleted", "total" }`
+  (+ 조건부 `legacy_fields_defaulted`, `fk_fallback`)
+- **비고**: `overwrite` 는 **기존 거래를 전부 지운다.** 화면의 확인 대화상자와 별개로
+  `confirm: "DELETE_ALL"` 을 요구한다 — API 를 직접 부르는 경로까지 막기 위한 토큰이라
+  화면 쪽 확인만 믿지 않는다. 없으면 400.
+
+  백업의 FK 값이 현재 DB 에 없을 수 있다(다른 기기 복원, 결제수단 초기화 등).
+  `foreign_keys=ON` 이라 그대로 넣으면 트랜잭션 전체가 롤백되므로, **있는 값만 넣고
+  나머지는 NULL 로 떨어뜨린 뒤** `fk_fallback: true` 로 알린다. 구버전 백업이라
+  기본값으로 채운 칸이 있으면 `legacy_fields_defaulted: true`.
+
+  `actor` 는 `import` 다 — 복원은 DB 를 통째로 갈아끼우므로 실행취소 대상에서 뺀다(#300).
+
+## cardStrategy.js
+
+"지금 이 결제를 어느 카드로 할 것인가"(#277, M8). 카드 등록(`card_products`)과
+혜택(`card_benefits`)이 모두 있어야 의미 있는 답이 나온다.
+
+전월실적 판정 기간은 **달력월**이다. 청구 이용기간(결제일·마감일 기준)과 다르며,
+섞으면 판정이 뒤집힌다 — `docs/DATA_MODEL.md` 의 카드 절 참조.
+
+### GET /api/card-strategy/thresholds
+카드별 전월실적 달성 현황.
+
+- **요청 파라미터**: `asOf` (query, `YYYY-MM-DD`, 기본값 오늘)
+- **응답 스키마**: `{ "data": [{ "cardProductId", "issuer", "productName", "isActive", ...threshold }], "asOf" }`
+- **비고**: **비활성 카드도 함께 내린다**(#410). 감추면 "지난달 이 카드로 30만원 썼는데
+  목록에 없다" 가 되어 소프트 삭제로 과거를 보존한 목적이 반쯤 사라진다. 화면이 흐리게
+  표시하고 추천에서만 빼도록 `isActive` 로 표시만 붙인다.
+
+### GET /api/card-strategy/estimate
+지금 결제하면 어느 카드가 나은가. 거래 입력 화면이 부른다.
+
+- **요청 파라미터**: `amount` (required, 숫자), `category_id` (optional), `merchant` (optional), `asOf` (optional)
+- **응답 스키마**: `{ "data": [카드별 추정, 혜택 내림차순], "comparable": "boolean", "capUnknown": true, "asOf" }`
+- **비고**: `data` 에서 **비활성 카드는 빠진다.** 지금 결제할 카드를 고르는 화면이라
+  못 쓰는 카드를 1위로 올리면 그대로 틀린 답이 된다(#410).
+
+  `comparable` 은 카드가 2장 이상일 때만 `true` 다. 카드가 하나뿐인데 "이게 최선입니다"
+  라고 말하면 안 된다 — 비교 대상이 없는 것과 비교해서 이긴 것은 다르다.
+  `capUnknown` 은 월 한도 소진분을 계산에 넣지 못했다는 표시다.
+
+  `amount` 가 없거나 숫자가 아니면 400.
+
+### GET /api/card-strategy/comparison
+지난 결제를 다른 카드로 했다면 얼마나 달랐을까.
+
+- **요청 파라미터**: `from` / `to` (query, `YYYY-MM-DD`) — 기본 구간은 **최근 3개월**
+- **응답 스키마**: `{ ...비교결과, "period": { "from", "to" }, "thresholdEstimated": "boolean" }`
+- **비고**: 기간을 안 주면 전 기간을 훑게 되는데 몇 년 전 결제를 지금 카드로 다시
+  계산하는 것은 의미가 없어 기본값을 둔다. `from > to` 면 400.
+
+  수입은 카드 혜택 대상이 아니라 제외한다. `thresholdEstimated` 가 `true` 면 실적
+  판정이 추정이라는 뜻이고, **차액도 추정이다** — 화면이 이어서 말해야 한다.
+
+## exchange.js
+
+한국수출입은행(EXIM) 환율. 외화 자산을 원화로 환산해 보여주는 데 쓴다.
+
+### GET /api/exchange
+- **응답 스키마**: `services/eximService.getExchangeRates()` 결과 그대로
+- **비고**: 외부 API 라 실패가 정상 경로에 있다. 실패는 500 으로 떨어지며 내부 메시지는
+  숨기고 서버 로그에만 남긴다.
+
+## stocks.js
+
+한국투자증권(KIS) 주가 조회. **기본적으로 꺼져 있다**(#150) — 계좌 개설 전이라
+`KIS_ENABLED=false` 이고, 서비스가 예외 대신 `enabled: false` 를 값으로 돌려준다.
+
+### GET /api/stocks/:ticker
+- **요청 파라미터**: `ticker` (path)
+- **응답 스키마**: `services/kisService.getStockPrice()` 결과 그대로
+- **비고**: 비활성 상태면 **503** 과 `{ "error": "주가 조회 기능은 아직 준비 중입니다." }`.
+  이 분기가 값으로 처리되므로 500 으로 떨어지는 것은 전부 예상 못한 오류다(FND-18).
+
+## guide.js
+
+앱 안에서 보는 사용 설명서. `docs/GUIDE.md` 를 그대로 내려준다.
+
+### GET /api/guide
+- **응답**: `text/markdown` (JSON 이 아니다)
+- **비고**: 문서가 없으면 **404** 와 `{ "error": "가이드 문서를 찾을 수 없습니다." }`.
+  경로는 `GUIDE_PATH` 환경변수로 바꿔 끼울 수 있다 — 404 경로를 테스트하려면 문서를
+  치워야 하는데, 테스트가 중간에 죽으면 저장소 파일이 사라진 채 남기 때문이다.

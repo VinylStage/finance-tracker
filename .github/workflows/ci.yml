@@ -27,6 +27,13 @@ jobs:
       # 손으로 유지하다 세 번 낡았고(FND-17), PR 템플릿 체크박스로는 또 놓쳤다.
       - name: Docs inventory matches code
         run: npm run docs:inventory:check
+
+      # 인벤토리 생성이 막는 것은 ARCHITECTURE.md 하나다. API.md 와
+      # DATA_MODEL.md 는 본문을 코드에서 만들 수 없어 생성 대상이 아니었고,
+      # 그래서 강제도 없었다 — 마운트 26개 중 7개, 실테이블 22개 중 3개가 통째로
+      # 빠진 채였다(#496). 내용까지 검사하지는 못해도 통째로 빠지는 것은 막는다.
+      - name: Docs cover routes and tables
+        run: npm run docs:check
       # node --check 는 문법만 보고 서버 src/ 만 본다. 정의되지 않은 식별자는
       # 잡지 못해, import 를 빠뜨린 코드가 테스트 전부 초록인 채로 배포됐다가
       # 브라우저에서 ReferenceError 로 죽은 적이 있다. 여기가 그 자리를 막는다.
