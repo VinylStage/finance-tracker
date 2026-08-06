@@ -73,7 +73,13 @@ export default function Savings() {
       </div>
 
       {showForm && (
+        // key 없이는 편집 대상이 바뀌어도 React 가 같은 인스턴스를 재사용한다.
+        // 폼의 초기값은 useState 초기화 함수라 마운트 때 한 번만 읽히므로,
+        // 폼을 연 채로 다른 상품의 '수정' 을 누르거나 '+ 상품 등록' 으로 넘어가면
+        // 제목만 바뀌고 입력은 이전 상품 값이 그대로 남는다. 그 상태로 저장하면
+        // 새 대상의 id 에 이전 상품의 값이 덮인다.
         <SavingsForm
+          key={editItem ? editItem.id : 'new'}
           initial={editItem}
           categories={categories}
           onSave={handleSave}

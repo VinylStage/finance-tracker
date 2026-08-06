@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Debts from './Debts';
 import { ConfirmProvider } from '../components/ConfirmProvider';
@@ -156,5 +157,58 @@ describe('부채 현황 화면', () => {
     });
     const row = screen.getByText('학자금 마통').closest('tr');
     expect(row.textContent).toContain('이자 추가');
+  });
+});
+
+// 폼은 열려 있는 동안 계속 마운트돼 있다. 초기값은 마운트 때 한 번만 읽히므로
+// 대상이 바뀌어도 갱신되지 않는다 — 제목만 바뀌고 입력은 이전 것이 남는다.
+describe('수정 폼이 가리키는 대상', () => {
+  const ROWS = [
+    { id: 1, name: '주택담보대출', type: '일반', loan_type: 'general', balance: 9000000, annual_rate: 4.17, monthly_interest: 31000, memo: '첫집' },
+    { id: 2, name: '급여통장 마통', type: '마이너스통장', loan_type: 'credit_line', balance: 3000000, credit_limit: 5000000, annual_rate: 6.5, monthly_interest: 16000, memo: null },
+  ];
+
+  beforeEach(() => {
+    put.mockResolvedValue({ ok: true });
+    get.mockResolvedValue({ data: ROWS, total_balance: 12000000, total_monthly_interest: 43000 });
+  });
+
+  it('폼을 연 채 다른 부채를 수정하면 그 부채 값으로 바뀐다', async () => {
+    renderDebts();
+    await waitFor(() => expect(screen.getByText('주택담보대출')).toBeTruthy());
+
+    await userEvent.click(screen.getAllByRole('button', { name: '수정' })[0]);
+    expect(screen.getByLabelText('부채명 *').value).toBe('주택담보대출');
+
+    await userEvent.click(screen.getAllByRole('button', { name: '수정' })[1]);
+    expect(screen.getByLabelText('부채명 *').value).toBe('급여통장 마통');
+  });
+
+  it('대상을 바꾼 뒤 저장하면 그 대상의 값을 그 id 로 보낸다', async () => {
+    renderDebts();
+    await waitFor(() => expect(screen.getByText('주택담보대출')).toBeTruthy());
+
+    await userEvent.click(screen.getAllByRole('button', { name: '수정' })[0]);
+    await userEvent.click(screen.getAllByRole('button', { name: '수정' })[1]);
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    // 이전 부채의 값이 새 대상에 덮이면 마이너스통장이 일반대출로 바뀌고
+    // 한도가 null 로 지워진다. 사용자는 그런 화면을 본 적이 없다.
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/debts/2', expect.objectContaining({
+      name: '급여통장 마통',
+      loan_type: 'credit_line',
+      credit_limit: 5000000,
+    })));
+  });
+
+  it('수정을 열어 둔 채 추가로 넘어가면 빈 폼이 된다', async () => {
+    renderDebts();
+    await waitFor(() => expect(screen.getByText('주택담보대출')).toBeTruthy());
+
+    await userEvent.click(screen.getAllByRole('button', { name: '수정' })[0]);
+    await userEvent.click(screen.getByRole('button', { name: '+ 부채 추가' }));
+
+    expect(screen.getByText('부채 추가')).toBeTruthy();
+    expect(screen.getByLabelText('부채명 *').value).toBe('');
   });
 });
