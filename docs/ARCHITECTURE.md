@@ -63,9 +63,9 @@ CSS 에서 사라진다.
 | `/api/stocks` | `stocks.js` |
 | `/api/transactions` | `transactions.js` |
 
-### 서비스 (27개)
+### 서비스 (28개)
 
-`accountBalance.js` · `auditRetention.js` · `billingMonthBackfill.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurringCatchup.js` · `settlementBilling.js` · `settlementReclassify.js` · `transactionOrigin.js` · `undo.js`
+`accountBalance.js` · `auditRetention.js` · `billingMonthBackfill.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurrenceDetect.js` · `recurringCatchup.js` · `settlementBilling.js` · `settlementReclassify.js` · `transactionOrigin.js` · `undo.js`
 
 ### 프론트엔드 페이지 (13개)
 
@@ -75,9 +75,9 @@ CSS 에서 사라진다.
 
 `AnchorNav` · `BalanceProjection` · `BillingMonthBackfillSection` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `RetentionNotice` · `SavingsGoalBar` · `SettlementReclassifySection` · `SpendHeatmap` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
-### 마이그레이션 (23개)
+### 마이그레이션 (24개)
 
-최신: `023-card-product-active`
+최신: `024-recurrence-suggestion-dismissals`
 
 
 <!-- inventory:end -->

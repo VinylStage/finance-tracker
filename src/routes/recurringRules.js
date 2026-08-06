@@ -6,6 +6,7 @@ const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
 const { getLastCatchupSummary } = require('../services/recurringCatchup');
+const { detectRecurringCandidates } = require('../services/recurrenceDetect');
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 function thisYearMonth() {
@@ -128,6 +129,73 @@ function ruleColumns(body) {
 // 뒤에 두면 나중에 GET /:id 가 생겼을 때 조용히 가려진다.
 router.get('/catchup', (_req, res) => {
   res.json(getLastCatchupSummary());
+});
+
+// GET /api/recurring-rules/suggestions — 반복으로 보이는 거래를 제안한다(#499).
+//
+// **읽기 전용이다.** 자동으로 규칙을 만들지 않는다. 감지는 틀릴 수 있고, 이
+// 저장소는 "자동으로 만들어진 것" 이 사용자를 놀라게 하는 문제를 이미 다뤘다
+// (#280). 후보를 보여주고 판단을 받는다.
+//
+// 고정 경로라 '/:id' 형태보다 앞에 둔다.
+router.get('/suggestions', (req, res) => {
+  try {
+    const months = asInt(req.query.months) ?? 12;
+    if (months < 1 || months > 60) {
+      return res.status(400).json({ error: '조회 기간은 1~60개월 사이로 정해 주세요.' });
+    }
+    const since = new Date();
+    since.setMonth(since.getMonth() - months);
+    const from = since.toISOString().slice(0, 10);
+
+    const rows = db.prepare(`
+      SELECT date, amount, merchant, category_id, payment_method_id, payment_style, origin
+      FROM transactions WHERE date >= ?
+    `).all(from);
+
+    // 이미 규칙이 있는 가맹점은 비활성 규칙까지 본다 — 껐다고 해서 다시 권하면
+    // 사용자가 끈 이유를 무시하는 셈이다.
+    const existing = db.prepare('SELECT merchant FROM recurring_rules').all().map((r) => r.merchant);
+    const dismissed = db.prepare('SELECT merchant FROM recurrence_suggestion_dismissals').all().map((r) => r.merchant);
+
+    res.json({
+      data: detectRecurringCandidates(rows, { existingMerchants: existing, dismissedMerchants: dismissed }),
+      scanned_from: from,
+    });
+  } catch (e) {
+    serverError(res, e, 'recurring-rules');
+  }
+});
+
+// POST /api/recurring-rules/suggestions/dismiss — 이 가맹점은 반복이 아니다.
+//
+// 세션이 아니라 DB 에 남긴다. "이번에 안 보겠다" 가 아니라 "이건 반복이 아니다"
+// 라는 지속적인 판단이라, 브라우저를 바꿔도 유지돼야 한다.
+router.post('/suggestions/dismiss', (req, res) => {
+  try {
+    const merchant = String((req.body || {}).merchant ?? '').trim();
+    if (!merchant) return res.status(400).json({ error: '가맹점을 알 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.' });
+
+    db.prepare('INSERT OR IGNORE INTO recurrence_suggestion_dismissals (merchant) VALUES (?)').run(merchant);
+    res.json({ ok: true });
+  } catch (e) {
+    serverError(res, e, 'recurring-rules');
+  }
+});
+
+// POST /api/recurring-rules/suggestions/restore — 거절을 되돌린다.
+//
+// 되돌릴 길이 없으면 실수로 누른 제안이 영영 안 보인다.
+router.post('/suggestions/restore', (req, res) => {
+  try {
+    const merchant = String((req.body || {}).merchant ?? '').trim();
+    if (!merchant) return res.status(400).json({ error: '가맹점을 알 수 없습니다.' });
+
+    const r = db.prepare('DELETE FROM recurrence_suggestion_dismissals WHERE merchant = ?').run(merchant);
+    res.json({ ok: true, restored: r.changes });
+  } catch (e) {
+    serverError(res, e, 'recurring-rules');
+  }
 });
 
 router.get('/', (req, res) => {
