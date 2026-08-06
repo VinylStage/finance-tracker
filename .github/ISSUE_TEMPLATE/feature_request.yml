@@ -18,9 +18,17 @@ body:
     id: acceptance
     attributes:
       label: 인수 기준 (Acceptance Criteria)
-      placeholder: "- [ ] AC1\n- [ ] AC2"
+      description: "사용자가 쓰는 기능이면 마지막 줄에 `- [ ] docs/GUIDE.md 갱신` 을 넣는다. 쓰는 법이 어디에도 없으면 만든 적 없는 것과 같다(#490)."
+      placeholder: "- [ ] AC1\n- [ ] AC2\n- [ ] docs/GUIDE.md 에 사용법 반영"
     validations:
       required: true
+  - type: checkboxes
+    id: guide
+    attributes:
+      label: 사용자 가이드
+      options:
+        - label: "이 기능은 `docs/GUIDE.md` 갱신이 필요하다 (내부 작업이면 체크하지 않는다)"
+          required: false
   - type: dropdown
     id: phase
     attributes:
