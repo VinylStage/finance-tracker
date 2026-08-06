@@ -24,7 +24,9 @@
 | card_products | 카드 상품. payment_methods 아래에 붙는다 | id, payment_method_id, issuer, product_name, card_type, annual_fee, prev_month_threshold, billing_cycle_day, statement_close_day, memo |
 | card_benefits | 카드별 할인·적립 조건 | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo |
 | card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
-| duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | id, key, dismissed_at |
+| installment_duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | transaction_id, dismissed_at |
+| merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |
+| schema_migrations | 적용된 마이그레이션 파일 이름 | id, name, applied_at |
 
 ## 테이블 관계
 
@@ -42,6 +44,25 @@
 - `card_products.payment_method_id` → `payment_methods.id` (1:N — **UNIQUE 가 아니다**)
 - `card_benefits.card_product_id` → `card_products.id` (1:N, ON DELETE CASCADE)
 - `transactions.card_product_id` → `card_products.id` (1:N)
+- `installment_duplicate_dismissals.transaction_id` → `transactions.id` (1:1, ON DELETE CASCADE)
+- `merchant_category_map.category_id` → `categories.id` (1:N)
+
+### 문서에 없는 표
+
+`_audit_context` 는 트리거가 읽는 내부 표라 위 목록에 두되 관계는 없다. 그 밖에
+마이그레이션이 표를 재작성하며 만드는 임시 표(`*_new`)는 끝나면 사라지므로 적지
+않는다. 이 예외 규칙은 `scripts/check-docs.js` 의 `TABLE_EXCLUDE` 에 같은 내용으로
+박혀 있다 — 새 표를 만들면서 문서에 안 적으면 CI 가 막는다.
+
+### `installment_duplicate_dismissals` 는 이름이 그대로여야 한다
+
+이 문서는 오랫동안 이 표를 `duplicate_dismissals` 로 적고 컬럼도 `id, key,
+dismissed_at` 이라고 적어 뒀는데, **셋 다 실제와 달랐다.** 실제 표는 거래 id 를
+그대로 기본키로 쓴다(`transaction_id`) — 판단 대상이 거래 한 건이라 별도 키가
+필요 없고, 거래가 지워지면 판단도 함께 사라져야 하기 때문이다.
+
+이름이 틀린 문서는 없는 문서보다 나쁘다. 읽는 사람이 그 이름으로 코드를 찾다가
+못 찾는다. 2026-08-06 문서 검사(#496)를 붙이면서 드러났다.
 
 ## 파생 거래 (#268, #269)
 
