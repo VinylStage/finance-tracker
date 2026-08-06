@@ -22,3 +22,8 @@ coverage/
 # confirm-chain 승인 체크포인트 (로컬 전용)
 .confirm-chain.sqlite*
 .aider*
+
+# scripts/delegate 의 파이썬 도구가 남긴다. 위임 하네스의 scope_check 가
+# git status 를 읽어 배치 밖 편집을 잡으므로, 여기 걸리면 멀쩡한 라운드가
+# 오판돼 중단된다.
+__pycache__/
