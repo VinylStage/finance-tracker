@@ -5,7 +5,7 @@ const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
-const { getLastCatchupSummary } = require('../services/recurringCatchup');
+const { getLastCatchupSummary, setLastCatchupSummary, runCatchup, localToday } = require('../services/recurringCatchup');
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 function thisYearMonth() {
@@ -128,6 +128,38 @@ function ruleColumns(body) {
 // 뒤에 두면 나중에 GET /:id 가 생겼을 때 조용히 가려진다.
 router.get('/catchup', (_req, res) => {
   res.json(getLastCatchupSummary());
+});
+
+// POST /api/recurring-rules/catchup/run — 따라잡기를 지금 한 번 돌린다(#498).
+//
+// 지금까지 `runCatchup` 은 기동 경로에서만 불렸다. 이 앱은 사용자가 열 때만
+// 프로세스가 살아서(상시 스케줄러가 없다) **규칙을 새로 만들어도 다음 기동까지
+// 아무 일도 안 일어난다.** 며칠이 지날 수도 있다.
+//
+// 함수는 이미 `options` 를 받게 돼 있었다 — 부르는 입구만 없었다.
+//
+// 프리뷰를 요구하지 않는다. 되돌릴 수 있고(생성된 거래를 지우면 된다) 같은 회차를
+// 두 번 만들지 않는다(`INSERT OR IGNORE`). 다만 **몇 건이 생겼는지 응답이 말한다** —
+// 공백이 길면 수십 건이 한 번에 생긴다(#280 과 같은 이유).
+//
+// '/catchup' 뒤, '/:id' 형태보다 앞에 둔다.
+router.post('/catchup/run', (req, res) => {
+  try {
+    const asked = (req.body || {}).today;
+    if (asked !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(asked))) {
+      return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다. 2026-08-06 처럼 입력해 주세요.' });
+    }
+    // **미래로는 못 간다.** 넘겨받은 날짜를 그대로 쓰면 아직 오지 않은 회차까지
+    // 만들어지고, 그건 사용자가 지우기 전까지 가계부에 남는다.
+    const real = localToday();
+    const today = asked && String(asked) < real ? String(asked) : real;
+
+    const summary = runCatchup(db, { today });
+    setLastCatchupSummary(summary);
+    res.json(summary);
+  } catch (e) {
+    serverError(res, e, 'recurring-rules');
+  }
 });
 
 router.get('/', (req, res) => {

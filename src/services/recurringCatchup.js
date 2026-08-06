@@ -73,6 +73,20 @@ const LINK_OCCURRENCE = `
 
 const TOUCH_RULE = `UPDATE recurring_rules SET last_run_on = ? WHERE id = ?`;
 
+// 월 단위로 이미 처리한 회차. `POST /:id/confirm` 과 `/:id/skip` 이 여기 쓴다.
+//
+// **따라잡기가 이 표를 안 보면 두 가지가 깨진다**(#498 에서 실측).
+//   1. `confirm` 으로 만든 달을 따라잡기가 **또 만든다** — 같은 달 거래가 2건
+//   2. `skip` 으로 건너뛴 달을 따라잡기가 **만들어 버린다** — 사용자가 명시적으로
+//      "이번 달은 넘긴다" 고 했는데 앱이 무시하는 셈이다
+//
+// 두 경로가 서로 다른 표(`recurring_occurrences` / `recurring_rule_months`)를
+// 쓰는 것이 원인이다. 표를 합치는 것이 더 깨끗하지만 그건 데이터 이행이 필요하다 —
+// 여기서는 **따라잡기가 양쪽을 다 보게** 해서 증상을 먼저 막는다.
+const SELECT_HANDLED_MONTHS = `
+  SELECT year_month FROM recurring_rule_months WHERE rule_id = ?
+`;
+
 // 기동 시 1회 실행한다. 반환값은 요약이며, 화면이 "무엇이 새로 생겼는지" 를
 // 알리는 데 쓴다(#280).
 //
@@ -90,6 +104,7 @@ function runCatchup(db, options = {}) {
   const insertTx = db.prepare(INSERT_TX);
   const linkOcc = db.prepare(LINK_OCCURRENCE);
   const touch = db.prepare(TOUCH_RULE);
+  const handledMonths = db.prepare(SELECT_HANDLED_MONTHS);
 
   const apply = db.transaction(() => {
     let created = 0;
@@ -106,7 +121,13 @@ function runCatchup(db, options = {}) {
       const dates = occurrencesBetween(rule, from, to);
       let ruleCreated = 0;
 
+      // 화면에서 이미 처리한 달(생성·건너뛰기)은 건드리지 않는다.
+      const handled = new Set(
+        handledMonths.all(rule.id).map((r) => r.year_month)
+      );
+
       for (const date of dates) {
+        if (handled.has(date.slice(0, 7))) { skipped++; continue; }
         // DB 가 중복을 판정한다. changes 가 0 이면 이미 처리된 발생일이다.
         const res = insertOcc.run(rule.id, date);
         if (res.changes === 0) { skipped++; continue; }
