@@ -324,10 +324,14 @@ function CategorySection({ categories, onChanged }) {
     }
   };
 
-  const handleReActivate = async (id) => {
+  // PUT /api/categories/:id 는 부분 갱신이 아니라 레코드 전체를 덮는다.
+  // major_type 을 빼고 보내면 서버가 400 으로 막는다(routes/categories.js:42) —
+  // is_active 만 보내던 동안 재활성화는 한 번도 성공한 적이 없고, 사용자에게는
+  // "major_type must be one of ..." 라는 영문 메시지만 떴다.
+  const handleReActivate = async (cat) => {
     if (!await confirm('재활성화하시겠습니까?')) return;
     try {
-      await api.put(`/api/categories/${id}`, { is_active: 1 });
+      await api.put(`/api/categories/${cat.id}`, { ...cat, is_active: 1 });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -443,7 +447,7 @@ function CategorySection({ categories, onChanged }) {
                       {c.is_active ? (
                         <button onClick={() => handleDeactivate(c.id)} className="text-caption hover:text-loss-text text-xs">비활성화</button>
                       ) : (
-                        <button onClick={() => handleReActivate(c.id)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
+                        <button onClick={() => handleReActivate(c)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
                       )}
                     </td>
                   </>
@@ -725,10 +729,14 @@ function PaymentMethodSection({ paymentMethods, accounts, onChanged }) {
     }
   };
 
-  const handleReActivate = async (id) => {
+  // 카테고리 쪽과 같은 이유다 — 이 PUT 도 전체 교체다. is_active 만 보내면
+  // name·type 이 NULL 로 덮이려다 스키마 제약에 걸려 500 이 난다. 즉 지금까지
+  // 재활성화는 한 번도 성공한 적이 없고, 사용자에게는 "처리 중 문제가
+  // 생겼습니다" 만 떴다.
+  const handleReActivate = async (pm) => {
     if (!await confirm('재활성화하시겠습니까?')) return;
     try {
-      await api.put(`/api/payment-methods/${id}`, { is_active: 1 });
+      await api.put(`/api/payment-methods/${pm.id}`, { ...pm, is_active: 1 });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -829,7 +837,7 @@ function PaymentMethodSection({ paymentMethods, accounts, onChanged }) {
                       <Icon name="close" size={14} />
                     </button>
                   ) : (
-                    <button onClick={() => handleReActivate(p.id)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="재활성화">
+                    <button onClick={() => handleReActivate(p)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="재활성화">
                       <Icon name="refresh" size={14} />
                     </button>
                   )}
