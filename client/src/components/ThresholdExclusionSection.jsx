@@ -10,7 +10,10 @@ import { formatWon } from '../lib/format';
 // 자동 제외(수입·할부금 같은 파생 행)는 목록에 없다. 서버가 애초에 안 내려준다.
 // 못 바꾸는 것을 보여주면 눌러 보고 나서 아무 일도 안 일어난다.
 
-export default function ThresholdExclusionSection() {
+// `onChanged` 는 제외가 바뀐 뒤 **위쪽 «전월 실적» 을 다시 읽게** 한다.
+// 없으면 이 목록만 줄고 실적 줄은 옛 숫자를 그대로 들고 있어, 한 화면의 두
+// 숫자가 서로 다른 말을 한다. 실제로 그 상태를 만들어 확인했다.
+export default function ThresholdExclusionSection({ onChanged }) {
   const [cards, setCards] = useState([]);
   const [period, setPeriod] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +46,7 @@ export default function ThresholdExclusionSection() {
         await api.post('/api/card-strategy/exclusions', { transaction_id: tx.id });
       }
       await load();
+      if (onChanged) await onChanged();
     } catch (e) {
       setError(e.message || '바꾸지 못했습니다.');
     } finally {

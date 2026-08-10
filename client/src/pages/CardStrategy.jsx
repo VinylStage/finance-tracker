@@ -160,7 +160,7 @@ export default function CardStrategy() {
       </Section>
 
       <Section title="실적에서 뺀 거래">
-        <ThresholdExclusionSection />
+        <ThresholdExclusionSection onChanged={reload} />
       </Section>
 
       <Section title="지난 결제 다시 계산">
