@@ -33,10 +33,22 @@ export const PRESETS = [
   { key: 'last-month', label: '지난 달' },
   { key: 'last-3-months', label: '최근 3개월' },
   { key: 'this-year', label: '올해' },
+  // 'month' 와 'custom' 은 `rangeForPreset` 이 null 을 준다 — 누르는 순간 범위가
+  // 정해지는 게 아니라 **컨트롤이 열리는** 종류라서다. `presetFor` 도 이 둘은
+  // 되짚기 대상에서 자연히 빠진다.
+  { key: 'month', label: '월 선택' },
   { key: 'custom', label: '직접 지정' },
 ];
 
 const PRESET_KEYS = new Set(PRESETS.map((p) => p.key));
+
+// 누르는 순간 범위가 정해지지 않고 **컨트롤이 열리는** 프리셋. `rangeForPreset`
+// 이 null 을 주는 것이 정상이다.
+//
+// 목록으로 빼 두는 이유: 이걸 두지 않으면 "range 가 null 이어도 되는 키" 를
+// 테스트가 그때그때 예외 처리하게 되고, 그러면 **구현을 빠뜨린 버튼**도 같은
+// 방식으로 통과한다. 어느 쪽인지를 여기서 못 박아 두 방향 다 검사할 수 있게 한다.
+export const CONTROL_PRESETS = new Set(['month', 'custom']);
 
 // 조회 종료일 상한. 할부·반복거래가 미래로 뻗기 때문에 미래 자체는 정상이지만,
 // 2099년을 찍으면 집계가 빈 달로 가득 찬다.
@@ -105,6 +117,9 @@ function presetFor(from, to, today) {
     const r = rangeForPreset(key, today);
     if (r && r.from === from && r.to === to) return key;
   }
+  // 이번 달·지난 달은 위에서 이미 잡혔다. 남은 '정확히 한 달' 은 월 선택으로 본다.
+  // 순서가 뒤집히면 이번 달을 열어도 '월 선택' 이 눌린 것으로 보인다.
+  if (monthShorthand({ from, to })) return 'month';
   return 'custom';
 }
 
@@ -178,6 +193,11 @@ export function toPeriodQuery({ from, to, includeDerived = true } = {}, today = 
   const base = defaultRange(today);
 
   // 기본값이면 URL 을 더럽히지 않는다. 주소가 짧아야 공유했을 때 읽힌다.
+  //
+  // **`?month=` 로 줄이지 않는다.** `parsePeriodQuery` 는 그 형태를 읽지만
+  // (#272 설계, 주소창을 직접 고치는 경우), 쓰는 쪽은 from/to 하나로 통일한다.
+  // 두 형태를 다 내보내면 같은 기간이 두 가지 주소를 갖게 되고, 어느 쪽이
+  // 정본인지 정해야 할 자리가 하나 더 생긴다.
   if (from !== base.from || to !== base.to) {
     if (from) params.set('from', from);
     if (to) params.set('to', to);
@@ -190,6 +210,12 @@ export function toPeriodQuery({ from, to, includeDerived = true } = {}, today = 
 
 /** 화면에 쓸 기간 라벨. 프리셋이면 그 이름, 아니면 날짜 범위. */
 export function periodLabel({ preset, from, to }) {
+  // '월 선택' 은 이름이 아니라 **고른 달**을 보여줘야 한다. 버튼 이름을 그대로
+  // 쓰면 3월을 보고 있는데 화면에 '월 선택' 이라고 적힌다.
+  if (preset === 'month') {
+    const ym = monthShorthand({ from, to });
+    if (ym) return `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
+  }
   if (preset && preset !== 'custom' && PRESET_KEYS.has(preset)) {
     return PRESETS.find((p) => p.key === preset).label;
   }

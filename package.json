@@ -1,6 +1,6 @@
 {
   "name": "finance-tracker",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "description": "Personal finance tracker — local web app (Express + SQLite + React)",
   "type": "commonjs",
@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "docs:inventory": "node scripts/gen-inventory.js",
     "docs:inventory:check": "node scripts/gen-inventory.js --check",
+    "docs:check": "node scripts/check-docs.js",
     "test:ports": "node scripts/check-test-ports.js"
   },
   "dependencies": {

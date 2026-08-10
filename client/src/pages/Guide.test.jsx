@@ -4,40 +4,106 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import Guide from './Guide';
-import { api } from '../lib/api';
 
-// 가이드 화면은 `docs/GUIDE.md` 를 받아 그대로 그린다. 그래서 이 화면의 버그는
-// "안 뜬다" 가 아니라 **"떴는데 문서가 아니게 보인다"** 로 나타난다. 목차가
-// 본문처럼 보이거나 절차의 번호가 사라지는 식이라, 화면이 죽지 않으니
-// 스모크 테스트로는 안 잡힌다(pageSmoke 는 "열면 죽는가" 만 본다).
+// 앱 안에서 보는 사용 설명서. 테스트가 하나도 없었다.
 //
-// 마크다운 요소마다 components 매핑이 필요한 이유가 여기 있다. Tailwind
-// preflight 가 h1~h6 · ol · ul 의 기본 표시를 지우므로, 매핑을 빠뜨린 요소는
-// 클래스 없이 맨몸으로 나가서 본문 글자와 구분되지 않는다.
+// 서버가 docs/GUIDE.md 를 **마크다운 텍스트 그대로** 내려주고 이 화면이 그린다.
+// 다른 화면과 달리 JSON 이 아니라 문자열을 받는 유일한 자리라, 응답을 객체로
+// 다루는 순간 조용히 빈 화면이 된다.
 
-vi.mock('../lib/api', () => ({
-  api: { get: vi.fn() },
+const { get, post, put, del } = vi.hoisted(() => ({
+  get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(),
 }));
 
-beforeEach(() => {
-  api.get.mockReset();
-});
+vi.mock('../lib/api', () => ({
+  api: { get, post, put, del },
+  ApiError: class ApiError extends Error {},
+}));
 
 function renderMarkdown(md) {
-  api.get.mockResolvedValue(md);
+  get.mockResolvedValue(md);
   return render(<Guide />);
 }
 
-describe('가이드 화면', () => {
-  it('문서를 받아 화면에 그린다', async () => {
-    const { container } = renderMarkdown('## 홈\n\n이번 달 현황을 봅니다.\n');
+const settled = () => waitFor(() => expect(screen.queryByText('로딩 중...')).toBeNull());
 
-    await waitFor(() => expect(container.querySelector('h2')).not.toBeNull());
-    expect(api.get).toHaveBeenCalledWith('/api/guide');
-    expect(screen.getByText('홈')).toBeTruthy();
-    expect(screen.getByText('이번 달 현황을 봅니다.')).toBeTruthy();
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('문서 표시', () => {
+  it('가이드를 받아 마크다운으로 그린다', async () => {
+    get.mockResolvedValue('# 시작하기\n\n첫 거래를 넣어 보세요.');
+    render(<Guide />);
+    await settled();
+
+    expect(get).toHaveBeenCalledWith('/api/guide');
+    // 원문 그대로 뿌리면 '# 시작하기' 가 글자로 보인다. 제목으로 그려져야 한다.
+    expect(screen.getByRole('heading', { name: '시작하기' })).toBeTruthy();
+    expect(screen.getByText('첫 거래를 넣어 보세요.')).toBeTruthy();
   });
 
+  it('목록과 강조도 마크다운으로 처리한다', async () => {
+    get.mockResolvedValue('- 첫째\n- 둘째\n\n**중요한 것**');
+    render(<Guide />);
+    await settled();
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByText('중요한 것').tagName).toBe('STRONG');
+  });
+
+  it('링크는 눌리는 링크로 그린다', async () => {
+    get.mockResolvedValue('[설정으로](/settings)');
+    render(<Guide />);
+    await settled();
+
+    const link = screen.getByRole('link', { name: '설정으로' });
+    expect(link.getAttribute('href')).toBe('/settings');
+  });
+
+  it('문서가 비어 있어도 화면은 뜬다', async () => {
+    get.mockResolvedValue('');
+    render(<Guide />);
+    await settled();
+
+    // 빈 문자열에서 렌더가 죽으면 가이드 메뉴 자체가 못 쓰게 된다.
+    expect(screen.getByRole('heading', { name: '가이드' })).toBeTruthy();
+  });
+});
+
+describe('불러오기 실패', () => {
+  it('사유를 화면에 남긴다', async () => {
+    get.mockRejectedValue(new Error('404'));
+    render(<Guide />);
+    await settled();
+
+    // 로딩만 걷히고 아무것도 없으면 화면이 고장 난 것으로 읽힌다.
+    expect(screen.getByText('가이드 문서를 불러오지 못했습니다.')).toBeTruthy();
+  });
+
+  it('실패해도 로딩 상태에 갇히지 않는다', async () => {
+    get.mockRejectedValue(new Error('네트워크'));
+    render(<Guide />);
+
+    // finally 가 빠지면 '로딩 중...' 인 채로 영영 멈춘다.
+    await waitFor(() => expect(screen.queryByText('로딩 중...')).toBeNull());
+    expect(screen.getByRole('heading', { name: '가이드' })).toBeTruthy();
+  });
+
+  // '실패하면 본문을 안 그린다' 는 여기서 잠글 수 없다. 성공했을 때만 content 가
+  // 채워지므로 실패 경로에서는 content 가 늘 빈 문자열이고, 삼항을 없애 둘을
+  // 함께 그려도 화면 결과가 같다. 돌연변이로 확인했다 — 등가 변이다.
+  //
+  // 마찬가지로 마크다운 링크의 커스텀 컴포넌트를 지워도 안 잡힌다. 지워도
+  // ReactMarkdown 이 평범한 <a href> 를 그려서 역할과 주소는 그대로고, 달라지는
+  // 것은 className 뿐이다. 스타일까지 테스트로 붙들 자리는 아니라고 봤다.
+});
+
+// #490 에서 더한 것. 위 검사들이 '마크다운이 처리되는가' 를 본다면, 아래는
+// **마커가 눈에 보이는가** 를 본다. Tailwind preflight 가 ol·ul 의 list-style 을
+// 지우므로 Guide.jsx 의 components 매핑이 빠지면 번호가 사라진다 — 목록 항목
+// 개수만 세면 이 상태가 통과한다.
+describe('목록 마커', () => {
   // #490. 절차를 번호로 적은 문단이 번호 없이 나오던 자리다.
   //
   // preflight 의 `ol, ul, menu { list-style: none }` 때문에 ol 은 매핑이 없으면
@@ -62,19 +128,8 @@ describe('가이드 화면', () => {
     await waitFor(() => expect(container.querySelector('ul')).not.toBeNull());
     expect(container.querySelector('ul').className).toContain('list-disc');
   });
-
-  it('문서를 못 불러오면 안내를 낸다', async () => {
-    api.get.mockRejectedValue(new Error('boom'));
-    render(<Guide />);
-
-    await waitFor(() => expect(screen.getByText('가이드 문서를 불러오지 못했습니다.')).toBeTruthy());
-  });
 });
 
-// 실제 문서를 넣고 그려 본다. 위 테스트들이 보는 것은 "이런 마크다운이 오면
-// 이렇게 그린다" 이고, 여기서 보는 것은 "**지금 저장소에 있는 문서**가 그
-// 조건을 지키는가" 다. 문서만 고쳐서 깨지는 경우가 여기서 잡힌다 — 예를 들어
-// 표를 넣으면 remark-gfm 이 없어 파이프 문자가 본문에 그대로 찍힌다.
 describe('docs/GUIDE.md 실물', () => {
   const guide = fs.readFileSync(
     path.resolve(__dirname, '../../../docs/GUIDE.md'),
@@ -96,9 +151,13 @@ describe('docs/GUIDE.md 실물', () => {
     // 기능 이름 그대로가 아니라 **그 화면에만 있는 말**로 고른다. '카드' 처럼
     // 흔한 낱말은 다른 문단에 우연히 들어 있어도 통과하므로, 카드 전략 화면은
     // 그 화면의 절 제목인 '전월 실적' 으로 확인한다.
+    //
+    // '통장' 과 '카드대금 인출' 은 뺐다. #490 이 셀 때는 있던 기능인데 계좌·결제방식
+    // 축 제거(#524)로 사라진다 — 없는 기능을 문서에 요구하면 이 검사가 문서를
+    // 틀리게 만든다. '마이너스통장' 은 대출 유형이라 그 제거와 무관하게 남는다.
     for (const feature of [
       '반복 거래', '전월 실적', '변경 이력', '되돌리기',
-      '통장', '달력', '카드대금 인출', '마이너스통장',
+      '달력', '마이너스통장',
     ]) {
       expect(guide).toContain(feature);
     }

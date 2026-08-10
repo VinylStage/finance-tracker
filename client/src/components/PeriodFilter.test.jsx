@@ -164,3 +164,94 @@ describe('D. 직접 지정', () => {
     expect(screen.getByTestId('range').textContent).toBe('2026-03-05~2026-04-10');
   });
 });
+
+describe('E. 월 선택 (#484)', () => {
+  it('E-1. 한 달짜리 기간으로 들어오면 월 선택이 눌린 상태다', () => {
+    // `?month=` 파싱은 예전부터 있었지만(#272 설계) 그 상태를 나타내는 버튼이
+    // 없어서, 3월을 보고 있어도 '직접 지정' 이 눌린 것처럼 보였다.
+    setUrl('?month=2026-03');
+    render(<Harness />);
+
+    expect(screen.getByTestId('range').textContent).toBe('2026-03-01~2026-03-31');
+    expect(screen.getByRole('button', { name: '월 선택' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('조회할 달').value).toBe('2026-03');
+  });
+
+  it('E-2. from/to 로 들어와도 정확히 한 달이면 월 선택으로 본다', () => {
+    setUrl('?from=2026-02-01&to=2026-02-28');
+    render(<Harness />);
+
+    // 2월 말일(28/29)을 사용자가 기억하지 않아도 되게 하는 게 이 기능의 요점이다.
+    expect(screen.getByRole('button', { name: '월 선택' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('조회할 달').value).toBe('2026-02');
+  });
+
+  it('E-3. 하루라도 모자라면 월 선택이 아니다', () => {
+    setUrl('?from=2026-02-01&to=2026-02-27');
+    render(<Harness />);
+
+    expect(screen.getByRole('button', { name: '월 선택' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByLabelText('조회할 달')).toBeNull();
+  });
+
+  it('E-4. 이번 달은 자기 버튼을 유지한다', () => {
+    // 이번 달도 "정확히 한 달" 이라, 되짚는 순서를 잘못 두면 '월 선택' 이
+    // 눌린 것으로 보인다.
+    render(<Harness />);
+
+    expect(screen.getByRole('button', { name: '이번 달' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '월 선택' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('E-5. 지난 달도 자기 버튼을 유지한다', () => {
+    setUrl(`?from=${LAST_MONTH.from}&to=${LAST_MONTH.to}`);
+    render(<Harness />);
+
+    expect(screen.getByRole('button', { name: '지난 달' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: '월 선택' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('E-6. 달을 고르면 그 달 전체가 되고 주소에 실린다', () => {
+    setUrl('?month=2026-03');
+    render(<Harness />);
+
+    fireEvent.change(screen.getByLabelText('조회할 달'), { target: { value: '2026-02' } });
+
+    // 말일을 화면이 계산한다. 사용자가 28 을 넣을 일이 없다.
+    expect(screen.getByTestId('range').textContent).toBe('2026-02-01~2026-02-28');
+    expect(window.location.search).toContain('2026-02');
+  });
+
+  it('E-7. 입력을 비우는 중간 상태에서는 아무것도 하지 않는다', () => {
+    setUrl('?month=2026-03');
+    render(<Harness />);
+    const historyBefore = window.history.length;
+
+    fireEvent.change(screen.getByLabelText('조회할 달'), { target: { value: '' } });
+
+    // 비운 순간 기간이 무너지면 화면이 한 번 빈다.
+    expect(screen.getByTestId('range').textContent).toBe('2026-03-01~2026-03-31');
+
+    // **기간이 그대로인 것만으로는 부족하다.** `usePeriod` 는 pushState 를 쓰므로
+    // 같은 값으로라도 onChange 를 부르면 뒤로가기 기록이 하나 쌓인다. 그러면
+    // 사용자가 뒤로가기를 눌러도 화면이 안 바뀌어 "먹통" 으로 보인다.
+    expect(window.history.length).toBe(historyBefore);
+  });
+
+  it('E-8. 다른 프리셋에서 월 선택으로 넘어가면 보던 달이 잡힌다', () => {
+    // 최근 3개월(예: 6~8월)에서 넘어가면 시작월이 잡혀야 한다. 오늘 달로 튀면
+    // 사용자가 보던 곳을 잃는다.
+    setUrl('?from=2026-06-01&to=2026-08-31');
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '월 선택' }));
+
+    expect(screen.getByTestId('range').textContent).toBe('2026-06-01~2026-06-30');
+    expect(screen.getByLabelText('조회할 달').value).toBe('2026-06');
+  });
+
+  it('E-9. 프리셋일 때는 월 입력을 안 보여준다', () => {
+    render(<Harness />);
+    expect(screen.queryByLabelText('조회할 달')).toBeNull();
+  });
+});
