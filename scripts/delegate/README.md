@@ -26,11 +26,14 @@
 | `DELEGATE_WORK` | `mktemp -d` — 명세·로그가 쌓이는 곳 |
 | `DELEGATE_METRICS` | `DELEGATE_WORK` — 측정값(`numstat-*.tsv`)을 따로 모을 곳 |
 | `MIN_TESTS` | `5` — 이보다 적으면 껍데기로 보고 실패시킨다 |
+| `DELEGATE_ISSUE` | **필수.** 이 라운드가 속한 이슈/PR 번호 |
+| `DELEGATE_MODEL` | `ollama_chat/qwen3-coder:30b` — 원장에 남길 모델 이름 |
 
 ## 순서
 
 ```bash
 export DELEGATE_WORK=$(mktemp -d -t delegate)
+export DELEGATE_ISSUE=526   # 없으면 러너가 시작하지 않는다
 
 # 1. 명세를 만든다
 python3 scripts/delegate/make-spec.py 1 test/aRoute.test.js test/bRoute.test.js
@@ -52,6 +55,7 @@ scripts/delegate/run-batch.sh 1 "$DELEGATE_WORK" test/aRoute.test.js test/bRoute
 
 ```bash
 export DELEGATE_WORK=$(mktemp -d -t delegate)
+export DELEGATE_ISSUE=526   # 없으면 러너가 시작하지 않는다
 
 MIN_TESTS=8 scripts/delegate/run-client-batch.sh \
   debts spec-debts.md \
@@ -122,3 +126,21 @@ harness-<배치>.log            검수 결과
   지켜지는 것은 다른 문제다. `mutate-client.py` 로 되짚는다. 실제로 첫 판이
   `loan_type` 대신 `type` 으로 판정하도록 되돌려도 7건 전부 통과했다 —
   자료가 두 값을 늘 함께 갖고 있었기 때문이다
+
+## 라운드 원장 (`rounds.tsv`)
+
+`DELEGATE_METRICS` 에 라운드마다 한 줄이 쌓인다.
+
+```
+ts	issue	label	round	target	added	model
+2026-08-10T20:22:40	526	3	r1	src/a.js test/b.test.js	0	ollama_chat/qwen3-coder:30b
+```
+
+**`DELEGATE_ISSUE` 를 필수로 만든 이유가 이 파일이다.** 전에는 라운드와 이슈/PR 을
+잇는 필드가 없어서, 나중에 위임 비율을 낼 때 **"이 PR 에서 위임한 것" 과 "언젠가
+aider 가 건드린 적 있는 파일" 이 구분되지 않았다.** 파일명만 대조하면 몇 주 전
+라운드가 만졌던 파일이 오늘 PR 의 위임 산출로 잡힌다 — 실제로 그렇게 비율을
+잘못 냈다(락파일만 고친 PR 이 33% 로 나왔다).
+
+선택값으로 두면 안 채우고 돌리게 되고, 그러면 같은 상태로 돌아간다. 그래서
+비어 있으면 러너가 시작하지 않는다.
