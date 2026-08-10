@@ -518,7 +518,18 @@ router.delete('/:id', (req, res) => {
     if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
 
-    const result = db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
+    // 반복거래(#279)가 만든 행은 `recurring_occurrences.transaction_id` 가 가리킨다.
+    // 그 컬럼에 `ON DELETE` 절이 없어서, 그냥 지우면 **외래키 위반으로 500 이 났다**
+    // — 앱은 지울 수 있다고 해 놓고(`recurring` 은 잠금 대상이 아니다) 막상 누르면
+    // 알 수 없는 오류를 냈다(#498 작업 중 발견).
+    //
+    // 발생 기록은 **남기고 연결만 끊는다.** 지우면 다음 따라잡기가 같은 회차를
+    // 다시 만들어, 사용자가 지운 거래가 되살아난다.
+    const result = db.transaction(() => {
+      db.prepare('UPDATE recurring_occurrences SET transaction_id = NULL WHERE transaction_id = ?')
+        .run(req.params.id);
+      return db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
+    })();
     if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {
