@@ -112,4 +112,45 @@ describe('csvImport 파서', () => {
     const rows = parseCardCsv('shinhan', csv);
     assert.strictEqual(rows.length, 1);
   });
+
+  test('공백만 있는 줄도 건너뛴다', () => {
+    // 파서는 빈 줄을 `[]` 가 아니라 `[""]` 로, 공백 줄은 `["   "]` 로 만든다.
+    // 빈 문자열만 보면 공백 줄이 통과해 **"읽을 수 없는 줄" 로 미리보기에 뜬다**
+    // — 사용자는 자기 파일이 잘못됐다고 읽는다(#463).
+    //
+    // 엑셀에서 CSV 로 내보내면 이런 줄이 흔히 생긴다.
+    const csv = [
+      '거래일자,가맹점,금액',
+      '   ',
+      '2026.01.15,이마트,32000',
+      '\t',
+      '2026.01.16,GS25,4500',
+      '  ,  ,  ',
+    ].join('\n');
+
+    const rows = parseCardCsv('shinhan', csv);
+
+    assert.strictEqual(rows.length, 2, `읽을 수 없는 줄이 섞였다: ${JSON.stringify(rows)}`);
+    assert.strictEqual(rows[0].merchant, '이마트');
+    assert.strictEqual(rows[1].merchant, 'GS25');
+    // 오류 행이 하나도 없어야 한다. 있으면 사용자가 파일을 의심한다.
+    assert.deepStrictEqual(rows.filter((r) => r.error), []);
+  });
+
+  test('한 칸만 비어 있는 줄은 버리지 않는다', () => {
+    // **모든 칸이 비었을 때만** 건너뛴다. "하나라도 비면 건너뛴다" 로 만들면
+    // 메모가 빈 정상 거래가 통째로 사라지고, 사용자는 넣은 줄이 왜 없는지
+    // 알 수 없다 — 빈 줄이 뜨는 것보다 훨씬 나쁘다.
+    const csv = [
+      '거래일자,가맹점,금액,메모',
+      '2026.01.15,이마트,32000,',
+      '2026.01.16,,4500,커피',
+    ].join('\n');
+
+    const rows = parseCardCsv('shinhan', csv);
+
+    assert.strictEqual(rows.length, 2, `줄이 사라졌다: ${JSON.stringify(rows)}`);
+    assert.strictEqual(rows[0].merchant, '이마트');
+    assert.strictEqual(rows[0].amount, 32000);
+  });
 });
