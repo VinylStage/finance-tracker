@@ -73,14 +73,17 @@ describe('cardExcelImport', () => {
 
   // 2. 천 단위 구분자(콤마) 금액 파싱
   test('comma in amount', () => {
-    // 농협은 row[10] = 거래금액. 실제로 Number("12,345")는 NaN이므로 테스트가 재현 가능.
+    // 농협은 row[10] = 거래금액. 카드사가 금액을 문자열로 내려주면 콤마가 붙어 온다.
     const rows = [
       [], [], [], [], [], [], [], [], [], [], [], [], [], [],  // index 0~13 (정확히 14개)
       [null, '2024/01/01 12:00:00', null, '12345', null, null, null, null, null, null, '12,345', null, null, null, '스타벅스', null, null, null, '일시불', null, null, null, null], // index 14
     ];
     const wb = makeWorkbook(rows);
     const result = parseCardExcel('nonghyup', wb);
-    assert.strictEqual(result[0].amount, NaN); // comma로 인해 파싱 실패
+    // 예전에는 NaN 이었다. NaN 은 저장에서 NOT NULL 위반으로 떨어져 **그 행만
+    // 조용히 빠졌고**, 사용자는 "저장하지 못했습니다" 만 보고 원인을 알 수 없었다.
+    // 이제 파서가 콤마를 떼고 읽는다.
+    assert.strictEqual(result[0].amount, 12345);
   });
 
   // 3. 개행문자가 포함된 셀 값

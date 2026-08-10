@@ -1,44 +1,19 @@
+// 서버 기동은 공용 헬퍼가 맡는다(#379). 조기 종료를 즉시 감지한다.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const { startTestServer } = require('./helpers/testServer');
 const XLSX = require('xlsx');
 
 const PORT = 34592; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-
-let serverOutput = '';
+let server;
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 function makeXlsxBuffer(rows) {
@@ -84,4 +59,25 @@ test('FND-09: /single 라우트도 동일하게 크기 제한 적용', async () 
   form.append('file', new Blob([bigBuffer]), '농협카드테스트.xlsx');
   const resp = await fetch(`${BASE}/api/card-import/single?preview=true`, { method: 'POST', body: form });
   assert.strictEqual(resp.status, 400);
+});
+
+// 크기와 확장자는 위에서 보는데 **파일을 아예 안 보낸 경우**가 두 라우트 다
+// 비어 있었다. 화면은 항상 파일을 붙여 보내지만, 선택 없이 버튼을 누르거나
+// API 를 직접 호출하면 이 경로로 온다.
+test('G-1. 파일 없이 보내면 400 이고 안내가 나온다', async () => {
+  const empty = new FormData();
+  const resp = await fetch(`${BASE}/api/card-import`, { method: 'POST', body: empty });
+  const body = await resp.json();
+  assert.strictEqual(resp.status, 400, JSON.stringify(body));
+  assert.ok(body.error, '거부 사유가 없다');
+  assert.ok(!body.error.includes('files'), `문구에 내부 필드명 노출: ${body.error}`);
+});
+
+test('G-2. /single 도 파일 없이 보내면 400 이다', async () => {
+  const empty = new FormData();
+  const resp = await fetch(`${BASE}/api/card-import/single`, { method: 'POST', body: empty });
+  const body = await resp.json();
+  assert.strictEqual(resp.status, 400, JSON.stringify(body));
+  assert.ok(body.error, '거부 사유가 없다');
+  assert.ok(!body.error.includes('req.file'), `문구에 내부 이름 노출: ${body.error}`);
 });

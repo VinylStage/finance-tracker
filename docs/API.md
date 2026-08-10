@@ -335,12 +335,17 @@
         "status": "string",
         "payment_method_name": "string",
         "remaining_months": "integer",
-        "billed_months": "integer"
+        "billed_months": "integer",
+        "can_reopen": "boolean",
+        "reopen_blocked_reason": "string | null",
+        "billing_ends_on": "string (YYYY-MM-DD)"
       }
     ],
     "this_month_total": "number"
   }
   ```
+- **비고**: `can_reopen` 은 완료 처리를 되돌릴 수 있는지를 **서버가 판정한** 값이다(#295).
+  화면이 같은 날짜 계산을 다시 하면 스윕 조건과 어긋날 수 있어 판정을 서버에 둔다.
 - **에러 케이스**:
   - 500: 서버 내부 오류
 
@@ -358,9 +363,12 @@
   ```json
   {
     "id": "integer",
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "created": "number" }
   }
   ```
+- **비고**: 등록과 동시에 회차별 파생 거래가 만들어진다(#269). 지울 것이 없는
+  신규 생성이므로 프리뷰를 요구하지 않는다. 몇 건이 생겼는지는 `derived.created` 로 알린다.
 - **에러 케이스**:
   - 400: 필수 파라미터 누락 또는 months가 2개 미만
   - 500: 서버 내부 오류
@@ -376,16 +384,186 @@
   - `fee_per_month` (body, optional): 월 수수료
   - `payment_method_id` (body, optional): 결제수단 ID
   - `start_billing_month` (body, optional): 시작 청구월
+  - `paid_off_on` (body, optional): 조기 완납일 `YYYY-MM-DD`
   - `status` (body, optional): 상태
+  - `preview_token` (body, conditional): 회차에 영향을 주는 값을 고칠 때 **필수**
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "deleted": "number", "created": "number" }
   }
   ```
+- **비고**: 회차에 영향을 주는 필드(`total_amount`, `months`, `start_billing_month`,
+  `payment_method_id`, `purchase_date`, `paid_off_on`, `fee_per_month`)를 고치면
+  파생 거래가 전부 지워지고 다시 만들어진다. 그래서 그 경우에만 프리뷰 확인을
+  요구한다(ADR 0008). 메모·상태처럼 회차와 무관한 수정은 토큰 없이 통과한다.
+- **에러 케이스**:
+  - 404: 할부 정보 없음
+  - 409: 프리뷰 이후 원본이 바뀜 (`preview_stale: true`) — 다시 미리보고 저장해야 한다
+  - 428: 프리뷰 없이 회차 변경 시도 (`preview_required: true`)
+  - 500: 서버 내부 오류
+
+### GET /api/installments/duplicates?days=14
+할부 전환(B안)으로 생긴 **중복 의심 거래**. **읽기 전용 — DB 를 바꾸지 않는다.**
+
+할부의 정본은 `installments` 행 하나이고 거래내역에는 청구 회차만 파생 거래로
+나타난다(#269 B안). 그 전에 할부 구매를 직접 거래로 넣어 뒀으면 그게 중복이 된다.
+
+**자동으로 지우지 않는다.** 이 저장소는 실거래 2,212건 유실 사고가 있었다.
+
+- **요청 파라미터**: `days` (query, optional, 기본 14, 0~365) — 구매일과 며칠까지 떨어진 것을 볼 것인가
+- **응답 스키마**:
+  ```json
+  {
+    "data": [
+      {
+        "transaction": { "id": "number", "date": "string", "merchant": "string",
+                         "amount": "number", "payment_style": "string",
+                         "category_name": "string", "memo": "string | null" },
+        "installment_id": "number | null",
+        "installment_merchant": "string | null",
+        "confidence": "exact | likely | review",
+        "days_apart": "number | null",
+        "matched_on": "total | monthly | null"
+      }
+    ],
+    "total_amount": "number",
+    "day_window": "number"
+  }
+  ```
+- **확신도**:
+  - `exact` — 등록된 할부와 가맹점·금액·날짜가 모두 맞음
+  - `likely` — 가맹점·날짜는 맞고 금액이 **월납입액** 쪽
+  - `review` — 할부로 적혀 있는데 연결될 할부 등록이 없음
+- **비고**: 가맹점명을 정규화해 비교한다 — 실데이터에 같은 가게가 `예스이십사 주식회사`
+  · `예스이십사(주)` · `예스이십사` 로 들어 있다. 파생 거래는 계산 결과라 후보가 아니다.
+  "중복 아님" 으로 판단한 거래는 목록에서 빠진다.
+
+### POST /api/installments/duplicates/preview
+지울 대상을 확인한다. **DB 를 바꾸지 않는다.**
+
+- **요청 파라미터**: `ids` (body, 거래 id 배열)
+- **응답 스키마**:
+  ```json
+  {
+    "data": {
+      "rows": [{ "id": "number", "date": "string", "merchant": "string", "amount": "number" }],
+      "locked": [ "파생 거래라 지울 수 없는 행" ],
+      "missing": [ "없는 id" ],
+      "total": "number",
+      "fingerprint": "string | null"
+    }
+  }
+  ```
+
+### POST /api/installments/duplicates/resolve
+사용자가 고른 것만 처리한다.
+
+- **요청 파라미터**:
+  - `delete_ids` (body, optional): 지울 거래. **`preview_token` 필수**
+  - `keep_ids` (body, optional): 중복이 아니라고 판단한 거래. 다음부터 목록에서 빠진다
+  - `preview_token` (body, `delete_ids` 가 있으면 required): 프리뷰의 `fingerprint`
+- **응답 스키마**: `{ "ok": true, "deleted": "number", "kept": "number" }`
+- **비고**: 지우는 것만이 판단이 아니다. 둘 다 남겨 두기로 했는데 목록이 계속 같은
+  행을 보여주면 사용자는 결국 목록 자체를 무시하게 되고, 그러면 진짜 중복도 놓친다.
+- **에러 케이스**:
+  - 400: 파생 거래가 섞여 있음
+  - 409: 프리뷰 이후 대상이 바뀜 (`preview_stale`)
+  - 428: 프리뷰 없이 지우기 시도 (`preview_required`)
+
+### GET /api/installments/duplicates/dismissed
+"중복 아님" 으로 지나친 후보 목록.
+
+- **응답 스키마**:
+  ```
+  { "data": [{ "transaction_id", "dismissed_at", "date", "merchant", "amount" }] }
+  ```
+- **비고**: `GET /api/installments/duplicates` 는 지나친 것을 **걸러내고** 목록에 안
+  낸다. 그게 맞는 동작이지만, 그래서 실수로 지나친 것을 사용자가 다시 찾을 방법이
+  없었다 — 서버에 `restore` 가 있는데 **목록이 없어 손이 닿지 않았다**(#445 §2).
+
+  거래 정보(날짜·가맹점·금액)를 같이 낸다. 거래 id 만 주면 사용자가 무엇을
+  지나쳤는지 판단할 수 없다.
+
+### POST /api/installments/duplicates/restore
+"중복 아님" 판단을 되돌린다. 다시 목록에 나온다.
+
+- **요청 파라미터**: `ids` (body)
+- **응답 스키마**: `{ "ok": true, "restored": "number" }`
+- **비고**: 되돌릴 대상은 `GET /api/installments/duplicates/dismissed` 로 찾는다.
+
+### POST /api/installments/:id/derived/preview
+회차 재생성 미리보기. **DB 를 바꾸지 않는다.**
+
+- **요청 파라미터**:
+  - `id` (path parameter, required): 할부 ID
+  - 본문에 PUT 과 같은 모양의 변경안을 넣는다. 비우면 현재 값 기준으로 계산한다
+- **응답 스키마**:
+  ```json
+  {
+    "data": {
+      "installment_id": "integer",
+      "policy_applied": { "policy_type": "string", "annual_rate": "number", "free_from_sequence": "number" },
+      "delete_count": "number",
+      "create_count": "number",
+      "before_total": "number",
+      "after_total": "number",
+      "delta": "number",
+      "rows_before": [{ "billing_month": "string", "sequence": "number", "amount": "number" }],
+      "rows_after":  [{ "billing_month": "string", "sequence": "number", "amount": "number" }],
+      "changed_months": [{ "billing_month": "string", "before": "number", "after": "number", "is_past": "boolean" }],
+      "past_affected": [{ "billing_month": "string", "before": "number", "after": "number", "is_past": true }],
+      "reversible": "backup",
+      "fingerprint": "string"
+    }
+  }
+  ```
+- **비고**: `fingerprint` 를 PUT 또는 apply 의 `preview_token` 으로 넘긴다.
+  프리뷰 이후 원본이나 기존 파생 거래가 바뀌면 지문이 달라져 실행이 거부된다.
+  `policy_applied` 가 `null` 이면 등록된 카드 정책이 없어 `fee_per_month` 를 회차
+  수수료로 쓴 것이다.
 - **에러 케이스**:
   - 404: 할부 정보 없음
   - 500: 서버 내부 오류
+
+### POST /api/installments/:id/derived/apply
+할부 값은 그대로 두고 회차만 다시 만든다. 카드 정책을 새로 입력한 뒤 쓴다.
+
+- **요청 파라미터**:
+  - `id` (path parameter, required): 할부 ID
+  - `preview_token` (body, required): 프리뷰가 준 `fingerprint`
+- **응답 스키마**:
+  ```json
+  { "ok": "boolean", "deleted": "number", "created": "number" }
+  ```
+- **에러 케이스**:
+  - 404: 할부 정보 없음
+  - 409 / 428: PUT 과 같음
+  - 500: 서버 내부 오류
+
+### POST /api/installments/:id/reopen
+완료 처리를 되돌린다(#295). `status` 하나만 `완료` → `진행중` 으로 바꾼다.
+
+`PUT /api/installments/:id` 로도 `status` 를 바꿀 수 있지만 경로를 나눈다. 되돌리기는
+**"이게 먹히는가" 를 서버가 판정해야 하는 동작**이고, 일반 수정과 섞으면 그 판정을
+넣을 자리가 없다.
+
+- **응답 스키마**: `{ "ok": true, "status": "진행중" }`
+- **에러 케이스**:
+  - 404: 할부 없음
+  - 400: 이미 진행중
+  - 409: 청구 기간이 끝나 되돌려도 스윕이 다시 완료로 바꾼다 (`billing_ends_on` 동봉)
+
+**왜 409 로 막는가.** `GET /api/installments` 는 매 호출마다 청구 기간이 끝난 할부를
+`완료` 로 바꾸는 스윕을 돈다. 기간이 끝난 항목을 되돌리면 다음 조회에서 즉시 다시
+완료가 되어 사용자 눈에는 "되돌리기가 안 먹는다" 로 보인다. 되는 것처럼 응답하고
+조용히 되뒤집히면 앱을 못 믿게 된다.
+
+### GET /api/installments/:id/derived
+이 할부가 만든 거래 목록.
+
+- **응답 스키마**: `{ "data": [ transactions 행 ] }`
 
 ### DELETE /api/installments/:id
 - **요청 파라미터**:
@@ -393,9 +571,11 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "deleted": "number" }
   }
   ```
+- **비고**: 딸린 파생 거래를 같은 트랜잭션에서 지운다. 고아 행이 남지 않는다.
 - **에러 케이스**:
   - 500: 서버 내부 오류
 
@@ -440,9 +620,12 @@
   ```json
   {
     "id": "integer",
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "created": "number", "deleted": "number" }
   }
   ```
+- **비고**: `interest` 가 0보다 크면 그 달의 수수료 거래 1건이 함께 만들어진다(#269).
+  0이면 만들지 않는다. 한 건짜리 CRUD 라 프리뷰를 요구하지 않는다(ADR 0008 제외 항목).
 - **에러 케이스**:
   - 400: 필수 파라미터 누락
   - 409: 해당 월/카드 조합이 이미 등록되어 있음
@@ -460,13 +643,20 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "created": "number", "deleted": "number" }
   }
   ```
+- **비고**: 수수료가 바뀌면 파생 거래도 따라 갱신된다. 0으로 고치면 기존 거래가 사라진다.
 - **에러 케이스**:
   - 404: 리볼빙 정보 없음
   - 409: 해당 월/카드 조합이 이미 등록되어 있음
   - 500: 서버 내부 오류
+
+### GET /api/revolving/:id/derived
+이 리볼빙 이력이 만든 수수료 거래.
+
+- **응답 스키마**: `{ "data": [ transactions 행 ] }`
 
 ### DELETE /api/revolving/:id
 - **요청 파라미터**:
@@ -474,9 +664,11 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "derived": { "deleted": "number" }
   }
   ```
+- **비고**: 딸린 수수료 거래를 같은 트랜잭션에서 지운다.
 - **에러 케이스**:
   - 500: 서버 내부 오류
 ## debts.js
@@ -507,6 +699,15 @@
 
 ### POST /api/debts
 - **요청 파라미터**:
+  - `loan_type` (body, optional, default `general`): 이자 **계산 방식**. `general` | `credit_line`.
+    `type`(용도 분류)과 다른 축이다 — 자세한 것은 `docs/DATA_MODEL.md`
+  - `credit_limit` (body, `credit_line` 이면 required): 한도
+  - `interest_basis` (body, optional): `daily` | `monthly`. 비우면 유형 기본값
+  - `compounds` (body, optional): 이자의 원금 편입 여부. 비우면 유형 기본값
+  - `interest_day` (body, optional): 이자 결제일
+  - `rate_effective_from` (body, optional): 금리 이력 첫 행의 시작일. 비우면 오늘
+  - `annual_rate` 는 **소수를 허용한다** (연 4.17%). 정수만 받던 검증이 실제 금리를
+    거부하던 결함을 #285 에서 고쳤다
   ```json
   {
     "name": "string",
@@ -553,9 +754,12 @@
 - **응답 스키마**:
   ```json
   {
-    "ok": true
+    "ok": true,
+    "derived": { "deleted": "number" }
   }
   ```
+- **비고**: 파생 이자 거래 → 이자 이력 → 부채 순으로 같은 트랜잭션에서 지운다.
+  이력을 먼저 지우면 어떤 거래가 이 부채 것이었는지 찾을 수 없어 고아 행이 남는다.
 - **에러 케이스**: 없음
 
 ### POST /api/debts/:id/interest
@@ -572,13 +776,129 @@
   ```json
   {
     "ok": true,
-    "balance_after": number
+    "balance_after": number,
+    "derived": { "created": "number" }
   }
   ```
+- **비고**: 이자 기록·잔액 갱신·이자 거래 생성이 한 트랜잭션이다(#269).
+  `interest_amount` 가 0이면 거래를 만들지 않는다.
 - **에러 케이스**:
   - 404: debt 없음
   - 400: rate, interest_amount, log_date 누락
   - 500: DB 오류
+
+### GET /api/debts/:id/derived
+이 부채의 이자 기록이 만든 거래 전부.
+
+- **응답 스키마**: `{ "data": [ transactions 행 ] }`
+
+### GET /api/debts/:id/repayments
+부분상환 이력. 최근 상환이 위로 온다.
+
+- **응답 스키마**: `{ "data": [ debt_repayments 행 ] }`
+
+### POST /api/debts/:id/repayments
+부분상환을 기록하고 잔액을 줄인다(#287).
+
+`debts.balance` 를 직접 고치는 대신 여기를 거치게 하는 것이 요점이다. 직접 고치면
+언제 얼마를 갚았는지가 남지 않아 과거 이자를 재계산할 수 없다.
+
+- **요청 파라미터**:
+  - `amount` (body, required): 총 상환액. 0보다 큰 정수
+  - `repaid_on` (body, required): `YYYY-MM-DD`
+  - `principal_portion` / `interest_portion` (body, optional): 배분을 직접 넣을 때.
+    **둘을 더한 값이 `amount` 와 같아야 한다.** 비우면 전액이 원금분이 된다
+  - `memo` (body, optional)
+- **응답 스키마**:
+  ```json
+  {
+    "ok": true, "id": "integer",
+    "principal_portion": "number", "interest_portion": "number",
+    "balance_before": "number", "balance_after": "number",
+    "derived": { "created": "number" }
+  }
+  ```
+- **비고**: 이력·잔액·거래가 한 트랜잭션이다. **원금분만 잔액에서 뺀다** — 이자분은
+  이미 잔액에 편입돼 있던 이자를 갚는 것이라 전액을 빼면 이중으로 줄어든다.
+  거래는 `origin='debt_repayment'` 로 만들어지고 거래내역에서 수정·삭제할 수 없다.
+- **에러 케이스**: 404 (부채 없음), 400 (금액·날짜·배분 합)
+
+### DELETE /api/debts/:id/repayments/:repaymentId
+상환 기록을 지우고 **원금분만큼** 잔액을 되돌린다. 딸린 거래도 함께 지운다.
+
+`balance_after` 로 되돌리지 않는다 — 그 사이에 다른 상환이나 이자가 있었으면 그것들까지 되감긴다.
+
+- **응답 스키마**: `{ "ok": true, "restored": "number", "derived": { "deleted": "number" } }`
+- **에러 케이스**: 404
+
+### GET /api/debts/:id/interest-projection?from=&to=
+마이너스통장의 기간 이자를 계산한다(#286). **읽기 전용 — DB 를 바꾸지 않는다.**
+
+이자를 실제로 기록하는 것은 `POST /api/debts/:id/interest` 이고, 여기서는 "이 기간에
+얼마가 붙는가" 만 보여준다. ADR 0008 이 읽기 전용 계산을 프리뷰 대상에서 제외한 것과
+같은 성격이다.
+
+구간을 **잔액 변동점과 금리 변경점 양쪽에서** 자른다. 변동금리 계좌에서 현재 금리로
+소급 계산하면 그때 청구된 금액과 다르다.
+
+- **요청 파라미터**: `from`, `to` (query, required, `YYYY-MM-DD`. `[from, to)` 반개구간)
+- **응답 스키마**:
+  ```json
+  {
+    "data": {
+      "postings": [
+        {
+          "date": "string", "from": "string", "to": "string",
+          "interest": "number",
+          "balance_before": "number", "balance_after": "number",
+          "over_limit": "boolean",
+          "segments": [{ "from": "string", "to": "string", "days": "number",
+                         "balance": "number", "annual_rate": "number", "interest": "number" }]
+        }
+      ],
+      "total_interest": "number",
+      "accrued_since_last_posting": "number",
+      "capitalized": "number",
+      "final_balance": "number"
+    }
+  }
+  ```
+- **비고**: `interest_day` 가 있으면 매월 그날이 회차 경계가 되고, 없으면 기간 전체가
+  한 회차다. 복리(`compounds`)면 회차마다 이자가 잔액에 편입되어 다음 회차 이자가
+  늘어난다. 한도를 넘어도 계산은 계속되고 `over_limit` 로만 알린다.
+- **에러 케이스**:
+  - 400: 기간 형식·순서 오류 / 그 구간의 금리 이력 없음 / 기간 계산을 지원하지 않는 유형
+  - 404: 부채 없음
+
+### GET /api/debts/:id/rates
+금리 이력. 최근 적용분이 위로 온다.
+
+- **응답 스키마**: `{ "data": [ debt_rate_history 행 ] }`
+
+### POST /api/debts/:id/rates
+금리를 바꾼다. 열려 있던 구간을 **전날로 닫고** 새 구간을 연다(#285).
+
+변동금리(3개월 주기 등)를 통보받을 때마다 여기로 넣는다. `PUT /api/debts/:id` 는
+금리를 건드리지 않는다 — 금리는 시점이 붙어야 의미가 있고, 덮어쓰면 과거 이자를
+그때 금리로 재현할 수 없다.
+
+- **요청 파라미터**:
+  - `annual_rate` (body, required): 연이율. **소수 허용** (연 4.17% 등)
+  - `effective_from` (body, required): `YYYY-MM-DD`. 이 금리가 적용되기 시작한 날
+  - `memo` (body, optional): 예 `3개월 재산정`
+- **응답 스키마**: `{ "ok": true, "id": "integer", "closed": "number" }` — `closed` 는 닫은 이전 구간 수
+- **비고**: 같은 `effective_from` 으로 다시 넣으면 그 행을 고친다. 날짜 오타를
+  바로잡을 때마다 이력이 늘면 읽을 수 없다. 미래 날짜로 넣으면 `debts.annual_rate`
+  (현재 금리)는 바뀌지 않는다.
+- **에러 케이스**: 404 (부채 없음), 400 (금리 범위·날짜 형식)
+
+### GET /api/debts/:id/rate-on?date=YYYY-MM-DD
+그 시점에 적용되던 연이율. 이력보다 앞선 날짜면 `null` 이다.
+
+**`null` 을 0 으로 흘리지 않는다.** 금리를 모르는 구간을 0% 로 계산하면 이자가 조용히 사라진다.
+
+- **응답 스키마**: `{ "data": "number | null" }`
+- **에러 케이스**: 400 (날짜 형식)
 
 ### GET /api/debts/:id/interest-log
 - **요청 파라미터**: 없음
@@ -601,6 +921,79 @@
   ```
 - **에러 케이스**:
   - 500: DB 오류
+## cardPolicies.js
+
+카드사 할부 정책 마스터(#266). 저장은 개월수 하나당 한 행이고, 화면은 구간으로
+입력·표시한다(#271).
+
+**부분무이자는 뒤쪽이 면제된다.** 카드사 안내가 "6개월 부분무이자(4회차부터 면제)"
+형태이고, 앞 회차일수록 할부잔액이 커서 수수료도 크기 때문에 비싼 구간을 고객이
+부담한다. `free_from_sequence` 가 그 "면제 시작 회차" 다.
+
+`effective_from` / `effective_to` 로 시점별 정책을 남긴다. 덮어쓰기로 관리하면
+과거 할부의 이자 계산이 소급해서 바뀐다.
+
+### GET /api/card-policies
+- **요청 파라미터**:
+  - `payment_method_id` (query, optional): 결제수단으로 거르기
+  - `months` (query, optional): 개월수로 거르기
+  - `on` (query, optional): 이 날짜에 유효한 것만
+- **응답 스키마**: `{ "data": [ card_installment_policies 행 + payment_method_name ] }`
+
+### GET /api/card-policies/effective
+특정 시점에 유효한 정책 1건. 이자 계산이 쓰는 조회다.
+
+- **요청 파라미터**: `payment_method_id`, `months`, `on` (모두 required)
+- **응답 스키마**: `{ "data": 정책 행 | null }`
+- **에러 케이스**: 400 — 셋 중 하나라도 빠짐
+
+### POST /api/card-policies/range
+개월수 구간을 개월수별 행으로 펼쳐 **한 트랜잭션에** 등록한다.
+
+- **요청 파라미터**:
+  - `payment_method_id` (body, required)
+  - `from_month` / `to_month` (body, required): 개월수 구간. 2 이상 60 이하
+  - `policy_type` (body, required): `무이자` / `부분무이자` / `유이자`
+  - `annual_rate` (body, optional, default 0)
+  - `free_from_sequence` (body, 부분무이자면 required): 수수료가 **면제되기 시작하는 회차**.
+    카드사 안내의 "4회차부터 면제" 를 그대로 넣는다. 그 앞 회차는 고객 부담이다.
+    2 이상이어야 하고 구간의 시작 개월수를 넘을 수 없다
+  - `effective_from` (body, required) / `effective_to` (body, optional)
+  - `memo` (body, optional)
+- **응답 스키마**: `{ "ok": true, "created": "number" }`
+- **비고**: 펼치기를 서버가 하는 이유는 원자성이다. 화면이 개월수마다 POST 하면
+  중간에 겹침으로 막혔을 때 앞부분만 저장된 상태가 남는다. 겹침은 **전부 먼저
+  확인하고** 하나라도 걸리면 아무것도 넣지 않는다.
+- **에러 케이스**:
+  - 400: 필수값 누락 / 구간이 뒤집힘 / 정책 종류와 값이 어긋남
+  - 409: 겹치는 개월수가 있음. 어느 개월인지 문구에 담는다
+
+### POST /api/card-policies
+개월수 1건 등록. 구간 입력 화면은 `/range` 를 쓴다.
+
+- **요청 파라미터**: `payment_method_id`, `months`, `policy_type`, `effective_from` (required),
+  `annual_rate`, `free_from_sequence`, `effective_to`, `memo` (optional)
+- **응답 스키마**: `{ "id": "integer", "ok": true }`
+- **에러 케이스**: 400 (검증 실패), 409 (기간 겹침)
+
+### PUT /api/card-policies/:id
+- **요청 파라미터**: POST 와 같음 (부분 갱신)
+- **응답 스키마**: `{ "ok": true }`
+- **에러 케이스**: 404, 400, 409
+
+### DELETE /api/card-policies/range
+목록에 구간으로 보이는 것을 구간째 지운다.
+
+- **요청 파라미터**: `payment_method_id`, `from_month`, `to_month`, `effective_from` (모두 query, required)
+- **응답 스키마**: `{ "ok": true, "deleted": "number" }`
+- **비고**: `effective_from` 까지 일치해야 지운다. 같은 개월수라도 적용 기간이
+  다르면 별개 정책이라 함께 사라지면 안 된다.
+- **에러 케이스**: 400 — 구간을 특정할 수 없음
+
+### DELETE /api/card-policies/:id
+- **응답 스키마**: `{ "ok": true }`
+- **에러 케이스**: 404
+
 ## savings.js
 
 ### GET /api/savings
@@ -816,7 +1209,8 @@
   - `date` (필수): 거래 날짜 (YYYY-MM-DD 형식)
   - `category_id` (필수): 카테고리 ID
   - `amount` (필수): 금액
-  - `payment_method_id` (선택): 결제 수단 ID
+  - `payment_method_id` (선택): 결제 수단 ID (카드사 단위)
+  - `card_product_id` (선택): 카드 상품 ID. 어느 카드로 결제했는지(#302)
   - `payment_style` (선택, 기본값: 일시불): 결제 방식
   - `merchant` (선택): 가맹점
   - `memo` (선택): 메모
@@ -829,8 +1223,15 @@
   ```
 
 - **에러 케이스**
-  - 400: 필수 필드 누락
+  - 400: 필수 필드 누락 / `card_product_id` 가 없는 카드 /
+    `card_product_id` 와 `payment_method_id` 가 맞는 짝이 아님
   - 500: 서버 내부 에러
+
+- **비고**: `card_product_id` 를 보내면 그 카드가 달린 카드사와 맞는지 확인한다.
+  화면은 둘을 한 선택지로 고르지만 API 는 따로 받으므로, 여기서 막지 않으면
+  "삼성카드로 결제한 하나 A카드" 가 저장되고 카드 전략 계산이 그걸 그대로 믿는다.
+
+  보내지 않으면 NULL 이다 — **"미상"** 은 전용 값이 아니라 NULL 이다(#306).
 
 ### PUT /:id
 
@@ -839,7 +1240,10 @@
   - `date`: 거래 날짜 (YYYY-MM-DD 형식)
   - `category_id`: 카테고리 ID
   - `amount`: 금액
-  - `payment_method_id`: 결제 수단 ID
+  - `payment_method_id`: 결제 수단 ID (카드사 단위)
+  - `card_product_id`: 카드 상품 ID. **보내지 않으면 지워진다** —
+    `payment_method_id` 와 같은 규칙이다. COALESCE 를 쓰면 null 을 보내도 옛 값이
+    남아 "카드사는 알지만 어느 카드인지 모른다"(#306 의 미상)로 되돌릴 길이 없어진다
   - `payment_style`: 결제 방식
   - `merchant`: 가맹점
   - `memo`: 메모
@@ -995,3 +1399,560 @@
   }
   ```
 - **에러 케이스**: 없음
+
+## settlement.js
+
+기존 거래의 결제 방식(`settlement`)을 결제수단 단위로 일괄 재분류한다(#289).
+**프리뷰 → 확인 → 실행**(ADR 0008).
+
+021 은 기존 거래를 전부 `immediate` 로 남겼다. **자동 변환하지 않기로 한 결정**이다 —
+이 저장소는 실거래 2,212건 유실 사고가 있었고 조용한 대량 변경은 같은 범주의
+위험이다. 사용자가 직접 "이 카드로 쓴 건 전부 카드 사용" 을 지정하는 도구가 이것이다.
+
+### POST /api/settlement/reclassify/preview
+**DB 를 바꾸지 않는다.**
+
+- **요청 파라미터**:
+  - `payment_method_id` (required, 숫자검증): 대상 결제수단
+  - `settlement` (required): 바꿀 결제 방식. `immediate` / `deferred` / `settlement`
+  - `from` / `to` (optional): 기간. `YYYY-MM-DD`
+- **응답 스키마**:
+  ```
+  { "target": {...}, "count": "number",
+    "billing_month_filled": "number", "billing_month_cleared": "number",
+    "samples": [{ "id", "date", "merchant", "amount", "before", "after",
+                  "billing_month_before", "billing_month_after" }],
+    "impact": [{ "accountId", "accountName", "balanceBefore", "balanceAfter",
+                 "balanceDelta", "cardUnpaidBefore", "cardUnpaidAfter" }],
+    "preview_token": "string", "undoable": true }
+  ```
+- **에러 케이스**: 400 — 결제수단 미지정 / 없는 결제수단 / 모르는 결제 방식 /
+  기간 형식이 `YYYY-MM-DD` 아님 / 시작일이 종료일보다 뒤
+- **비고**: **잔액 영향을 손으로 유도하지 않는다.** 실제 `computeBalance` 를 두 번
+  돌린다(지금 행 / 바꾼 행). `deferred` 제외 · 수입지출 방향 · 기준일 · 개설일
+  경계가 얽혀 있어 약식 계산은 경계에서 틀린다.
+
+  **잔액이 늘었다고 돈이 생긴 게 아니다.** `deferred` 로 바꾸면 잔액이 늘지만 그만큼
+  카드 미결제액이 는다. 실거래 사본에서 두 숫자가 정확히 일치했다. 그래서
+  `cardUnpaidBefore` / `cardUnpaidAfter` 를 같이 낸다 — 잔액만 보여주면 사용자가
+  반대로 읽는다.
+
+  **결제 방식이 바뀌면 청구월도 바뀐다.** `settlement` 은 `billing_month` 의
+  입력이다(#289). `deferred` 로 바꾸면 채워지고, 벗어나면 지워진다 —
+  `billing_month_filled` / `billing_month_cleared` 가 그 건수다. 카드의 결제일·마감일을
+  모르면 채우지 않는다(#290). 그 경우 나중에
+  `POST /api/billing-month/backfill` 로 소급한다.
+
+  **잔액은 계좌 단위로 낸다.** "12만원 늘어난다" 만 보여주면 어느 통장 이야기인지
+  알 수 없고 사용자가 통장을 열어 대조할 수 없다.
+
+### POST /api/settlement/reclassify
+확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
+
+- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
+- **에러 케이스**:
+  - 400: 프리뷰와 같음
+  - 428: `preview_token` 없음 (`preview_required: true`)
+  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
+- **비고**: 지문에 각 행의 `id` · 금액 · **현재 `settlement`** · `date` ·
+  `card_product_id` · `billing_month` 를 전부 담는다.
+
+  현재 `settlement` 을 담는 이유는 뮤테이션 테스트가 찾아낸 진짜 구멍이다 — id·금액만
+  담으면 **프리뷰 뒤에 대상 중 한 건의 상태만 바뀐 경우** 건수도 id 목록도 그대로라
+  지문이 통과하고, 사용자가 본 적 없는 상태의 거래가 조용히 재분류된다.
+
+  나머지 셋은 청구월의 입력이라 같은 이유로 담는다. `test/settlementReclassify.test.js`
+  의 `E-5`~`E-5c` 가 각 입력을 고립시켜 잠근다.
+
+  재분류 전체가 한 `action_id` 로 묶이고 라벨이 붙어 `/api/audit/undo` 로 통째로
+  되돌아간다.
+
+## audit.js
+
+모든 쓰기의 전후 값과 1단계 실행취소(#297, #300, #301). 캡처는 라우트가 아니라 DB
+트리거가 한다 — 라우트 기록은 새 라우트를 쓰는 사람이 한 줄 빠뜨리면 그 경로만
+조용히 안 남는다.
+
+### GET /api/audit/undoable
+방금 한 작업 중 되돌릴 수 있는 것 1건. 없으면 `null`.
+
+**되돌릴 수 없는 작업(임포트·복원·시스템)에는 아무것도 주지 않는다.** 화면이
+버튼을 낼지 말지를 여기서 판단하므로, 화면이 규칙을 따로 갖지 않는다.
+
+- **응답 스키마**:
+  ```json
+  { "undoable": { "action_id": "string", "label": "string|null", "ts": "string",
+                  "affected": "number", "tables": ["string"], "ops": ["string"] } }
+  ```
+- **비고**: `label` 은 대개 `null` 이다(#298 에서 선택으로 뒀다). 화면이 "방금 한
+  작업" 같은 무의미한 말 대신 이름을 지어낼 수 있도록 `tables` 와 `ops` 를 함께 준다.
+  `affected` 는 몇 건이 되돌아가는지다 — 큰 작업은 사용자가 확인하고 눌러야 한다(ADR 0008).
+
+### POST /api/audit/undo
+- **요청 파라미터**: `action_id` (body, optional). 없으면 가장 최근 후보를 되돌린다
+- **응답 스키마**: `{ "ok": true, "reverted": "number" }`
+- **에러 케이스**:
+  - 400: 되돌릴 작업이 없음 / 이미 되돌린 작업 / 시스템 작업을 직접 지정 /
+    **그 사이 값이 또 바뀜**
+- **비고**: 쓰기 전에 현재 행이 `after_json` 과 같은지 본다. 다르면 그 뒤에
+  누군가(또는 스윕이) 또 바꾼 것이고, 그대로 되돌리면 그 변경을 **조용히 덮어쓴다.**
+  조용히 덮어쓰는 게 최악이라 거부한다. 거부되면 데이터는 하나도 안 바뀐다.
+
+  되돌리기 자체도 로그에 남지만 `actor='system'` 이라 다시 후보에 오르지 않는다 —
+  되돌리기의 되돌리기 루프가 생기지 않는다.
+
+### GET /api/audit/log
+- **요청 파라미터**:
+  - `actor` (query, optional): `user` / `system` / `import` / `all`
+  - `limit` / `offset` (query, optional)
+- **응답 스키마**: `{ "data": [ audit_log 행 ], "total": "number" }`
+- **비고**: 화면 기본값은 `user` 다. 조회마다 도는 시스템 스윕(#205)을 섞으면 목록을
+  뒤덮어 사용자가 자기 작업을 찾을 수 없다.
+
+## accounts.js
+
+통장·계좌(#288). 잔액 추적(M11)의 바탕이다.
+
+### GET /api/accounts
+- **요청 파라미터**: `include_inactive` (query, optional)
+- **응답 스키마**: `{ "data": [ accounts 행 ] }`
+
+### POST /api/accounts
+- **요청 파라미터**: `name`, `type` (required), `opening_balance`, `credit_limit` (optional, 숫자검증)
+- **응답 스키마**: `{ "id": "number" }`
+
+### GET /api/accounts/balances
+활성 계좌별 현재 잔액과 가용액.
+
+- **응답 스키마**: `{ "data": [{ "id", "name", "type", "balance", "available", ... }] }`
+- **비고**: 잔액은 `opening_balance` 에 그 계좌에 걸린 결제수단의 거래를 더해 센다.
+  수입은 더하고 나머지는 뺀다. **`/:id` 보다 먼저 선언해야 한다** — 뒤에 두면
+  `balances` 가 id 로 잡힌다.
+
+### GET /api/accounts/:id
+계좌 1건 + 잔액.
+
+- **에러 케이스**: 404 — 없는 계좌
+
+### PUT /api/accounts/:id
+- **요청 파라미터**: 위와 같음 + `is_active` (숫자검증)
+- **에러 케이스**: 404 — 없는 계좌
+
+## dataIntegrity.js
+
+데이터가 어긋난 곳을 한 번에 훑는다. **고치지 않고 보여주기만 한다** — 무엇을 고칠지는
+사용자가 정한다.
+
+### GET /api/data-integrity
+- **응답 스키마**: `{ "checks": [{ "name": "string", "count": "number", "samples": [...] }] }`
+- **비고**: 현재 검사 항목 — 비ISO 날짜 형식 / `payment_style` 이상값 / `major_type`
+  이상값 / 금액이 비정상적으로 작은 임포트 건 / 종료됐어야 하는데 진행중으로 남은 할부 /
+  카테고리 없는 거래 / 중복 승인번호. `samples` 는 최대 20건만 준다.
+
+## cardProducts.js
+
+카드 상품(#274, #306). `payment_methods` 는 **카드사 단위**라 개별 카드를 표현할 수
+없다. 부수지 않고 옆에 붙인다.
+
+**`payment_method_id` 에 UNIQUE 를 걸지 않는다.** 같은 카드사 카드 두 장을 표현할
+수 없으면 이 구조의 목적이 사라진다.
+
+### GET /api/card-products
+- **요청 파라미터**: `payment_method_id` (query, optional)
+- **응답 스키마**: `{ "data": [ card_products 행 + payment_method_name ] }`
+
+### GET /api/card-products/unassigned-count
+아직 어느 카드인지 정하지 않은 신용 거래 수.
+
+- **응답 스키마**: `{ "unassigned": "number" }`
+- **비고**: 기존 거래의 카드 상품은 **추측하지 않는다.** 역추정하면 그럴듯하지만
+  틀렸을 때 전략 계산이 조용히 잘못된 답을 낸다. 사용자가 재매핑을 언제 끝냈는지
+  알 수 있어야 해서 이 수를 낸다.
+
+### POST /api/card-products/remap/preview
+지난 거래를 카드 상품에 붙일 때 **무엇이 몇 건 바뀌는지** 계산한다(#302 3단계).
+**DB 를 바꾸지 않는다** — ADR 0008 의 프리뷰 단계다.
+
+- **요청 파라미터**:
+  - `card_product_id` (required, 숫자검증): 옮겨 갈 카드
+  - `from` / `to` (optional): 기간. `YYYY-MM-DD`
+  - `merchant` (optional): 가맹점 부분일치
+  - `min_amount` / `max_amount` (optional, 숫자검증): 금액대
+  - `include_assigned` (optional, boolean): 이미 다른 카드로 지정된 거래까지 포함
+- **응답 스키마**:
+  ```
+  { "target": {...}, "count": "number", "already_assigned": "number",
+    "billing_month_filled": "number", "billing_month_cleared": "number",
+    "samples": [{ "id", "date", "merchant", "amount", "before", "after",
+                  "billing_month_before", "billing_month_after" }],
+    "preview_token": "string", "remaining_unassigned": "number", "undoable": true }
+  ```
+- **에러 케이스**: 400 — 카드 미지정 / 없는 카드 / 기간 형식이 `YYYY-MM-DD` 아님 /
+  금액이 숫자 아님
+- **비고**: 대상은 **그 카드가 달린 카드사의 거래**로 고정된다. 카드사를 따로 받으면
+  "삼성카드 거래를 하나 A카드로" 가 가능해지는데, 그건 재매핑이 아니라 결제수단
+  변경이고 거래 입력이 할 일이다.
+
+  **금액은 부호 없이 받는다.** 거래 금액이 전부 양수로 저장되고 지출·수입은
+  카테고리 대분류가 가른다 — 음수를 넣으면 아무것도 안 걸린다.
+
+  이미 그 카드인 거래는 `count` 에 세지 않는다. 바뀌지 않는 것을 세면 건수가
+  사실이 아니게 된다.
+
+  기간 형식이 틀리면 400 이다. SQLite 의 문자열 비교라 `2026-8-1` 같은 값은 오류
+  없이 조용히 0건이 되거나 엉뚱하게 걸린다 — 사용자는 조건을 걸었다고 믿는다.
+
+  **카드가 바뀌면 청구월도 바뀐다**(#421). `card_product_id` 는 `billing_month` 의
+  입력이라(#289) 재매핑이 그것도 다시 계산한다. `billing_month_filled` 는 비어
+  있던 것이 채워지는 건수, `billing_month_cleared` 는 옮겨 갈 카드의 결제일·마감일을
+  몰라 지워지는 건수다. 건수만 보여주면 사용자가 **무엇을 승인하는지 모른 채**
+  승인한다 — 청구월은 "이번 결제일에 얼마 빠지나" 를 정하는 값이다.
+
+### POST /api/card-products/remap
+확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
+
+- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
+- **응답 스키마**: `{ "ok": true, "updated": "number", "remaining_unassigned": "number", "target": {...} }`
+- **에러 케이스**:
+  - 400: 프리뷰와 같음
+  - 428: `preview_token` 없음 (`preview_required: true`)
+  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
+- **비고**: **화면에서만 막고 엔드포인트가 열려 있으면 원칙이 반쪽이 된다**(ADR 0008).
+  지문은 대상의 id 뿐 아니라 금액과 현재 카드, **현재 청구월**까지 넣어 만든다 —
+  id 만 넣으면 그 사이 같은 거래가 다른 카드로 지정된 것을 못 잡고, 청구월을 빼면
+  프리뷰 뒤에 청구월만 손으로 바뀐 경우 건수도 id 목록도 그대로라 지문이 통과한다
+  (#421, #419 의 `C-3b` 와 같은 구멍).
+
+  재매핑 전체가 한 `action_id` 로 묶이고 `카드 재매핑 → <카드 이름>` 라벨이 붙어,
+  `/api/audit/undo` 로 통째로 되돌아간다.
+
+### POST /api/card-products
+- **요청 파라미터**:
+  - `payment_method_id`, `issuer`, `product_name`, `card_type` (required)
+  - `annual_fee` (optional, 숫자검증)
+  - `prev_month_threshold` (optional, 숫자검증): 전월 실적 기준액. 없으면 조건 없음
+  - `billing_cycle_day` / `statement_close_day` (optional, 숫자검증): 결제일 / 마감일. 1~31
+  - `memo` (optional)
+- **응답 스키마**: `{ "id": "number", "ok": true }`
+- **에러 케이스**:
+  - 400: 필수값 누락 / 카드 종류가 목록 밖 / 결제일·마감일이 1~31 밖 /
+    전월 실적 기준액이 음수 / 없는 결제수단
+  - 409: 같은 카드사에 같은 이름의 카드가 이미 있음
+- **비고**: 청구 주기 세 필드는 **비워 둘 수 있다.** 사용자가 자기 카드의
+  결제일·마감일을 모를 수 있고, 모르는 것을 0 이나 1 로 채우면 계산이 틀린 답을
+  자신 있게 낸다.
+
+  **전월 실적은 달력 월이다**(전월 1일 ~ 말일). `statement_close_day` 는 **청구
+  이용기간**을 정하는 값이지 실적 산정기간이 아니다 — 이 문서가 한동안 반대로
+  적고 있었고, 실거래로 재니 실적 판정이 뒤집혔다(#398). 자세한 근거는
+  `docs/DATA_MODEL.md` 의 카드 절에 있다.
+
+### PUT /api/card-products/:id
+보내지 않은 필드는 기존 값을 잇는다.
+
+- **에러 케이스**: 404 — 없는 카드. 그 외 POST 와 같음
+
+### DELETE /api/card-products/:id
+- **비고**: 삭제해도 거래는 남는다. `card_product_id` 가 NULL 로 돌아가 "미상" 이
+  될 뿐이다 — 거래를 지우면 가계부 기록이 사라지므로 그럴 수 없다.
+
+## billingMonth.js
+
+청구월 소급(#289). 카드 주기를 **나중에** 넣거나 고쳤을 때 기존 거래의 청구월을
+다시 맞춘다.
+
+`resolveBillingMonth` 는 카드의 결제일·마감일을 모르면 아무것도 안 적는다(#290).
+그런데 사용자는 카드를 등록한 뒤에 그 값을 채워 넣는다 — 명세서를 찾아봐야 알 수
+있어서 나중에 들어온다. 그 사이에 쌓인 거래는 청구월이 빈 채로 남고 **스스로
+되살아나지 않는다.** `PUT /api/card-products/:id` 는 `card_products` 만 UPDATE 한다.
+
+비어 있으면 `cardUnpaid` 가 `unassigned` 로 빼고, `projectBalance` 는 청구월 없는
+`deferred` 를 추이에서 **통째로 뺀다** — 앞으로 빠질 카드값이 없는 것처럼 보인다.
+
+### GET /api/billing-month/missing-count
+- **응답 스키마**: `{ "missing": "number" }`
+- **비고**: 청구월이 비어 있는 `deferred` 거래 수. 소급이 필요한 상태인지 화면을
+  열기 전에 알 수 있어야 한다. 즉시 결제는 청구월이 없는 것이 정상이라 안 센다.
+
+### POST /api/billing-month/backfill/preview
+**DB 를 바꾸지 않는다** — ADR 0008 의 프리뷰 단계다.
+
+- **요청 파라미터**:
+  - `mode` (optional): `fill`(기본) 또는 `recompute`
+  - `card_product_id` (optional, 숫자검증): 그 카드 거래만. 안 주면 전체
+- **응답 스키마**:
+  ```
+  { "mode": "string", "card": {...} | null,
+    "scanned": "number", "count": "number",
+    "filled": "number", "cleared": "number", "rewritten": "number",
+    "skipped_written": "number",
+    "samples": [{ "id", "date", "merchant", "amount", "card_product_name",
+                  "before", "after" }],
+    "preview_token": "string", "undoable": true }
+  ```
+- **에러 케이스**: 400 — 모르는 `mode` / 없는 카드
+- **비고**: **두 모드가 있는 이유는 손으로 적은 값을 구분할 컬럼이 없기 때문이다.**
+  라우트가 `billing_month` 를 직접 받으므로 명세서를 보고 넣은 값이 섞여 있을 수 있다.
+
+  | 모드 | 무엇을 하나 |
+  |---|---|
+  | `fill` (기본) | 비어 있는 것만 채운다. 적힌 값은 지나치고 `skipped_written` 로 센다 |
+  | `recompute` | 전부 다시 계산한다. 마감일을 고쳤을 때 쓴다 |
+
+  `fill` 이 기본인 이유는 **되돌릴 수 없는 쪽이 더 비싸기 때문이다.** 손으로 넣은
+  값이 지워지면 사용자는 그것이 무엇이었는지 알 방법이 없다. 덜 채워진 것은 다시
+  돌리면 된다.
+
+  대상은 `deferred` 만이 아니라 **청구월이 적힌 행 전부**다. 즉시 결제·카드대금
+  인출에는 청구월이 없어야 하는데(#289) 재분류로 `deferred` 를 벗은 거래에 값이
+  남을 수 있다. 대상에서 빼면 그 찌꺼기를 치울 방법이 없어진다.
+
+  `cleared` 가 0 이 아니면 옮겨 갈 카드의 결제일·마감일을 모른다는 뜻이다. 근거
+  없는 달에 묶인 채 남는 것보다 "아직 모른다" 가 낫다(#290).
+
+### POST /api/billing-month/backfill
+확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
+
+- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
+- **응답 스키마**: `{ "ok": true, "updated": "number", "missing": "number", "mode": "string", "card": {...} | null }`
+- **에러 케이스**:
+  - 400: 프리뷰와 같음
+  - 428: `preview_token` 없음 (`preview_required: true`)
+  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
+- **비고**: 지문은 **바뀔 값과 그 입력 전부**를 담는다 — `id` · `date` ·
+  `settlement` · `card_product_id` · 지금 `billing_month`. 청구월은 앞의 셋에서
+  나오므로 하나라도 빠지면, 프리뷰 뒤에 그 입력이 바뀌었을 때 **건수도 id 목록도
+  그대로라 지문이 통과하고** 사용자가 본 적 없는 계산 결과가 적힌다(#419 의
+  `C-3b` 와 같은 구멍). `test/billingMonthBackfillRoute.test.js` 의 `G-1b`~`G-1e`
+  가 네 입력을 각각 고립시켜 잠근다.
+
+  소급 전체가 한 `action_id` 로 묶이고 `청구월 소급` 라벨이 붙어
+  `/api/audit/undo` 로 통째로 되돌아간다.
+
+## cardBenefits.js
+
+카드별 할인·적립 조건(#274).
+
+**시장 전체 카드 비교는 범위 밖이다.** 상품 정보를 주는 공식 API 가 없고 크롤링은
+약관·정확성 양쪽에서 믿을 수 없다. 사용자가 자기 카드를 직접 넣는다.
+
+### GET /api/card-benefits
+- **요청 파라미터**: `card_product_id` (query, optional)
+- **응답 스키마**: `{ "data": [ card_benefits 행 + category_name, product_name, issuer ] }`
+
+### POST /api/card-benefits
+- **요청 파라미터**:
+  - `card_product_id` (required, 숫자검증), `benefit_type` (required): `할인` / `적립`
+  - `rate` (required): % . **0 이상 100 이하**
+  - `category_id` (optional, 숫자검증): 없으면 전 가맹점
+  - `merchant_pattern` (optional): 없으면 그 카테고리 전체
+  - `monthly_cap` (optional, 숫자검증): 없으면 무제한
+  - `min_amount` (optional, 숫자검증, default 0): 건당 최소 결제액
+  - `memo` (optional)
+- **응답 스키마**: `{ "id": "number", "ok": true }`
+- **에러 케이스**: 400 — 혜택 종류가 목록 밖 / 비율이 0~100 밖 / 한도·최소액이 음수 /
+  없는 카드 / 없는 카테고리
+- **비고**: `rate` 0 은 유효하다. "이 카테고리에는 혜택 없음" 을 명시적으로 적어 두는
+  쓰임이 있다 — 안 적은 것과 없다고 적은 것은 다르다.
+
+### PUT /api/card-benefits/:id
+보내지 않은 필드는 기존 값을 잇는다. 일부만 보내는 호출부가 안 보낸 값을 기본값으로
+덮으면 사용자가 적어 둔 한도가 조용히 사라진다.
+
+- **에러 케이스**: 404 — 없는 혜택. 그 외 POST 와 같음
+
+### DELETE /api/card-benefits/:id
+- **비고**: **실제로 지운다.** 카드·결제수단과 달리 지난 기록으로서의 값이 없고
+  거래가 참조하지도 않는다. 소프트 삭제를 두면 목록에서 걸러야 할 상태만 는다.
+  카드를 지우면 `ON DELETE CASCADE` 로 혜택도 사라진다.
+
+## recurringRules.js — #278~#280 에서 늘어난 것
+
+004 의 월 단위 규칙에 주기·기간이 붙었다. 기존 행은 `freq='monthly'`, `interval=1` 로
+남아 동작이 바뀌지 않는다.
+
+### GET /api/recurring-rules/catchup
+기동 시 따라잡기(#279)의 결과. 화면이 "무엇이 새로 생겼는지" 를 알리는 데 쓴다.
+
+- **응답 스키마**:
+  ```json
+  { "created": "number", "skipped": "number", "rules": "number",
+    "today": "string", "details": [{ "rule_id": "number", "merchant": "string", "created": "number" }] }
+  ```
+- **비고**: catch-up 은 **상한을 두지 않는다.** 공백이 길어도 규칙대로 전부 만든다 —
+  사용자가 규칙으로 이미 의사를 밝혔는데 "156건을 만들까요" 를 되묻는 것은 규칙의
+  취지를 없앤다. 대신 몇 건이 생겼는지 화면이 반드시 알려야 한다.
+
+### GET /api/recurring-rules/due
+이번 달(기본값) 아직 처리하지 않은 규칙 목록. 대시보드의 "이번 달 반복 거래 확인" 이
+쓴다.
+
+- **요청 파라미터**: `month` (query, optional): `YYYY-MM`. 형식이 어긋나면 400
+- **응답 스키마**: `{ "month": "string", "data": [ recurring_rules 행 + category_name, payment_method_name ] }`
+- **비고**: 따라잡기(#279)가 자동으로 만드는 것과 별개다. 이쪽은 사용자가 확인하고
+  `confirm` / `skip` 을 누르는 흐름이다.
+
+### POST / PUT /api/recurring-rules — 늘어난 필드
+- `freq` (optional, default `monthly`): `daily` / `monthly` / `yearly`
+- `interval` (optional, default 1): 1 이상
+- `starts_on` (optional): `YYYY-MM-DD`. **생략하면 새 규칙은 오늘, 수정은 기존 값**
+- `ends_on` (optional): `YYYY-MM-DD` 또는 null(무기한). `starts_on` 보다 빠르면 400
+- `month_of_year` (optional): 1~12. `freq='yearly'` 에서만 의미가 있다
+- `day_of_month`: `monthly`/`yearly` 면 required. `daily` 면 생략 가능하고 `starts_on` 의 일자로 채운다
+
+- **비고**: 보내지 않은 반복 필드는 **기존 값을 잇는다.** 일부만 보내는 호출부가
+  있어서(재활성화), 안 보낸 값을 기본값으로 덮으면 연 반복의 지정 월과 종료일이
+  조용히 사라진다. 명시적 `null` 은 지우려는 뜻이므로 값이 아니라 키의 유무로 가른다.
+
+  `starts_on` 을 API 에서 선택으로 둔 이유는 생략한 기존 호출을 400 으로 만들면 이미
+  있는 경로가 깨지기 때문이다. 화면은 필수로 받는다.
+
+## cardImport.js
+
+카드사 이용내역 엑셀을 거래로 넣는다(#34, #102). 파싱은 `services/cardImport` 가 하고
+카드사 판별도 그쪽이다 — 이 라우트는 업로드·미리보기 분기·집계만 한다.
+
+**한 파일이 실패해도 나머지는 계속 처리한다.** 실패를 예외로 올리면 30개 중 하나가
+깨졌을 때 전부 헛수고가 된다. 파일별 결과에 `ok: false` 로 담고 사유를 함께 준다.
+
+`actor` 를 `import` 로 구분한다(#298). 파일에서 들어온 대량 삽입은 사용자가 한 건씩
+넣은 것과 실행취소 단위가 다르다.
+
+### POST /api/card-import
+- **요청**: `multipart/form-data`, 필드 `files` (최대 30개, 파일당 10MB)
+- **요청 파라미터**: `preview` (query) — `true` 면 저장하지 않고 건수만 센다
+- **응답 스키마**:
+  ```
+  {
+    "results": [
+      { "filename": "string", "ok": true,
+        "cardCompanyLabel": "string", "count": "number", "skipped": "number" },
+      { "filename": "string", "ok": false, "error": "string" }
+    ],
+    "totals": { "files": "number", "succeeded": "number", "failed": "number",
+                "count": "number", "skipped": "number", "imported": "number" }
+  }
+  ```
+- **비고**: `count`/`skipped` 는 미리보기, `imported`/`skipped` 는 실제 저장에서 채워진다.
+  `totals` 는 성공한 파일만 합산한다. 파일이 없으면 400, 용량 초과도 400.
+
+### POST /api/card-import/single
+`file` 필드 하나를 받는 하위호환 경로. 새 화면은 위 경로를 쓴다.
+
+- **요청**: `multipart/form-data`, 필드 `file`
+- **응답 스키마**: 위 `results` 한 건과 같은 모양(`filename` 없이 파싱 결과 그대로)
+- **비고**: 여기서는 실패를 400 으로 올린다. 파일이 하나뿐이라 부분 성공이 없다.
+
+## csvImport.js
+
+신한카드는 엑셀 내보내기를 지원하지 않아 CSV 본문을 텍스트로 받는다. 그래서 엑셀
+경로(`/api/card-import`)와 달리 `multipart` 가 아니라 JSON 본문이다.
+
+### POST /api/csv-import
+- **요청 파라미터**: `preview` (query) — `true` 면 저장하지 않는다
+- **요청 본문**: `{ "cardCompany": "string", "csvText": "string" }`
+- **응답 스키마**
+  - 미리보기: `{ "cardCompany", "cardCompanyLabel", "count", "skipped", "invalid" }`
+  - 저장: `{ "imported", "skipped", "invalid", "errors": ["string"] }`
+- **비고**: `invalid` 는 파싱 단계에서 걸러진 행이다 — 저장 대상에서 아예 빠진다.
+  `errors` 는 저장 중 실패한 행의 요약이며, **예외 원문을 담지 않는다**(#231).
+  둘 중 하나라도 빠지면 400.
+
+## data.js
+
+거래내역 전용 백업·복원. 설정 백업(`/api/export/settings`)과는 다른 경로다 —
+그쪽은 카테고리·결제수단·설정값만 다룬다.
+
+### GET /api/data/export
+- **응답 스키마**: `{ "exported_at": "ISO8601", "schema_version": 4, "transactions": [...] }`
+- **비고**: `Content-Disposition: attachment` 로 내려준다. 파일명은
+  `finance-backup-YYYYMMDD.json`. `schema_version` 은 `origin` 3필드가 늘면서 4 가
+  됐다(#268) — 이걸 안 내보내면 복원 시 파생 거래가 전부 `manual` 이 되어 잠금이 풀린다.
+  `exported_at` 은 의도적으로 UTC 다(메타데이터이지 로컬 날짜가 아니다).
+
+### POST /api/data/import
+- **요청 본문**: `{ "mode": "append" | "overwrite", "transactions": [...], "confirm": "string" }`
+- **응답 스키마**: `{ "ok": true, "imported", "skipped", "deleted", "total" }`
+  (+ 조건부 `legacy_fields_defaulted`, `fk_fallback`)
+- **비고**: `overwrite` 는 **기존 거래를 전부 지운다.** 화면의 확인 대화상자와 별개로
+  `confirm: "DELETE_ALL"` 을 요구한다 — API 를 직접 부르는 경로까지 막기 위한 토큰이라
+  화면 쪽 확인만 믿지 않는다. 없으면 400.
+
+  백업의 FK 값이 현재 DB 에 없을 수 있다(다른 기기 복원, 결제수단 초기화 등).
+  `foreign_keys=ON` 이라 그대로 넣으면 트랜잭션 전체가 롤백되므로, **있는 값만 넣고
+  나머지는 NULL 로 떨어뜨린 뒤** `fk_fallback: true` 로 알린다. 구버전 백업이라
+  기본값으로 채운 칸이 있으면 `legacy_fields_defaulted: true`.
+
+  `actor` 는 `import` 다 — 복원은 DB 를 통째로 갈아끼우므로 실행취소 대상에서 뺀다(#300).
+
+## cardStrategy.js
+
+"지금 이 결제를 어느 카드로 할 것인가"(#277, M8). 카드 등록(`card_products`)과
+혜택(`card_benefits`)이 모두 있어야 의미 있는 답이 나온다.
+
+전월실적 판정 기간은 **달력월**이다. 청구 이용기간(결제일·마감일 기준)과 다르며,
+섞으면 판정이 뒤집힌다 — `docs/DATA_MODEL.md` 의 카드 절 참조.
+
+### GET /api/card-strategy/thresholds
+카드별 전월실적 달성 현황.
+
+- **요청 파라미터**: `asOf` (query, `YYYY-MM-DD`, 기본값 오늘)
+- **응답 스키마**: `{ "data": [{ "cardProductId", "issuer", "productName", "isActive", ...threshold }], "asOf" }`
+- **비고**: **비활성 카드도 함께 내린다**(#410). 감추면 "지난달 이 카드로 30만원 썼는데
+  목록에 없다" 가 되어 소프트 삭제로 과거를 보존한 목적이 반쯤 사라진다. 화면이 흐리게
+  표시하고 추천에서만 빼도록 `isActive` 로 표시만 붙인다.
+
+### GET /api/card-strategy/estimate
+지금 결제하면 어느 카드가 나은가. 거래 입력 화면이 부른다.
+
+- **요청 파라미터**: `amount` (required, 숫자), `category_id` (optional), `merchant` (optional), `asOf` (optional)
+- **응답 스키마**: `{ "data": [카드별 추정, 혜택 내림차순], "comparable": "boolean", "capUnknown": true, "asOf" }`
+- **비고**: `data` 에서 **비활성 카드는 빠진다.** 지금 결제할 카드를 고르는 화면이라
+  못 쓰는 카드를 1위로 올리면 그대로 틀린 답이 된다(#410).
+
+  `comparable` 은 카드가 2장 이상일 때만 `true` 다. 카드가 하나뿐인데 "이게 최선입니다"
+  라고 말하면 안 된다 — 비교 대상이 없는 것과 비교해서 이긴 것은 다르다.
+  `capUnknown` 은 월 한도 소진분을 계산에 넣지 못했다는 표시다.
+
+  `amount` 가 없거나 숫자가 아니면 400.
+
+### GET /api/card-strategy/comparison
+지난 결제를 다른 카드로 했다면 얼마나 달랐을까.
+
+- **요청 파라미터**: `from` / `to` (query, `YYYY-MM-DD`) — 기본 구간은 **최근 3개월**
+- **응답 스키마**: `{ ...비교결과, "period": { "from", "to" }, "thresholdEstimated": "boolean" }`
+- **비고**: 기간을 안 주면 전 기간을 훑게 되는데 몇 년 전 결제를 지금 카드로 다시
+  계산하는 것은 의미가 없어 기본값을 둔다. `from > to` 면 400.
+
+  수입은 카드 혜택 대상이 아니라 제외한다. `thresholdEstimated` 가 `true` 면 실적
+  판정이 추정이라는 뜻이고, **차액도 추정이다** — 화면이 이어서 말해야 한다.
+
+## exchange.js
+
+한국수출입은행(EXIM) 환율. 외화 자산을 원화로 환산해 보여주는 데 쓴다.
+
+### GET /api/exchange
+- **응답 스키마**: `services/eximService.getExchangeRates()` 결과 그대로
+- **비고**: 외부 API 라 실패가 정상 경로에 있다. 실패는 500 으로 떨어지며 내부 메시지는
+  숨기고 서버 로그에만 남긴다.
+
+## stocks.js
+
+한국투자증권(KIS) 주가 조회. **기본적으로 꺼져 있다**(#150) — 계좌 개설 전이라
+`KIS_ENABLED=false` 이고, 서비스가 예외 대신 `enabled: false` 를 값으로 돌려준다.
+
+### GET /api/stocks/:ticker
+- **요청 파라미터**: `ticker` (path)
+- **응답 스키마**: `services/kisService.getStockPrice()` 결과 그대로
+- **비고**: 비활성 상태면 **503** 과 `{ "error": "주가 조회 기능은 아직 준비 중입니다." }`.
+  이 분기가 값으로 처리되므로 500 으로 떨어지는 것은 전부 예상 못한 오류다(FND-18).
+
+## guide.js
+
+앱 안에서 보는 사용 설명서. `docs/GUIDE.md` 를 그대로 내려준다.
+
+### GET /api/guide
+- **응답**: `text/markdown` (JSON 이 아니다)
+- **비고**: 문서가 없으면 **404** 와 `{ "error": "가이드 문서를 찾을 수 없습니다." }`.
+  경로는 `GUIDE_PATH` 환경변수로 바꿔 끼울 수 있다 — 404 경로를 테스트하려면 문서를
+  치워야 하는데, 테스트가 중간에 죽으면 저장소 파일이 사라진 채 남기 때문이다.

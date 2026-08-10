@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# 스테이징 이상 감지 (pre-commit 에서 호출)
+#
+# 커밋에 들어가면 안 되는 것이 스테이징됐는지 본다. 두 가지를 잡는다.
+#
+#   1. 심링크 (git mode 120000)
+#   2. 비정상적으로 큰 파일
+#
+# **왜 .gitignore 만으로 부족한가**: `node_modules/` 처럼 트레일링 슬래시가 붙은
+# 패턴은 디렉터리만 매칭하고 심링크는 통과시킨다. 그 사실을 알고 슬래시를 떼도,
+# 한 번 추적되기 시작한 파일에는 .gitignore 가 아예 적용되지 않는다. 그래서
+# 무시 규칙과 별개로 스테이징 시점에 막는 장치가 필요하다.
+#
+# 실제로 이 저장소에서 두 번 터졌다 — 워크트리마다 node_modules 를 심링크로
+# 걸어 쓰는 구조라, 디렉터리 단위로 스테이징하면(git add <dir>) 심링크가 딸려
+# 들어간다.
+#
+# 우회: git commit --no-verify
+set -uo pipefail
+
+MAX_BYTES=${STAGING_GUARD_MAX_BYTES:-2000000}   # 2MB
+PROBLEMS=0
+
+# --- 1. 심링크 ---
+# ls-files -s 의 첫 컬럼이 mode 다. 120000 이 심링크.
+SYMLINKS="$(git diff --cached --name-only --diff-filter=AM -z \
+  | xargs -0 -I{} sh -c 'git ls-files -s "{}" 2>/dev/null' \
+  | awk '$1=="120000"{ $1=""; $2=""; $3=""; sub(/^[ \t]+/,""); print }')"
+
+if [ -n "$SYMLINKS" ]; then
+  {
+    echo
+    echo "[staging-guard] ⛔ 심링크가 스테이징됐습니다."
+    echo
+    printf '%s\n' "$SYMLINKS" | sed 's/^/    /'
+    echo
+    echo "  심링크는 다른 환경에서 깨진 경로를 가리킵니다. 의존성 디렉터리를"
+    echo "  워크트리마다 심링크로 걸어 쓰는 경우 특히 커밋에 섞이기 쉽습니다."
+    echo
+    echo "  해제:"
+    printf '%s\n' "$SYMLINKS" | sed 's|^|    git restore --staged |'
+    echo
+    echo "  스테이징은 디렉터리가 아니라 파일 경로를 명시하세요."
+    echo "    git add client/src/lib/foo.js      (O)"
+    echo "    git add client                     (X — 심링크까지 딸려옵니다)"
+    echo
+  } >&2
+  PROBLEMS=1
+fi
+
+# --- 2. 큰 파일 ---
+BIG=""
+while IFS= read -r -d '' f; do
+  [ -f "$f" ] || continue
+  size=$(wc -c < "$f" 2>/dev/null || echo 0)
+  if [ "$size" -gt "$MAX_BYTES" ]; then
+    BIG="${BIG}    ${f} ($(( size / 1024 ))KB)
+"
+  fi
+done < <(git diff --cached --name-only --diff-filter=AM -z)
+
+if [ -n "$BIG" ]; then
+  {
+    echo
+    echo "[staging-guard] ⛔ 큰 파일이 스테이징됐습니다 (기준 $(( MAX_BYTES / 1024 ))KB)."
+    echo
+    printf '%s' "$BIG"
+    echo
+    echo "  빌드 산출물이나 의존성이 섞이지 않았는지 확인하세요."
+    echo "  의도한 것이면: STAGING_GUARD_MAX_BYTES=<바이트> git commit ..."
+    echo
+  } >&2
+  PROBLEMS=1
+fi
+
+if [ "$PROBLEMS" -ne 0 ]; then
+  echo "  (의도적으로 건너뛰려면: git commit --no-verify)" >&2
+  echo >&2
+  exit 1
+fi
+
+exit 0

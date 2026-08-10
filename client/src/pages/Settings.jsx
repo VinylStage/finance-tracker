@@ -1,41 +1,54 @@
-import React, { useState } from 'react';
+import { Link } from 'wouter';
+import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import CategoryBadge from '../components/CategoryBadge';
-import { categoryStyle } from '../lib/categoryStyle';
 import { TrustPanel, LastExportNote } from '../components/TrustPanel';
 import { recordExport } from '../lib/backupStatus';
+import { takeRecurringDraft } from '../lib/recurringDraft';
+import {
+  EMPTY_RULE_FORM, ruleToForm, formToBody, validateForm,
+  describeSchedule, endOfMonthNote, todayYMD,
+} from '../lib/recurringForm';
 import { resetOnboarding } from '../lib/onboarding';
 import { readTheme, saveTheme, toggleTheme, applyTheme } from '../lib/theme';
 import Icon from '../components/Icon';
 import AnchorNav from '../components/AnchorNav';
+import CardPolicySection from '../components/CardPolicySection';
+import CardProductSection from '../components/CardProductSection';
+import CardRemapSection from '../components/CardRemapSection';
+import CardBenefitSection from '../components/CardBenefitSection';
+import SettlementReclassifySection from '../components/SettlementReclassifySection';
+import BillingMonthBackfillSection from '../components/BillingMonthBackfillSection';
+import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
 const PAYMENT_TYPES = ['신용', '체크', '이체', '현금성', '간편결제'];
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 export default function Settings() {
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [appSettings, setAppSettings] = useState({ initial_balance: 0, monthly_income: 0 });
   const [recurringRules, setRecurringRules] = useState([]);
+  // 결제수단을 계좌에 잇는 선택지(#376).
+  const [accounts, setAccounts] = useState([]);
 
   const { loading, error, reload } = useLoader(async () => {
-    const [cats, pms, settings, rules] = await Promise.all([
+    const [cats, pms, settings, rules, accts] = await Promise.all([
       api.get('/api/categories'),
       api.get('/api/payment-methods'),
       api.get('/api/settings'),
       api.get('/api/recurring-rules?include_inactive=1'),
+      api.get('/api/accounts'),
     ]);
     setCategories(cats);
     setPaymentMethods(pms);
     setAppSettings(settings);
     setRecurringRules(rules);
+    setAccounts(accts.data || []);
   }, []);
 
   if (loading) return <div className="text-caption text-center py-20">로딩 중...</div>;
@@ -66,10 +79,50 @@ export default function Settings() {
             <CategorySection categories={categories} onChanged={reload} />
           </Anchor>
           <Anchor id="payment">
-            <PaymentMethodSection paymentMethods={paymentMethods} onChanged={reload} />
+            <PaymentMethodSection paymentMethods={paymentMethods} accounts={accounts} onChanged={reload} />
+          </Anchor>
+          {/* 보유 카드는 결제수단(카드사) 아래 카드 한 장 단위다(#302). 카드사
+              바로 다음에 두어 "카드사를 넣고 그 아래 카드를 넣는다" 순서가
+              화면에서도 그대로 읽히게 한다. */}
+          <Anchor id="card-product">
+            <CardProductSection paymentMethods={paymentMethods} />
+          </Anchor>
+          {/* 혜택은 카드를 등록한 **바로 다음**이다(#435). 카드만 등록하고 혜택을
+              안 넣으면 추천 계산이 모든 카드를 똑같이 봐서 M8 전체가 무의미해진다 —
+              등록 화면 바로 아래에 두어 이어지게 한다. */}
+          <Anchor id="card-benefit">
+            <CardBenefitSection categories={categories} />
+          </Anchor>
+          {/* 재매핑은 카드를 등록한 **다음** 할 일이다(#302 3단계). 등록 화면
+              바로 아래에 두어 "카드를 넣었으니 지난 거래도 붙이자" 가 이어지게 한다.
+              위에 두면 옮길 카드가 없는 상태에서 도구부터 만나게 된다. */}
+          <Anchor id="card-remap">
+            <CardRemapSection paymentMethods={paymentMethods} />
+          </Anchor>
+          {/* 결제방식 재분류는 재매핑 **다음**이다(#289). 어느 카드인지 먼저
+              붙여야 "이 카드로 쓴 건 전부 카드 사용" 이 성립한다. 순서를
+              뒤집으면 상품 미상인 채로 결제방식만 바꾸게 된다. */}
+          <Anchor id="settlement-reclassify">
+            <SettlementReclassifySection paymentMethods={paymentMethods} />
+          </Anchor>
+          {/* 청구월 소급은 그 **다음**이다. 청구월은 `card_product_id` 와
+              `settlement` 둘 다에서 나오므로, 카드를 붙이고 결제방식을 정한
+              뒤라야 채울 것이 제대로 잡힌다. 순서를 앞당기면 아직 즉시 결제인
+              거래가 대상에서 빠져 두 번 돌려야 한다. */}
+          <Anchor id="billing-backfill">
+            <BillingMonthBackfillSection />
+          </Anchor>
+          {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
+          <Anchor id="card-policy">
+            <CardPolicySection paymentMethods={paymentMethods} />
           </Anchor>
           <Anchor id="recurring">
             <RecurringRuleSection rules={recurringRules} categories={categories} paymentMethods={paymentMethods} onChanged={reload} />
+          </Anchor>
+          {/* 되돌리기는 여기서만 할 수 있다. 백업·복원 바로 앞에 두어, 되돌리려는
+              사람이 전체 복원까지 가기 전에 만나게 한다. */}
+          <Anchor id="history">
+            <HistorySection />
           </Anchor>
           <Anchor id="export">
             <ExportSection />
@@ -103,7 +156,14 @@ export const SETTINGS_SECTIONS = [
   { id: 'app', label: '기본 설정' },
   { id: 'category', label: '카테고리 관리' },
   { id: 'payment', label: '결제수단 관리' },
+  { id: 'card-product', label: '보유 카드' },
+  { id: 'card-benefit', label: '카드 혜택' },
+  { id: 'card-remap', label: '지난 거래 카드 지정' },
+  { id: 'settlement-reclassify', label: '결제방식 재분류' },
+  { id: 'billing-backfill', label: '청구월 소급' },
+  { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
+  { id: 'history', label: '변경 이력' },
   { id: 'export', label: '데이터 내보내기' },
   { id: 'settings-backup', label: '설정 백업 / 복원' },
   { id: 'tx-backup', label: '거래내역 백업 / 복원' },
@@ -264,10 +324,14 @@ function CategorySection({ categories, onChanged }) {
     }
   };
 
-  const handleReActivate = async (id) => {
+  // PUT /api/categories/:id 는 부분 갱신이 아니라 레코드 전체를 덮는다.
+  // major_type 을 빼고 보내면 서버가 400 으로 막는다(routes/categories.js:42) —
+  // is_active 만 보내던 동안 재활성화는 한 번도 성공한 적이 없고, 사용자에게는
+  // "major_type must be one of ..." 라는 영문 메시지만 떴다.
+  const handleReActivate = async (cat) => {
     if (!await confirm('재활성화하시겠습니까?')) return;
     try {
-      await api.put(`/api/categories/${id}`, { is_active: 1 });
+      await api.put(`/api/categories/${cat.id}`, { ...cat, is_active: 1 });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -302,7 +366,7 @@ function CategorySection({ categories, onChanged }) {
           <div>
             <label htmlFor="category-major-type" className="block text-xs text-caption mb-1">유형</label>
             <select id="category-major-type" className={inp} value={form.major_type} onChange={e => setForm(f => ({ ...f, major_type: e.target.value }))}>
-              {CATEGORY_TYPES.map(t => <option key={t} value={t}>{categoryStyle(t).icon} {t}</option>)}
+              {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div>
@@ -338,7 +402,7 @@ function CategorySection({ categories, onChanged }) {
                         value={editForm.major_type}
                         onChange={e => setEditForm(f => ({ ...f, major_type: e.target.value }))}
                       >
-                        {CATEGORY_TYPES.map(t => <option key={t} value={t}>{categoryStyle(t).icon} {t}</option>)}
+                        {CATEGORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </td>
                     <td className="px-3 py-2">
@@ -383,7 +447,7 @@ function CategorySection({ categories, onChanged }) {
                       {c.is_active ? (
                         <button onClick={() => handleDeactivate(c.id)} className="text-caption hover:text-loss-text text-xs">비활성화</button>
                       ) : (
-                        <button onClick={() => handleReActivate(c.id)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
+                        <button onClick={() => handleReActivate(c)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
                       )}
                     </td>
                   </>
@@ -397,41 +461,51 @@ function CategorySection({ categories, onChanged }) {
   );
 }
 
-const EMPTY_RULE_FORM = { category_id: '', merchant: '', amount: '', day_of_month: '1', payment_method_id: '', payment_style: '일시불', memo: '' };
 
 function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_RULE_FORM);
   const [showInactive, setShowInactive] = useState(false);
+  const [fromTransaction, setFromTransaction] = useState(false);
   const { confirm, alert } = useConfirm();
 
-  const startAdd = () => { setEditingId(null); setForm(EMPTY_RULE_FORM); setShowForm(true); };
+  // 거래내역에서 넘어온 초안이 있으면 그것으로 폼을 연다(#280). 한 번 읽고
+  // 지우므로, 그냥 설정을 열었을 때 지난 초안이 떠 있지 않다.
+  useEffect(() => {
+    const draft = takeRecurringDraft();
+    if (!draft) return;
+    setEditingId(null);
+    setForm(draft);
+    setFromTransaction(true);
+    setShowForm(true);
+  }, []);
+
+  const startAdd = () => {
+    setEditingId(null);
+    setFromTransaction(false);
+    setForm({ ...EMPTY_RULE_FORM, starts_on: todayYMD() });
+    setShowForm(true);
+  };
   const startEdit = (r) => {
     setEditingId(r.id);
-    setForm({
-      category_id: String(r.category_id), merchant: r.merchant, amount: String(r.amount),
-      day_of_month: String(r.day_of_month), payment_method_id: r.payment_method_id ? String(r.payment_method_id) : '',
-      payment_style: r.payment_style, memo: r.memo || '',
-    });
+    setFromTransaction(false);
+    setForm(ruleToForm(r));
     setShowForm(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const body = {
-      ...form,
-      category_id: Number(form.category_id),
-      amount: Number(form.amount),
-      day_of_month: Number(form.day_of_month),
-      payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
-    };
+    // 눌러 보고 나서 거부당하는 것보다 미리 알려주는 편이 낫다.
+    const invalid = validateForm(form);
+    if (invalid) { await alert(invalid); return; }
+    const body = formToBody(form);
     try {
       if (editingId) await api.put(`/api/recurring-rules/${editingId}`, body);
       else await api.post('/api/recurring-rules', body);
       setShowForm(false);
       setEditingId(null);
-      setForm(EMPTY_RULE_FORM);
+      setForm({ ...EMPTY_RULE_FORM, starts_on: todayYMD() });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -479,6 +553,11 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
         매달 금액이 완전히 고정된 지출(구독료 등)만 등록하세요. 통신비처럼 매달 금액이 달라지는 항목은 계속 직접 입력해야 합니다.
         등록해도 자동으로 거래가 생기지 않고, 대시보드의 "이번 달 반복 거래 확인"에서 매달 확인 후 생성합니다.
       </p>
+      {showForm && fromTransaction && (
+        <p className="text-xs text-brand-text bg-brand-tint border border-brand-tint-strong rounded-control px-3 py-2">
+          거래내역에서 값을 가져왔어요. 날짜는 복사하지 않았으니 시작일과 주기를 정해 주세요.
+        </p>
+      )}
       {showForm && (
         <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end bg-surface-page rounded-control p-3">
           <div>
@@ -497,8 +576,42 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
             <input id="rule-amount" type="number" className={inp} placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="rule-day-of-month" className="block text-xs text-caption mb-1">매월 며칠</label>
-            <input id="rule-day-of-month" type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
+            <label htmlFor="rule-freq" className="block text-xs text-caption mb-1">주기</label>
+            <select id="rule-freq" className={inp} value={form.freq} onChange={e => setForm(f => ({ ...f, freq: e.target.value }))}>
+              <option value="daily">일</option>
+              <option value="monthly">월</option>
+              <option value="yearly">연</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="rule-interval" className="block text-xs text-caption mb-1">간격</label>
+            <input id="rule-interval" type="number" min="1" className={`${inp} w-20`} value={form.interval} onChange={e => setForm(f => ({ ...f, interval: e.target.value }))} required />
+          </div>
+          {/* 주기에 따라 필요한 입력이 다르다. 일 단위에 발생일은 의미가 없다 —
+              안 쓰는 입력을 남겨 두면 사용자가 정한 값이 안 쓰인다. */}
+          {form.freq === 'yearly' && (
+            <div>
+              <label htmlFor="rule-month-of-year" className="block text-xs text-caption mb-1">몇 월</label>
+              <select id="rule-month-of-year" className={inp} value={form.month_of_year} onChange={e => setForm(f => ({ ...f, month_of_year: e.target.value }))} required>
+                <option value="">선택...</option>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
+              </select>
+            </div>
+          )}
+          {form.freq !== 'daily' && (
+            <div>
+              <label htmlFor="rule-day-of-month" className="block text-xs text-caption mb-1">며칠</label>
+              <input id="rule-day-of-month" type="number" min="1" max="31" className={`${inp} w-20`} value={form.day_of_month} onChange={e => setForm(f => ({ ...f, day_of_month: e.target.value }))} required />
+            </div>
+          )}
+          <div>
+            <label htmlFor="rule-starts-on" className="block text-xs text-caption mb-1">시작일</label>
+            <input id="rule-starts-on" type="date" className={inp} value={form.starts_on} onChange={e => setForm(f => ({ ...f, starts_on: e.target.value }))} required />
+          </div>
+          <div>
+            <label htmlFor="rule-ends-on" className="block text-xs text-caption mb-1">종료일</label>
+            <input id="rule-ends-on" type="date" className={inp} value={form.ends_on} onChange={e => setForm(f => ({ ...f, ends_on: e.target.value }))} />
+            <p className="text-xs text-caption mt-1">비우면 무기한</p>
           </div>
           <div>
             <label htmlFor="rule-payment-method" className="block text-xs text-caption mb-1">결제수단</label>
@@ -517,6 +630,10 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
           <button type="submit" className="btn-primary text-sm px-4 py-2 rounded-control transition-colors">
             {editingId ? '저장' : '추가'}
           </button>
+          {/* 안 알려주면 2월에 날짜가 다른 것을 버그로 읽는다(#278 A안). */}
+          {endOfMonthNote(form) && (
+            <p className="w-full text-xs text-caption">{endOfMonthNote(form)}</p>
+          )}
         </form>
       )}
       <div className="max-h-72 overflow-y-auto">
@@ -526,7 +643,7 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
               <th className="text-left px-3 py-2 text-caption font-medium">가맹점</th>
               <th className="text-left px-3 py-2 text-caption font-medium">카테고리</th>
               <th className="text-right px-3 py-2 text-caption font-medium">금액</th>
-              <th className="text-right px-3 py-2 text-caption font-medium">매월</th>
+              <th className="text-right px-3 py-2 text-caption font-medium">일정</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
@@ -537,8 +654,8 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
               <tr key={r.id} className={`border-b border-line-faint ${!r.is_active ? 'opacity-50' : ''}`}>
                 <td className="px-3 py-2 text-ink">{r.merchant}</td>
                 <td className="px-3 py-2 text-caption text-xs">{r.category_name}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmt(r.amount)}</td>
-                <td className="px-3 py-2 text-right text-xs text-caption">{r.day_of_month}일</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatWon(r.amount)}</td>
+                <td className="px-3 py-2 text-right text-xs text-caption">{describeSchedule(r)}</td>
                 <td className="px-3 py-2 text-right">
                   <button onClick={() => startEdit(r)} className="text-brand-text hover:text-brand-text text-xs mr-2">수정</button>
                   {r.is_active ? (
@@ -556,9 +673,12 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
   );
 }
 
-function PaymentMethodSection({ paymentMethods, onChanged }) {
+// 결제수단을 계좌에 잇는다(#376). 이 연결이 없으면 그 결제수단의 거래가 계좌
+// 잔액에 잡히지 않는다 — 컬럼은 있었지만 지정할 화면이 없어 잔액이 늘
+// 기준값 그대로였다.
+function PaymentMethodSection({ paymentMethods, accounts, onChanged }) {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', type: '신용' });
+  const [form, setForm] = useState({ name: '', type: '신용', account_id: '' });
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -568,7 +688,7 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
     e.preventDefault();
     try {
       await api.post('/api/payment-methods', form);
-      setForm({ name: '', type: '신용' });
+      setForm({ name: '', type: '신용', account_id: '' });
       setShowForm(false);
       onChanged();
     } catch (err) {
@@ -588,7 +708,9 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
 
   const handleEditStart = (pm) => {
     setEditing(pm.id);
-    setEditForm({ name: pm.name, type: pm.type });
+    // account_id 를 함께 담는다. 안 담으면 편집 저장이 기존 연결을 그대로
+    // 되돌려 보내긴 하지만, 화면에서 계좌를 바꿀 수 없게 된다.
+    setEditForm({ name: pm.name, type: pm.type, account_id: pm.account_id ?? '' });
   };
 
   const handleEditCancel = () => {
@@ -607,10 +729,14 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
     }
   };
 
-  const handleReActivate = async (id) => {
+  // 카테고리 쪽과 같은 이유다 — 이 PUT 도 전체 교체다. is_active 만 보내면
+  // name·type 이 NULL 로 덮이려다 스키마 제약에 걸려 500 이 난다. 즉 지금까지
+  // 재활성화는 한 번도 성공한 적이 없고, 사용자에게는 "처리 중 문제가
+  // 생겼습니다" 만 떴다.
+  const handleReActivate = async (pm) => {
     if (!await confirm('재활성화하시겠습니까?')) return;
     try {
-      await api.put(`/api/payment-methods/${id}`, { is_active: 1 });
+      await api.put(`/api/payment-methods/${pm.id}`, { ...pm, is_active: 1 });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -652,8 +778,20 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
               {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+          <div>
+            <label htmlFor="pm-account" className="block text-xs text-caption mb-1">연결 계좌</label>
+            <select id="pm-account" className={inp} value={form.account_id} onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}>
+              <option value="">연결 안 함</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
           <button type="submit" className="btn-primary text-sm px-4 py-2 rounded-control transition-colors">추가</button>
         </form>
+      )}
+      {accounts.length === 0 && (
+        <p className="text-xs text-caption">
+          계좌를 먼저 등록하면 결제수단을 계좌에 이을 수 있어요. 이어야 그 결제수단의 거래가 통장 잔액에 반영돼요.
+        </p>
       )}
       <div className="flex flex-wrap gap-2">
         {filteredPaymentMethods.map(p => (
@@ -675,6 +813,15 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
                 >
                   {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
+                <select
+                  aria-label={`${p.name} 연결 계좌 수정`}
+                  className="bg-surface border border-line-strong rounded px-2 py-1 text-xs"
+                  value={editForm.account_id}
+                  onChange={e => setEditForm(f => ({ ...f, account_id: e.target.value }))}
+                >
+                  <option value="">계좌 없음</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
                 <button onClick={() => handleEditSave(p)} className="text-xs text-brand-text hover:text-brand-text mr-1">저장</button>
                 <button onClick={handleEditCancel} className="text-xs text-caption hover:text-body">취소</button>
               </>
@@ -690,7 +837,7 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
                       <Icon name="close" size={14} />
                     </button>
                   ) : (
-                    <button onClick={() => handleReActivate(p.id)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="재활성화">
+                    <button onClick={() => handleReActivate(p)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="재활성화">
                       <Icon name="refresh" size={14} />
                     </button>
                   )}
@@ -700,6 +847,25 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+// 변경 이력은 화면이 따로 있다(#301). 설정은 앵커 섹션 구조라, 별도 라우트로
+// 나가는 입구가 여기 없으면 주소를 아는 사람만 쓸 수 있다.
+function HistorySection() {
+  return (
+    <div className="bg-surface shadow-card rounded-card p-4 space-y-3">
+      <h2 className="text-sm font-semibold text-body">변경 이력</h2>
+      <p className="text-xs text-caption">
+        추가·수정·삭제한 내역을 시간순으로 보고, 잘못 바꾼 것을 되돌립니다.
+      </p>
+      <Link
+        href="/settings/history"
+        className="inline-block text-sm text-brand-text border border-line hover:bg-surface-page rounded-control px-4 py-2 transition-colors"
+      >
+        변경 이력 보기
+      </Link>
     </div>
   );
 }
@@ -1118,7 +1284,9 @@ function DangerZoneSection() {
     setDeleting(true);
     setMessage('');
     try {
-      const data = await api.del('/api/transactions', { all: true });
+      // 서버가 확인 토큰을 요구한다(#363). 위의 입력 문구·대화상자와 별개로,
+      // API 를 직접 부르는 경로까지 막기 위한 것이다.
+      const data = await api.del('/api/transactions', { all: true, confirm: 'DELETE_ALL' });
       if (data.ok) {
         setMessage(`${data.deleted}건이 삭제되었습니다.`);
         setConfirmText('');

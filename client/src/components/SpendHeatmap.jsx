@@ -1,5 +1,6 @@
 import React from 'react';
 import { dailyBasis, heatClass, heatLabel } from '../lib/heatmap';
+import MonthCalendarGrid from './MonthCalendarGrid';
 
 // 일별 지출 강도를 달력 격자로 보여준다.
 //
@@ -15,24 +16,12 @@ export default function SpendHeatmap({ year, month, dailyTotals, monthlyBudgetTo
 
   const basis = dailyBasis(monthlyBudgetTotal, daysInMonth, recentDailyAverage);
 
-  // 1일이 무슨 요일인지에 따라 앞쪽 빈 칸 수가 정해진다.
-  const startDay = new Date(year, month - 1, 1).getDay();
-
-  const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-
-  // 빈 칸은 null 로 둔다. 격자 자리는 차지하되 아무것도 그리지 않는다.
-  const calendarDays = [];
-
-  for (let i = 0; i < startDay; i++) {
-    calendarDays.push(null);
-  }
-
-  for (let day = 1; day <= daysInMonth; day++) {
+  // 격자 계산은 MonthCalendarGrid 가 한다. 여기서는 그날의 금액만 꺼낸다.
+  const amountOf = (day) => {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const amount = dailyTotals[dateStr] || 0;
-    calendarDays.push({ day, amount });
-  }
-  
+    return dailyTotals[dateStr] || 0;
+  };
+
   // 범례 램프는 단계별 색을 직접 쓰지 않고, 그 단계에 해당하는 대표 금액을 heatClass 에
   // 넣어 얻는다. 색 결정을 한 곳(heatmap.js)에 묶어두기 위해서다 — 여기서 색을 따로
   // 나열하면 규칙이 두 군데로 갈라진다.
@@ -50,37 +39,20 @@ export default function SpendHeatmap({ year, month, dailyTotals, monthlyBudgetTo
   
   return (
     <div className="flex flex-col">
-      {/* 요일 머리글 */}
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {weekdays.map((day, index) => (
-          <div key={index} className="text-meta text-caption text-center">
-            {day}
-          </div>
-        ))}
-      </div>
-      
       {/* 셀 안의 날짜 숫자는 장식이 아니다. 색 단독으로 정보를 전달하지 않기 위한
           두 번째 채널이다(WCAG SC 1.4.1). title 의 배수 표기가 세 번째다. */}
-      <div className="grid grid-cols-7 gap-1 mb-3">
-        {calendarDays.map((cell, index) => (
-          <div
-            key={index}
-            className={`aspect-square ${
-              cell 
-                ? 'rounded-chip flex items-center justify-center text-meta tabular-nums ' + heatClass(cell.amount, basis)
-                : ''
-            }`}
-            title={
-              cell 
-                ? `${month}월 ${cell.day}일 · ${cell.amount.toLocaleString('ko-KR')}원 · ${heatLabel(cell.amount, basis)}`
-                : undefined
-            }
-          >
-            {cell ? cell.day : null}
-          </div>
-        ))}
-      </div>
-      
+      <MonthCalendarGrid
+        year={year}
+        month={month}
+        renderCell={(day) => day}
+        cellProps={(day) => ({
+          className:
+            'rounded-chip flex items-center justify-center text-meta tabular-nums ' +
+            heatClass(amountOf(day), basis),
+          title: `${month}월 ${day}일 · ${amountOf(day).toLocaleString('ko-KR')}원 · ${heatLabel(amountOf(day), basis)}`,
+        })}
+      />
+
       {/* 범례 */}
       <div className="flex flex-col items-start text-meta text-caption">
         <div className="flex items-center justify-between w-full mb-1">

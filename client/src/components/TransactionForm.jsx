@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
+import CardEstimateHint from './CardEstimateHint';
 import { localYMD, localYearMonth } from '../lib/date';
-import { categoryStyle } from '../lib/categoryStyle';
 import { remainingBudget, toSpentMap } from '../lib/quickEntry';
+import { formatWon } from '../lib/format';
+import { buildPaymentOptions, optionValue, parseSelection } from '../lib/paymentOptions';
 
 // 정본은 src/constants.js(백엔드, CommonJS)의 PAYMENT_STYLES.
 // 프런트(ESM/Vite)와 빌드 도구가 분리되어 있어 값을 공유하지 못하므로 수동 동기화 필요(#90).
@@ -14,13 +16,21 @@ const CONFIDENCE_STYLE = {
   '없음': 'bg-surface-sunken text-caption',
 };
 
-export default function TransactionForm({ initial, categories, paymentMethods, onSave, onCancel }) {
+// defaultDate 는 보고 있던 화면이 정해 준 날짜다(#304). 없으면 오늘을 쓴다.
+// 수정 모드(initial 있음)에서는 그 거래의 날짜가 이기므로 영향이 없다.
+//
+// **기본값일 뿐이다.** 사용자가 폼에서 날짜를 고치면 그 값이 유지된다.
+// cardProducts 는 기본값이 빈 배열이다. 카드를 한 장도 등록하지 않은 상태가
+// 정상이고(#302 1단계 이전의 모든 거래가 그렇다), 그때 결제수단 선택은 지금과
+// 똑같이 카드사 목록으로 보인다.
+export default function TransactionForm({ initial, categories, paymentMethods, cardProducts = [], onSave, onCancel, defaultDate }) {
   const today = localYMD();
   const [form, setForm] = useState({
-    date: today,
+    date: defaultDate || today,
     category_id: '',
     amount: '',
     payment_method_id: '',
+    card_product_id: '',
     payment_style: '일시불',
     merchant: '',
     memo: '',
@@ -29,6 +39,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       category_id: String(initial.category_id),
       amount: String(initial.amount),
       payment_method_id: String(initial.payment_method_id || ''),
+      card_product_id: String(initial.card_product_id || ''),
       payment_style: initial.payment_style,
       merchant: initial.merchant || '',
       memo: initial.memo || '',
@@ -54,6 +65,11 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
   }, []);
 
   const majorTypes = [...new Set(categories.map(c => c.major_type))];
+  // 수정 중인 거래가 가리키는 카드는 비활성이어도 선택지에 남긴다. 빼면 선택이
+  // 비고, 그대로 저장하면 그 지정이 지워진다(#410).
+  const paymentGroups = buildPaymentOptions(paymentMethods, cardProducts, {
+    keepCardProductId: form.card_product_id || null,
+  });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -105,12 +121,23 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
       amount: Number(form.amount),
       category_id: Number(form.category_id),
       payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
+      card_product_id: form.card_product_id ? Number(form.card_product_id) : null,
     });
+  };
+
+  // 카드사와 카드상품은 한 선택지에서 함께 정해진다 — 둘을 따로 고르게 하면
+  // 어긋난 짝이 저장될 수 있고, 사용자가 보기에도 같은 질문을 두 번 받는다.
+  const handlePaymentChange = (value) => {
+    const { payment_method_id, card_product_id } = parseSelection(value, cardProducts);
+    setForm(f => ({
+      ...f,
+      payment_method_id: payment_method_id === null ? '' : String(payment_method_id),
+      card_product_id: card_product_id === null ? '' : String(card_product_id),
+    }));
   };
 
   const selectedCategory = categories.find(c => String(c.id) === String(form.category_id));
   const budgetHint = remainingBudget(selectedCategory, spentMap);
-  const fmtWon = (n) => Number(n || 0).toLocaleString('ko-KR') + '원';
 
   const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
 
@@ -142,8 +169,11 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           </label>
           <select id="tx-category" className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)} required>
             <option value="">선택...</option>
+            {/* optgroup label 은 문자열만 받는다. 아이콘이 이모지에서 SVG 키로
+                바뀐 뒤 이 자리에 키가 그대로 노출됐다(`payments 수입`). 아이콘은
+                대분류를 나타내는 보조 채널이고 이름이 이미 함께 나오므로 뺀다. */}
             {majorTypes.map(mt => (
-              <optgroup key={mt} label={`${categoryStyle(mt).icon} ${mt}`}>
+              <optgroup key={mt} label={mt}>
                 {categories.filter(c => c.major_type === mt).map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -153,11 +183,11 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           {budgetHint.show && (
             <p className="mt-1.5 text-[11px] tabular-nums">
               {budgetHint.level === 'over' ? (
-                <span className="text-loss-text">이번달 예산 {fmtWon(budgetHint.over)} 초과</span>
+                <span className="text-loss-text">이번달 예산 {formatWon(budgetHint.over)} 초과</span>
               ) : budgetHint.level === 'caution' ? (
-                <span className="text-warn-text">이번달 {fmtWon(budgetHint.remaining)} 남음 · 주의</span>
+                <span className="text-warn-text">이번달 {formatWon(budgetHint.remaining)} 남음 · 주의</span>
               ) : (
-                <span className="text-caption">이번달 {fmtWon(budgetHint.remaining)} 남음</span>
+                <span className="text-caption">이번달 {formatWon(budgetHint.remaining)} 남음</span>
               )}
             </p>
           )}
@@ -165,10 +195,18 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
 
         <div>
           <label htmlFor="tx-payment-method" className="block text-xs text-caption mb-1">결제수단</label>
-          <select id="tx-payment-method" className={inp} value={form.payment_method_id} onChange={e => set('payment_method_id', e.target.value)}>
+          <select
+            id="tx-payment-method" className={inp}
+            value={optionValue(form)}
+            onChange={e => handlePaymentChange(e.target.value)}
+          >
             <option value="">선택...</option>
-            {paymentMethods.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+            {paymentGroups.map(g => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
@@ -212,6 +250,17 @@ export default function TransactionForm({ initial, categories, paymentMethods, o
           )}
         </div>
       </div>
+
+      {/* 카드 추천은 **가맹점까지 채운 뒤**에 둔다(#437). 금액만으로도 계산되지만
+          가맹점 지정 혜택이 걸리는지가 순위를 바꾸므로, 그 칸을 지나온 자리에서
+          보여줘야 사용자가 본 값이 실제로 적용될 값과 같다.
+
+          입력 흐름을 막지 않는 보조 정보다(#276) — 계산이 실패하면 조용히 사라진다. */}
+      <CardEstimateHint
+        amount={form.amount}
+        categoryId={form.category_id}
+        merchant={form.merchant}
+      />
 
       <div>
         <label htmlFor="tx-memo" className="block text-xs text-caption mb-1">메모</label>

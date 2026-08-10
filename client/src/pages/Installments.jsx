@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
+import DerivedTransactions from '../components/DerivedTransactions';
+import DuplicateCandidates from '../components/DuplicateCandidates';
+import InstallmentRegenerate from '../components/InstallmentRegenerate';
+import InstallmentBillingHint from '../components/InstallmentBillingHint';
+import InstallmentMonthsPicker from '../components/InstallmentMonthsPicker';
+import { useHashTarget } from '../hooks/useHashTarget';
+import { anchorId } from '../lib/derivedOrigin';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 const STATUS_FILTERS = ['진행중', '완료', '전체'];
 
@@ -15,24 +20,55 @@ export default function Installments() {
   const [items, setItems] = useState([]);
   const [thisMonthTotal, setThisMonthTotal] = useState(0);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [filter, setFilter] = useState('진행중');
   const [showForm, setShowForm] = useState(false);
+  const [openId, setOpenId] = useState(null);
+  // 청구 내역을 만든 뒤 목록을 다시 부르기 위한 값. 할부 id 별로 센다.
+  const [derivedReload, setDerivedReload] = useState({});
+  const [derivedCount, setDerivedCount] = useState({});
   const { confirm, alert } = useConfirm();
 
   const { loading, error, reload } = useLoader(async () => {
     const qs = filter === '전체' ? '' : `?status=${encodeURIComponent(filter)}`;
-    const [inst, pms] = await Promise.all([
+    const [inst, pms, cats] = await Promise.all([
       api.get(`/api/installments${qs}`),
       api.get('/api/payment-methods'),
+      api.get('/api/categories'),
     ]);
     setItems(inst.data || []);
     setThisMonthTotal(inst.this_month_total || 0);
     setPaymentMethods(pms);
+    setCategories(cats.data || cats || []);
   }, [filter]);
 
-  const handleComplete = async (id) => {
+  // 거래내역에서 넘어왔으면 그 할부를 펼쳐 보여준다(#270).
+  useHashTarget('installment', !loading, setOpenId);
+
+  // 완료 처리에 확인을 받는다(#295).
+  //
+  // 바로 아래 handleDelete 는 확인을 거치는데 완료는 안 거쳤다. 되돌릴 수 없다는
+  // 점에서는 둘이 같고, 기본 필터가 '진행중' 이라 목록에서 사라지는 것도 같다.
+  // 실제로 잘못 눌러 DB 를 직접 고쳐 복구한 사고가 있었다.
+  const handleComplete = async (it) => {
+    const ok = await confirm(
+      `「${it.merchant}」 할부를 완료로 표시할까요? 목록에서 사라지고, 청구 기간이 끝난 뒤에는 되돌릴 수 없어요.`,
+      { confirmLabel: '완료 처리' }
+    );
+    if (!ok) return;
     try {
-      await api.put(`/api/installments/${id}`, { status: '완료' });
+      await api.put(`/api/installments/${it.id}`, { status: '완료' });
+      reload();
+    } catch (err) {
+      await alert(err.message);
+    }
+  };
+
+  // 완료를 되돌린다(#295). 되는지 여부는 서버가 판정해 내려준다 — 화면이 날짜
+  // 계산을 다시 하면 스윕 조건과 어긋난다.
+  const handleReopen = async (it) => {
+    try {
+      await api.post(`/api/installments/${it.id}/reopen`, {});
       reload();
     } catch (err) {
       await alert(err.message);
@@ -74,10 +110,15 @@ export default function Installments() {
       {showForm && (
         <InstallmentForm
           paymentMethods={paymentMethods}
+          categories={categories}
           onSave={handleSave}
           onCancel={() => setShowForm(false)}
         />
       )}
+
+      {/* 중복 의심 거래는 목록 위에 둔다. 할부를 새로 등록한 직후가 가장 흔한
+          발견 시점이고, 아래로 내리면 스크롤해야 만난다(#269). */}
+      <DuplicateCandidates />
 
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
@@ -94,7 +135,7 @@ export default function Installments() {
           ))}
         </div>
         <p className="text-sm text-caption">
-          이번달 청구 합계: <span className="text-ink font-semibold">{fmt(thisMonthTotal)}</span>
+          이번달 청구 합계: <span className="text-ink font-semibold">{formatWon(thisMonthTotal)}</span>
         </p>
       </div>
 
@@ -121,13 +162,14 @@ export default function Installments() {
             </thead>
             <tbody>
               {items.map((it, i) => (
+                <React.Fragment key={it.id}>
                 <tr
-                  key={it.id}
-                  className={`border-b border-line-faint hover:bg-surface-page transition-colors ${i % 2 === 0 ? '' : 'bg-surface-page/50'}`}
+                  id={anchorId('installment', it.id)}
+                  className={`border-b border-line-faint hover:bg-surface-page transition-colors scroll-mt-6 ${i % 2 === 0 ? '' : 'bg-surface-page/50'} ${openId === it.id ? 'bg-brand-tint/40' : ''}`}
                 >
                   <td className="px-4 py-3 text-ink">{it.merchant}</td>
-                  <td className="px-4 py-3 text-right text-body tabular-nums">{fmt(it.total_amount)}</td>
-                  <td className="px-4 py-3 text-right text-ink tabular-nums">{fmt(it.monthly_amount)}</td>
+                  <td className="px-4 py-3 text-right text-body tabular-nums">{formatWon(it.total_amount)}</td>
+                  <td className="px-4 py-3 text-right text-ink tabular-nums">{formatWon(it.monthly_amount)}</td>
                   <td className="px-4 py-3 text-center text-caption">{it.billed_months}/{it.months}</td>
                   <td className="px-4 py-3 text-center text-caption">
                     {it.remaining_months > 0 ? `${it.remaining_months}개월` : '-'}
@@ -140,13 +182,39 @@ export default function Installments() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setOpenId(openId === it.id ? null : it.id)}
+                        aria-expanded={openId === it.id}
+                        className="text-caption hover:text-brand-text transition-colors text-xs"
+                      >
+                        청구 내역 {openId === it.id ? '▲' : '▼'}
+                      </button>
                       {it.status === '진행중' && (
                         <button
-                          onClick={() => handleComplete(it.id)}
+                          onClick={() => handleComplete(it)}
                           className="text-caption hover:text-brand-text transition-colors text-xs"
                         >
                           완료처리
                         </button>
+                      )}
+                      {it.status === '완료' && (
+                        it.can_reopen ? (
+                          <button
+                            onClick={() => handleReopen(it)}
+                            className="text-caption hover:text-brand-text transition-colors text-xs"
+                          >
+                            되돌리기
+                          </button>
+                        ) : (
+                          // 비활성 버튼 대신 사유를 그대로 적는다. 눌리지 않는
+                          // 버튼은 고장으로 읽히고 이유도 알려주지 않는다(#270 과 같은 기준).
+                          <span
+                            className="text-disabled text-xs"
+                            title={it.reopen_blocked_reason || ''}
+                          >
+                            되돌릴 수 없음
+                          </span>
+                        )
                       )}
                       <button
                         onClick={() => handleDelete(it.id)}
@@ -157,6 +225,26 @@ export default function Installments() {
                     </div>
                   </td>
                 </tr>
+                {openId === it.id && (
+                  <tr className="border-b border-line-faint bg-surface-page/30">
+                    <td colSpan={8} className="px-4">
+                      <DerivedTransactions
+                        kind="installment"
+                        id={it.id}
+                        reloadKey={derivedReload[it.id] || 0}
+                        onLoaded={(n) => setDerivedCount((prev) => (prev[it.id] === n ? prev : { ...prev, [it.id]: n }))}
+                      />
+                      {/* 마이그레이션이 기존 할부에 청구 내역을 자동으로 만들지
+                          않는다(ADR 0008). 사용자가 프리뷰를 보고 실행하는 자리다. */}
+                      <InstallmentRegenerate
+                        installment={it}
+                        hasDerived={(derivedCount[it.id] || 0) > 0}
+                        onDone={() => setDerivedReload((prev) => ({ ...prev, [it.id]: (prev[it.id] || 0) + 1 }))}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -166,7 +254,7 @@ export default function Installments() {
   );
 }
 
-function InstallmentForm({ paymentMethods, onSave, onCancel }) {
+function InstallmentForm({ paymentMethods, categories, onSave, onCancel }) {
   const today = localYMD();
   const thisMonth = today.slice(0, 7);
   const [form, setForm] = useState({
@@ -178,9 +266,59 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
     fee_per_month: '',
     payment_method_id: '',
     start_billing_month: thisMonth,
+    category_id: '',
   });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // 자동계산이 채운 값인지, 사용자가 고친 값인지 구분한다(#316).
+  // 한 번이라도 직접 고쳤으면 그 뒤로는 계산이 덮어쓰지 않는다 — 실제 청구서가
+  // 계산과 다른 경우가 있고, 그때 사용자가 실제 값을 못 넣으면 가계부가 틀린
+  // 값을 강제하게 된다.
+  const [touched, setTouched] = useState({ monthly_amount: false, fee_per_month: false, start_billing_month: false });
+  const [billingMonthInfo, setBillingMonthInfo] = useState(null);
+  const setTouchedField = (k, v) => {
+    setTouched(t => (t[k] ? t : { ...t, [k]: true }));
+    set(k, v);
+  };
+
+  // 청구 시작월을 구매일·카드 청구주기에서 계산해 기본값으로 채운다(#364).
+  //
+  // 지금까지는 '이번 달' 이 박혀 있었다. 7/28 구매인데 마감이 7/25 인 카드면
+  // 첫 청구는 9월이라 두 달 어긋난다 — 그리고 #269 의 파생 거래가 이 값을
+  // 그대로 써서 회차 전체가 잘못된 달에 쌓인다.
+  //
+  // 사용자가 직접 고치면 덮어쓰지 않는다. 월납부액 자동채움(#316)과 같은 규칙이다.
+  useEffect(() => {
+    if (!form.purchase_date) return undefined;
+    let alive = true;
+    (async () => {
+      try {
+        const qs = new URLSearchParams({ purchase_date: form.purchase_date });
+        if (form.payment_method_id) qs.set('payment_method_id', String(form.payment_method_id));
+        const res = await api.get(`/api/card-products/billing-month?${qs}`);
+        if (!alive) return;
+        setBillingMonthInfo(res.data);
+        setForm(f => (touched.start_billing_month
+          ? f
+          : { ...f, start_billing_month: res.data.billing_month }));
+      } catch {
+        // 계산이 실패해도 입력은 막지 않는다. 기존 값을 그대로 둔다.
+        if (alive) setBillingMonthInfo(null);
+      }
+    })();
+    return () => { alive = false; };
+    // touched 를 의존성에 넣으면 사용자가 고치는 순간 다시 계산이 돈다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.purchase_date, form.payment_method_id]);
+
+  const applyEstimate = (est) => {
+    setForm(f => ({
+      ...f,
+      monthly_amount: touched.monthly_amount ? f.monthly_amount : String(est.monthly_amount),
+      fee_per_month: touched.fee_per_month ? f.fee_per_month : String(est.fee_per_month),
+    }));
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -191,6 +329,7 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
       monthly_amount: Number(form.monthly_amount),
       fee_per_month: form.fee_per_month ? Number(form.fee_per_month) : 0,
       payment_method_id: form.payment_method_id ? Number(form.payment_method_id) : null,
+      category_id: form.category_id ? Number(form.category_id) : null,
     });
   };
 
@@ -214,15 +353,22 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
         </div>
         <div>
           <label htmlFor="inst-months" className="block text-xs text-caption mb-1">개월수 *</label>
-          <input id="inst-months" type="number" min="2" className={inp} value={form.months} onChange={e => set('months', e.target.value)} required />
+          <InstallmentMonthsPicker
+            value={form.months}
+            onChange={(v) => set('months', v)}
+            paymentMethodId={form.payment_method_id}
+            categoryId={form.category_id}
+            purchaseDate={form.purchase_date}
+            inputClassName={inp}
+          />
         </div>
         <div>
           <label htmlFor="inst-monthly-amount" className="block text-xs text-caption mb-1">월납부액 (원) *</label>
-          <input id="inst-monthly-amount" type="number" className={inp} value={form.monthly_amount} onChange={e => set('monthly_amount', e.target.value)} required />
+          <input id="inst-monthly-amount" type="number" className={inp} value={form.monthly_amount} onChange={e => setTouchedField('monthly_amount', e.target.value)} required />
         </div>
         <div>
           <label htmlFor="inst-fee-per-month" className="block text-xs text-caption mb-1">월 수수료 (원)</label>
-          <input id="inst-fee-per-month" type="number" className={inp} placeholder="0" value={form.fee_per_month} onChange={e => set('fee_per_month', e.target.value)} />
+          <input id="inst-fee-per-month" type="number" className={inp} placeholder="0" value={form.fee_per_month} onChange={e => setTouchedField('fee_per_month', e.target.value)} />
         </div>
         <div>
           <label htmlFor="inst-payment-method" className="block text-xs text-caption mb-1">카드</label>
@@ -232,10 +378,45 @@ function InstallmentForm({ paymentMethods, onSave, onCancel }) {
           </select>
         </div>
         <div>
+          {/* 가맹점 카테고리. 정책을 고르는 기준이다(#316) — 같은 카드라도
+              "온라인쇼핑 6개월 무이자" 처럼 카테고리별 예외가 있다(#315).
+              고르지 않으면 그 카드의 기본 정책만 본다. 모르는 것을 아무
+              카테고리로 채우면 엉뚱한 예외 정책이 걸린다. */}
+          <label htmlFor="inst-category" className="block text-xs text-caption mb-1">가맹점 분류</label>
+          <select id="inst-category" className={inp} value={form.category_id} onChange={e => set('category_id', e.target.value)}>
+            <option value="">선택 안 함 (기본 정책)</option>
+            {categories.filter(c => c.major_type !== '수입').map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label htmlFor="inst-start-billing-month" className="block text-xs text-caption mb-1">청구 시작월 *</label>
-          <input id="inst-start-billing-month" type="month" className={inp} value={form.start_billing_month} onChange={e => set('start_billing_month', e.target.value)} required />
+          <input id="inst-start-billing-month" type="month" className={inp} value={form.start_billing_month} onChange={e => setTouchedField('start_billing_month', e.target.value)} required />
+          {billingMonthInfo && !touched.start_billing_month && (
+            <p className="text-[11px] text-caption mt-1">
+              {billingMonthInfo.resolved
+                ? `${billingMonthInfo.card_product?.product_name ?? '카드'} 청구주기로 계산했어요.`
+                : billingMonthInfo.ambiguous
+                  ? '이 카드에 청구주기가 다른 상품이 여럿이라 구매일의 달로 뒀어요. 실제 청구월을 확인해 주세요.'
+                  : '카드 청구주기를 몰라 구매일의 달로 뒀어요. 실제 청구월을 확인해 주세요.'}
+            </p>
+          )}
         </div>
       </div>
+
+      <InstallmentBillingHint
+        totalAmount={form.total_amount}
+        months={form.months}
+        paymentMethodId={form.payment_method_id}
+        purchaseDate={form.purchase_date}
+        startBillingMonth={form.start_billing_month}
+        categoryId={form.category_id}
+        monthlyAmount={form.monthly_amount}
+        feePerMonth={form.fee_per_month}
+        onEstimate={applyEstimate}
+      />
+
       <div className="flex gap-3 pt-1">
         <button type="submit" className="btn-primary text-sm px-5 py-2 rounded-control transition-colors">
           등록

@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError, errMsg } = require('../utils/errors');
 const { asInt } = require('../utils/validate');
+const { syncRevolvingDerived, deleteDerivedFor, derivedRowsFor } = require('../services/derivedTransactions');
 
 // FND-06(감사): 숫자 필드를 검증 없이 산술에 그대로 썼다. JSON 문자열이
 // 들어오면 `+`가 문자열 연결로 동작해(예: "100"+"200" → "100200") 그 결과가
@@ -59,11 +60,21 @@ router.post('/', (req, res) => {
     const paidAmount = asInt(paid_amount);
     const interest = req.body.interest !== undefined ? asInt(req.body.interest) : 0;
     const next_carried_balance = carried_balance + new_charge - paidAmount + interest;
-    const result = db.prepare(`
-      INSERT INTO revolving_history (month, payment_method_id, carried_balance, new_charge, paid_amount, interest, next_carried_balance)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(month, paymentMethodId, carried_balance, new_charge, paidAmount, interest, next_carried_balance);
-    res.status(201).json({ id: result.lastInsertRowid, ok: true });
+
+    // 이력 등록과 수수료 거래 생성이 한 덩어리다(#269). 수수료만 남거나
+    // 이력만 남는 중간 상태가 없어야 한다.
+    let newId;
+    let derived = { created: 0 };
+    db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO revolving_history (month, payment_method_id, carried_balance, new_charge, paid_amount, interest, next_carried_balance)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(month, paymentMethodId, carried_balance, new_charge, paidAmount, interest, next_carried_balance);
+      newId = Number(result.lastInsertRowid);
+      derived = syncRevolvingDerived(db, newId);
+    })();
+
+    res.status(201).json({ id: newId, ok: true, derived });
   } catch (e) {
     if (errMsg(e).includes('UNIQUE')) {
       return res.status(409).json({ error: '해당 월/카드 조합이 이미 등록되어 있습니다.' });
@@ -87,14 +98,21 @@ router.put('/:id', (req, res) => {
     const paid_amount = asInt(merged.paid_amount);
     const interest = asInt(merged.interest);
     const next_carried_balance = carried_balance + new_charge - paid_amount + interest;
-    db.prepare(`
-      UPDATE revolving_history SET month=?, payment_method_id=?, carried_balance=?, new_charge=?, paid_amount=?, interest=?, next_carried_balance=?
-      WHERE id=?
-    `).run(
-      merged.month, payment_method_id, carried_balance, new_charge,
-      paid_amount, interest, next_carried_balance, req.params.id
-    );
-    res.json({ ok: true });
+    // 수수료가 바뀌면 파생 거래도 따라가야 한다. 영향 범위가 한 달치 한 건이라
+    // 프리뷰를 요구하지 않는다(ADR 0008 이 제외한 한 건짜리 CRUD).
+    let derived = { created: 0, deleted: 0 };
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE revolving_history SET month=?, payment_method_id=?, carried_balance=?, new_charge=?, paid_amount=?, interest=?, next_carried_balance=?
+        WHERE id=?
+      `).run(
+        merged.month, payment_method_id, carried_balance, new_charge,
+        paid_amount, interest, next_carried_balance, req.params.id
+      );
+      derived = syncRevolvingDerived(db, Number(req.params.id));
+    })();
+
+    res.json({ ok: true, derived });
   } catch (e) {
     if (errMsg(e).includes('UNIQUE')) {
       return res.status(409).json({ error: '해당 월/카드 조합이 이미 등록되어 있습니다.' });
@@ -103,10 +121,28 @@ router.put('/:id', (req, res) => {
   }
 });
 
+// GET /api/revolving/:id/derived — 이 이력이 만든 거래(#270).
+router.get('/:id/derived', (req, res) => {
+  try {
+    res.json({ data: derivedRowsFor(db, 'revolving_history', Number(req.params.id)) });
+  } catch (e) {
+    serverError(res, e, 'revolving');
+  }
+});
+
 // DELETE /api/revolving/:id
+// 파생 수수료 거래를 같은 트랜잭션에서 지운다 — 고아 행 방지.
 router.delete('/:id', (req, res) => {
-  db.prepare('DELETE FROM revolving_history WHERE id=?').run(req.params.id);
-  res.json({ ok: true });
+  try {
+    let deleted = 0;
+    db.transaction(() => {
+      deleted = deleteDerivedFor(db, 'revolving_history', Number(req.params.id));
+      db.prepare('DELETE FROM revolving_history WHERE id=?').run(req.params.id);
+    })();
+    res.json({ ok: true, derived: { deleted } });
+  } catch (e) {
+    serverError(res, e, 'revolving');
+  }
 });
 
 module.exports = router;

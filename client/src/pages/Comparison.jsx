@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { localYMD } from '../lib/date';
 import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
+import { formatWon } from '../lib/format';
 
 const TABS = [
   { key: 'daily', label: '일별' },
@@ -15,9 +16,6 @@ const TABS = [
   { key: 'yearly', label: '연도별' },
 ];
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 function shortFmt(n) {
   const v = Number(n || 0);
@@ -33,9 +31,9 @@ function StatCard({ label, value, diff, pct, invert }) {
   return (
     <div className="bg-surface shadow-card rounded-card p-5 border border-line">
       <p className="text-caption text-sm mb-1">{label}</p>
-      <p className="text-2xl font-bold text-ink">{fmt(value)}</p>
+      <p className="text-2xl font-bold text-ink">{formatWon(value)}</p>
       <p className={`text-xs mt-1 ${diffColor}`}>
-        전 기간 대비 {diff >= 0 ? '+' : ''}{fmt(diff)}
+        전 기간 대비 {diff >= 0 ? '+' : ''}{formatWon(diff)}
         {pct !== null && pct !== undefined && ` (${pct >= 0 ? '+' : ''}${pct}%)`}
       </p>
     </div>
@@ -64,7 +62,7 @@ function OverlayChart({ data, xKey, currentKey, previousKey, currentName, previo
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
         <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
-        <Tooltip formatter={(v) => fmt(v)} />
+        <Tooltip formatter={(v) => formatWon(v)} />
         <Area type="monotone" dataKey={currentKey} name={currentName} stroke={color} fill={`url(#${gradientId})`} strokeWidth={2} connectNulls />
         <Line type="monotone" dataKey={previousKey} name={previousName} stroke="var(--color-caption)" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
       </ComposedChart>

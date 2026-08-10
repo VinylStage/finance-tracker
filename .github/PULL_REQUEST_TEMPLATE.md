@@ -15,4 +15,6 @@ closes #
 - [ ] 브라우저 콘솔 에러 없음
 - [ ] 연관 이슈의 인수 기준 전부 충족
 - [ ] 데이터 파일(*.db, *.xlsx) 커밋 안 됨
-- [ ] 라우트/페이지를 추가·삭제했다면 `docs/ARCHITECTURE.md` · `docs/ROADMAP.md` · `docs/audit/IMPLEMENTATION_AUDIT.md`의 목록도 같이 갱신함(FND-17 재발 방지)
+- [ ] 라우트/페이지를 추가·삭제했다면 `npm run docs:inventory` 를 돌려 `docs/ARCHITECTURE.md` 목록을 갱신함 (FND-17 재발 방지 — 체크박스만으로는 세 번 놓쳤다)
+- [ ] **사용자가 쓰는 기능을 넣거나 바꿨다면 `docs/GUIDE.md` 를 같이 갱신함** — 쓰는 법이 어디에도 없으면 만든 적 없는 것과 같다 (#490: 13일 방치 · 주요 기능 9개 설명 없음)
+  - 해당 없으면 그대로 두고 넘어간다. 내부 리팩터·테스트·CI 는 대상이 아니다

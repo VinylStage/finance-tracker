@@ -3,7 +3,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { numericBody, asInt } = require('../src/utils/validate');
+const { numericBody, asInt, toIdList } = require('../src/utils/validate');
 
 const ROOT = path.join(__dirname, '..');
 const ROUTES_DIR = path.join(ROOT, 'src/routes');
@@ -24,10 +24,23 @@ function collectDeclarations() {
 }
 
 const EXPECTED = [
+  { file: 'accounts.js', method: 'POST', routePath: '/', fields: ['opening_balance', 'credit_limit'] },
+  { file: 'accounts.js', method: 'PUT', routePath: '/:id', fields: ['opening_balance', 'credit_limit', 'is_active'] },
+  { file: 'billingMonth.js', method: 'POST', routePath: '/backfill/preview', fields: ['card_product_id'] },
+  { file: 'billingMonth.js', method: 'POST', routePath: '/backfill', fields: ['card_product_id'] },
+  { file: 'cardBenefits.js', method: 'POST', routePath: '/', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
+  { file: 'cardBenefits.js', method: 'PUT', routePath: '/:id', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
+  { file: 'cardPolicies.js', method: 'POST', routePath: '/range', fields: ['payment_method_id', 'from_month', 'to_month', 'free_from_sequence', 'category_id'] },
+  { file: 'cardProducts.js', method: 'POST', routePath: '/remap/preview', fields: ['card_product_id', 'min_amount', 'max_amount'] },
+  { file: 'cardProducts.js', method: 'POST', routePath: '/remap', fields: ['card_product_id', 'min_amount', 'max_amount'] },
+  { file: 'cardProducts.js', method: 'POST', routePath: '/', fields: ['payment_method_id', 'annual_fee', 'prev_month_threshold', 'billing_cycle_day', 'statement_close_day'] },
+  { file: 'cardProducts.js', method: 'PUT', routePath: '/:id', fields: ['payment_method_id', 'annual_fee', 'prev_month_threshold', 'billing_cycle_day', 'statement_close_day'] },
   { file: 'categories.js', method: 'POST', routePath: '/', fields: ['monthly_budget'] },
   { file: 'categories.js', method: 'PUT', routePath: '/:id', fields: ['monthly_budget', 'is_active'] },
-  { file: 'debts.js', method: 'POST', routePath: '/', fields: ['balance', 'annual_rate'] },
-  { file: 'debts.js', method: 'POST', routePath: '/:id/interest', fields: ['rate', 'interest_amount'] },
+  { file: 'debts.js', method: 'POST', routePath: '/', fields: ['balance', 'credit_limit', 'compounds', 'interest_day'] },
+  { file: 'debts.js', method: 'POST', routePath: '/:id/interest', fields: ['interest_amount'] },
+  { file: 'debts.js', method: 'POST', routePath: '/:id/repayments', fields: ['amount', 'principal_portion', 'interest_portion'] },
+  { file: 'installments.js', method: 'POST', routePath: '/billing-estimate', fields: ['total_amount', 'months', 'payment_method_id', 'category_id'] },
   { file: 'installments.js', method: 'POST', routePath: '/', fields: ['total_amount', 'months', 'monthly_amount', 'fee_per_month', 'payment_method_id'] },
   { file: 'paymentMethods.js', method: 'PUT', routePath: '/:id', fields: ['is_active'] },
   { file: 'recurringRules.js', method: 'PUT', routePath: '/:id', fields: ['is_active'] },
@@ -118,5 +131,41 @@ describe('numericBody validation declarations', () => {
     assert.strictEqual(asInt(true), null);
     assert.strictEqual(asInt([]), null);
     assert.strictEqual(asInt({}), null);
+  });
+});
+
+// id 목록 강제변환 — `ids.map(Number)` 이 만들던 구멍(2026-08-06 실측).
+//
+// `Number(true)` 는 `1`, `Number([2])` 는 `2`, `Number(null)` 은 `0` 이고 셋 다
+// `Number.isInteger` 를 통과한다. `DELETE /api/transactions` 가 그 목록을 그대로
+// `WHERE id IN (...)` 에 넣어서, `{ ids: [true] }` 로 부르면 **1번 거래가 지워지고
+// 200 이 돌아왔다.**
+describe('toIdList', () => {
+  test('강제변환으로 id 를 만들어내지 않는다', () => {
+    for (const bad of [true, false, null, undefined, '', ' ', [], [2], {}, '어제', NaN]) {
+      assert.deepStrictEqual(
+        toIdList([bad]), [],
+        `${JSON.stringify(bad)} 가 id 로 통과했다`
+      );
+    }
+  });
+
+  test('숫자와 숫자 문자열은 통과한다', () => {
+    assert.deepStrictEqual(toIdList([1, 2, 3]), [1, 2, 3]);
+    assert.deepStrictEqual(toIdList(['4', ' 5 ']), [4, 5]);
+    assert.deepStrictEqual(toIdList([7, '7']), [7], '중복은 하나로 합친다');
+  });
+
+  test('0 이하는 뺀다 — 매칭은 안 되지만 판정을 흐린다', () => {
+    // 통과시키면 "하나라도 유효하면 진행" 판정이 잘못 서서, 아무것도 안 지운
+    // 요청이 성공(200 deleted:0)으로 보인다. 사용자는 지워진 줄 안다.
+    assert.deepStrictEqual(toIdList([0, -1, -99]), []);
+    assert.deepStrictEqual(toIdList([0, 5]), [5]);
+  });
+
+  test('배열이 아니면 빈 목록', () => {
+    for (const v of [undefined, null, 'ids', 5, {}]) {
+      assert.deepStrictEqual(toIdList(v), []);
+    }
   });
 });

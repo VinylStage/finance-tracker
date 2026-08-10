@@ -1,9 +1,7 @@
 import React from 'react';
 import { savingsProgress, MILESTONES } from '../lib/savingsProgress';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // goal-gradient effect(Kivetz et al. 2006): 목표에 가까워질수록 동기가 강해진다.
 // 그래서 "38%" 가 아니라 "820,000원 남음" 을 주 정보로 올린다. 퍼센트는 보조로 내린다.
@@ -21,7 +19,7 @@ export default function SavingsGoalBar({ product, today }) {
     <div className="min-w-[9rem]">
       <div className="flex items-baseline justify-between gap-2">
         <span className={`text-sm font-semibold tabular-nums ${done ? 'text-goal-text' : 'text-ink'}`}>
-          {done ? '목표 달성' : `${fmt(p.remaining)} 남음`}
+          {done ? '목표 달성' : `${formatWon(p.remaining)} 남음`}
         </span>
         <span className="text-[10px] text-caption tabular-nums shrink-0">{p.barPct}%</span>
       </div>
@@ -48,7 +46,7 @@ export default function SavingsGoalBar({ product, today }) {
 
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className="text-[10px] text-caption tabular-nums">
-          {p.paidMonths}/{p.totalMonths}회 · {fmt(p.contributed)}
+          {p.paidMonths}/{p.totalMonths}회 · {formatWon(p.contributed)}
         </span>
         {p.milestone !== null && !done && (
           <span className="shrink-0 rounded-pill bg-goal-tint px-1.5 py-0.5 text-[10px] font-medium text-goal-text">

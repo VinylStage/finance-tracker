@@ -19,6 +19,7 @@ export const NAV_GROUPS = [
     children: [
       { label: '기간비교', path: '/analysis/comparison' },
       { label: '시뮬레이터', path: '/analysis/simulator' },
+      { label: '카드', path: '/analysis/cards' },
     ],
   },
   {
@@ -27,6 +28,9 @@ export const NAV_GROUPS = [
     path: '/assets',
     icon: 'account_balance',
     children: [
+      // 통장 잔액을 맨 앞에 둔다(#291). 할부·부채는 "얼마를 갚아야 하나" 이고
+      // 통장은 "지금 얼마 있나" 다. 후자가 앞의 것들을 판단하는 기준이 된다.
+      { label: '통장', path: '/assets/accounts' },
       { label: '할부', path: '/assets/installments' },
       { label: '리볼빙', path: '/assets/revolving' },
       { label: '부채', path: '/assets/debts' },

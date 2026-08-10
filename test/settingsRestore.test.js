@@ -1,43 +1,18 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const { startTestServer } = require('./helpers/testServer');
 
 const PORT = 34590; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-
-let serverOutput = '';
+let server;
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
+  // 기존 before 안에 있던 나머지 준비 작업은 이 아래에 그대로 남긴다
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 test('FND-03: confirm 토큰 없으면 400', async () => {
@@ -110,4 +85,40 @@ test('FND-03: 백업에 없는 기존 카테고리는 삭제되지 않고 남아
   const afterResp = await fetch(`${BASE}/api/categories?include_inactive=1`);
   const after = await afterResp.json();
   assert.strictEqual(after.length, totalBefore, '백업에 없다고 기존 카테고리가 삭제되면 안 됨');
+});
+
+// 복원은 덮어쓰기다. 확인 문구가 맞아도 **내용이 비어 있으면 거부**해야 하는데
+// 그 분기가 비어 있었다. 빈 페이로드가 통과하면 기존 설정이 지워진 채로 아무것도
+// 안 들어온다.
+test('K-1. 확인 문구가 맞아도 복원할 내용이 없으면 400 이다', async () => {
+  const cases = [
+    { name: '완전히 빈 본문', body: { confirm: 'OVERWRITE_SETTINGS' } },
+    { name: '엉뚱한 키만', body: { confirm: 'OVERWRITE_SETTINGS', 없는키: [1, 2] } },
+  ];
+  for (const c of cases) {
+    const r = await fetch(`${BASE}/api/export/settings/restore`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(c.body),
+    });
+    const parsed = await r.json();
+    assert.strictEqual(r.status, 400, `${c.name}: ${JSON.stringify(parsed)}`);
+    assert.ok(parsed.error, `${c.name}: 거부 사유가 없다`);
+  }
+});
+
+test('K-2. 확인 문구가 틀리면 400 이고 설정이 안 바뀐다', async () => {
+  const before = await (await fetch(`${BASE}/api/categories`)).json();
+  const beforeCount = (Array.isArray(before) ? before : before.data).length;
+
+  for (const confirm of [undefined, '', 'overwrite_settings', 'YES']) {
+    const r = await fetch(`${BASE}/api/export/settings/restore`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm, categories: [{ name: '침입', major_type: '선택지출' }] }),
+    });
+    assert.strictEqual(r.status, 400, `confirm=${JSON.stringify(confirm)} 가 통과했다`);
+  }
+
+  const after = await (await fetch(`${BASE}/api/categories`)).json();
+  const afterCount = (Array.isArray(after) ? after : after.data).length;
+  assert.strictEqual(afterCount, beforeCount, '거부됐는데 카테고리가 바뀌었다');
 });

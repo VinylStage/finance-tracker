@@ -1,48 +1,22 @@
-const { test, before, after } = require('node:test');
-const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
-
+// 서버 기동은 공용 헬퍼가 맡는다(#379). 조기 종료를 즉시 감지한다.
 // FND-05(감사): /api/installments의 this_month_total과
 // /api/transactions/summary/dashboard의 installmentsDue가 같은 DB 상태에서
 // 서로 다른 값을 반환했다(전자는 청구 기간 종료를 반영하지 않아 종료된 할부까지
 // 계속 합산). 이 파일은 두 엔드포인트가 항상 일치하는지 확인한다.
+const { test, before, after } = require('node:test');
+const assert = require('node:assert');
+const { startTestServer } = require('./helpers/testServer');
 
 const PORT = 34589; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-
-let serverOutput = '';
+let server;
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 test('FND-05: 감사 PoC — 종료된 할부가 있어도 /api/installments와 대시보드가 같은 값을 반환', async () => {

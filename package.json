@@ -11,7 +11,12 @@
     "build": "cd client && npm run build",
     "test": "node --test",
     "test:coverage": "c8 --all --src src --reporter=text --reporter=html --check-coverage --lines 80 --branches 75 --functions 85 --statements 80 node --test",
-    "perf:baseline": "npm run build && node scripts/lighthouse-baseline.mjs"
+    "perf:baseline": "npm run build && node scripts/lighthouse-baseline.mjs",
+    "lint": "eslint .",
+    "docs:inventory": "node scripts/gen-inventory.js",
+    "docs:inventory:check": "node scripts/gen-inventory.js --check",
+    "docs:check": "node scripts/check-docs.js",
+    "test:ports": "node scripts/check-test-ports.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.0",
@@ -25,6 +30,9 @@
   "devDependencies": {
     "c8": "^12.0.0",
     "chrome-launcher": "^1.2.1",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.9.0",
     "lighthouse": "^13.4.1"
   }
 }

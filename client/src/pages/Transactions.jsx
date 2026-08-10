@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useLocation } from 'wouter';
 import TransactionList from '../components/TransactionList';
 import TransactionForm from '../components/TransactionForm';
 import Modal from '../components/Modal';
@@ -8,17 +9,84 @@ import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
 import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
+import TransactionCalendar from '../components/TransactionCalendar';
+import { bucketByDay } from '../lib/dailyBuckets';
+import { defaultTxDate } from '../lib/defaultTxDate';
+import UndoSnackbar from '../components/UndoSnackbar';
+import { formFromTransaction } from '../lib/recurringForm';
+import { putRecurringDraft } from '../lib/recurringDraft';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 const today = new Date();
 const CURRENT_YEAR = String(today.getFullYear());
 const CURRENT_MONTH = `${CURRENT_YEAR}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+const CURRENT_DATE = `${CURRENT_MONTH}-${String(today.getDate()).padStart(2, '0')}`;
 
 const EMPTY_FILTERS = { merchant: '', memo: '', minAmount: '', maxAmount: '', paymentMethodId: '' };
 const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
+
+// 달력뷰의 뷰 모드와 보고 있는 달은 **이 화면의 상태**다. 대시보드의 기간
+// 필터(#272)와 공유하지 않는다 — 거래내역에서 7월을 보다가 대시보드로 돌아갔을 때
+// 보던 달이 바뀌어 있으면 안 된다. 키에 tx 접두를 붙여 다른 화면과 겹치지 않게 한다.
+const VIEW_KEY = 'txView';
+const MONTH_KEY = 'txMonth';
+
+// URL 이 정본이지만, 화면을 떠났다 돌아오면 URL 은 초기화된다(네비게이션 링크가
+// 쿼리를 들고 가지 않는다). 그때 마지막으로 보던 뷰를 되살리려고 세션에도 남긴다.
+// 세션 저장소라 탭을 닫으면 사라진다 — 영구 설정이 아니라 "방금 보던 상태"다.
+const STORE_KEY = 'tx.view';
+
+function readStore() {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(STORE_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function readViewParams() {
+  if (typeof window === 'undefined') return { view: 'list', month: CURRENT_MONTH };
+  const q = new URLSearchParams(window.location.search);
+  // URL 에 명시된 값이 세션 기억보다 우선한다 — 링크를 받아 연 사람이 그 링크대로 봐야 한다.
+  if (q.has(VIEW_KEY)) {
+    return {
+      view: q.get(VIEW_KEY) === 'calendar' ? 'calendar' : 'list',
+      month: /^\d{4}-\d{2}$/.test(q.get(MONTH_KEY) || '') ? q.get(MONTH_KEY) : CURRENT_MONTH,
+    };
+  }
+  const saved = readStore();
+  if (saved && saved.view === 'calendar' && /^\d{4}-\d{2}$/.test(saved.month || '')) {
+    return { view: 'calendar', month: saved.month };
+  }
+  return { view: 'list', month: CURRENT_MONTH };
+}
+
+// 뒤로가기가 뷰 전환까지 되짚지 않도록 replaceState 를 쓴다. 뷰 토글은 탐색이
+// 아니라 표시 방식 변경이다.
+function writeViewParams(view, month) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(STORE_KEY, JSON.stringify({ view, month }));
+  } catch {
+    // 세션 저장소를 못 쓰는 환경이어도 URL 동기화는 계속돼야 한다.
+  }
+  const url = new URL(window.location.href);
+  if (view === 'calendar') {
+    url.searchParams.set(VIEW_KEY, 'calendar');
+    url.searchParams.set(MONTH_KEY, month);
+  } else {
+    url.searchParams.delete(VIEW_KEY);
+    url.searchParams.delete(MONTH_KEY);
+  }
+  window.history.replaceState(null, '', url);
+}
+
+function shiftMonth(month, delta) {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 // FND-02(감사): 이전엔 화면이 최대 5000건을 요청해도 서버가 500건으로 잘라
 // 검색·월별합계·연도탭이 최신 500건 범위 안에서만 맞았다. 검색·집계를 전부
@@ -36,9 +104,11 @@ function buildFilterParams(filters, categoryFilter) {
 }
 
 export default function Transactions() {
+  const [, navigate] = useLocation();
   const [years, setYears] = useState([]);
   const [categories, setCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [cardProducts, setCardProducts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -51,17 +121,27 @@ export default function Transactions() {
   const [monthItems, setMonthItems] = useState({}); // { [month]: { data, total } } — 펼친 달만 보유
   const [autoExpandYear, setAutoExpandYear] = useState(null); // 마지막으로 기본펼침을 적용한 연도
   const [dataVersion, setDataVersion] = useState(0); // 저장/삭제 후 월별요약·항목 재조회 트리거
+  const [viewMode, setViewMode] = useState(() => readViewParams().view);
+  const [calendarMonth, setCalendarMonth] = useState(() => readViewParams().month);
+  const [calendarItems, setCalendarItems] = useState(null); // { data, total } — 달력뷰가 보는 달
+  const [selectedDay, setSelectedDay] = useState(null);
   const { confirm, alert } = useConfirm();
 
   const { loading, error, reload } = useLoader(async () => {
-    const [yrs, cats, pms] = await Promise.all([
+    // 카드상품은 결제수단 선택지의 일부다(#302). 보조 정보가 아니라서 화면
+    // 로더에 함께 태운다 — 조용히 실패하면 카드가 목록에서 통째로 빠진다.
+    const [yrs, cats, pms, cards] = await Promise.all([
       api.get('/api/transactions/years'),
       api.get('/api/categories'),
       api.get('/api/payment-methods'),
+      // 비활성 카드까지 받는다. 과거 거래가 그 카드를 가리킬 수 있고, 목록에
+      // 없으면 수정 화면이 선택을 비워 저장 시 지정이 지워진다(#410).
+      api.get('/api/card-products?include_inactive=1'),
     ]);
     setYears(yrs.data || []);
     setCategories(cats);
     setPaymentMethods(pms);
+    setCardProducts(cards.data || []);
   }, []);
 
   useEffect(() => {
@@ -129,6 +209,52 @@ export default function Transactions() {
     return () => { cancelled = true; };
   }, [expandedMonths, filters, categoryFilter, dataVersion]);
 
+  // 달력뷰가 보는 달의 거래. 목록뷰의 monthItems 와 별도로 둔다 — 두 뷰가 서로
+  // 다른 달을 볼 수 있고, 한쪽 상태가 다른 쪽을 덮어쓰면 안 된다.
+  useEffect(() => {
+    if (viewMode !== 'calendar') return;
+    let cancelled = false;
+    const p = buildFilterParams(filters, categoryFilter);
+    p.set('from', `${calendarMonth}-01`);
+    p.set('to', `${calendarMonth}-31`);
+    p.set('limit', '500');
+    setCalendarItems(null);
+    api.get(`/api/transactions?${p}`).then((res) => {
+      if (!cancelled) setCalendarItems(res);
+    });
+    return () => { cancelled = true; };
+  }, [viewMode, calendarMonth, filters, categoryFilter, dataVersion]);
+
+  useEffect(() => { writeViewParams(viewMode, calendarMonth); }, [viewMode, calendarMonth]);
+
+  // 달을 옮기면 그 달에 없는 날짜가 선택된 채 남는다.
+  useEffect(() => { setSelectedDay(null); }, [calendarMonth]);
+
+  const calendarBuckets = useMemo(
+    () => bucketByDay(calendarItems?.data || []),
+    [calendarItems]
+  );
+
+  const selectedDayItems = useMemo(
+    () => (selectedDay ? (calendarItems?.data || []).filter((t) => t.date === selectedDay) : []),
+    [selectedDay, calendarItems]
+  );
+
+  // 보고 있던 화면이 아는 날짜를 폼 기본값으로 넘긴다(#304).
+  //
+  // 달력뷰에서 고른 날짜 > 목록뷰에서 펼친 달 > 오늘 순이다. 상태는 이 방향으로만
+  // 흐른다 — 폼에서 날짜를 바꿔도 목록 펼침이나 달력 월은 움직이지 않는다.
+  const formDefaultDate = useMemo(
+    () => defaultTxDate({
+      // 달력뷰를 보고 있을 때만 선택 날짜가 의미를 갖는다. 목록뷰로 돌아온 뒤
+      // 남아 있는 선택이 기본값을 잡으면 사용자가 예측할 수 없다.
+      selectedDay: viewMode === 'calendar' ? selectedDay : null,
+      expandedMonths: [...expandedMonths],
+      today: CURRENT_DATE,
+    }),
+    [viewMode, selectedDay, expandedMonths]
+  );
+
   const toggleMonth = (month) => {
     setExpandedMonths(prev => {
       const next = new Set(prev);
@@ -156,6 +282,13 @@ export default function Transactions() {
       // 실패해도 반드시 풀어야 한다. 안 그러면 모달이 영영 닫히지 않는다.
       setSaving(false);
     }
+  };
+
+  // 거래를 반복 규칙의 템플릿으로 넘긴다(#280). 값은 세션 저장소로 넘긴다 —
+  // 쿼리 문자열로 넘기면 가맹점·메모가 주소창과 방문 기록에 남는다.
+  const handleMakeRecurring = (tx) => {
+    putRecurringDraft(formFromTransaction(tx));
+    navigate('/settings#recurring');
   };
 
   const handleDelete = async (id) => {
@@ -301,6 +434,10 @@ export default function Transactions() {
         </details>
       </div>
 
+      {/* 쓰기가 끝날 때마다 되돌릴 것이 있는지 묻는다(#301). dataVersion 은
+          저장·삭제 성공 시에만 증가하므로 그대로 트리거가 된다. */}
+      <UndoSnackbar trigger={dataVersion} onUndone={refreshAfterMutation} />
+
       {showForm && (
         <Modal
           title={editItem ? '거래 수정' : '새 거래 추가'}
@@ -309,8 +446,10 @@ export default function Transactions() {
         >
           <TransactionForm
             initial={editItem}
+            defaultDate={formDefaultDate}
             categories={categories}
             paymentMethods={paymentMethods}
+            cardProducts={cardProducts}
             onSave={handleSave}
             onCancel={() => { setShowForm(false); setEditItem(null); }}
           />
@@ -329,6 +468,80 @@ export default function Transactions() {
         />
       ) : (
         <>
+          <div className="flex justify-end gap-1" role="group" aria-label="보기 방식">
+            {[['list', '목록'], ['calendar', '달력']].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                className={`text-xs px-3 py-1 rounded-chip border transition-colors ${
+                  viewMode === mode
+                    ? 'bg-brand-tint border-brand-tint-strong text-brand-text'
+                    : 'border-line text-caption hover:bg-surface-page'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {viewMode === 'calendar' ? (
+            <div className="bg-surface shadow-card rounded-card border border-line p-4">
+              <TransactionCalendar
+                year={Number(calendarMonth.slice(0, 4))}
+                month={Number(calendarMonth.slice(5, 7))}
+                buckets={calendarBuckets}
+                selectedDay={selectedDay}
+                onPrev={() => setCalendarMonth(m => shiftMonth(m, -1))}
+                onNext={() => setCalendarMonth(m => shiftMonth(m, 1))}
+                onSelectDay={(day) => setSelectedDay(d => (d === day ? null : day))}
+              />
+
+              {calendarItems === null ? (
+                <div className="text-caption text-sm text-center py-6">불러오는 중...</div>
+              ) : calendarItems.data.length === 0 ? (
+                <div className="text-caption text-sm text-center py-6">
+                  이 달에는 거래가 없어요.
+                </div>
+              ) : selectedDay ? (
+                <div className="border-t border-line pt-3 mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-ink">
+                      {Number(selectedDay.slice(5, 7))}월 {Number(selectedDay.slice(8, 10))}일
+                      <span className="text-xs text-caption ml-2">{selectedDayItems.length}건</span>
+                    </div>
+                    {/* 날짜를 이미 골라놓은 자리다. 여기서 추가하면 더 정할 게 없다(#304). */}
+                    <button
+                      type="button"
+                      onClick={() => { setEditItem(null); setShowForm(true); }}
+                      className="text-xs px-2 py-1 rounded-chip border border-line text-caption hover:bg-surface-page"
+                    >
+                      이 날짜로 추가
+                    </button>
+                  </div>
+                  <TransactionList
+                    items={selectedDayItems}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onMakeRecurring={handleMakeRecurring}
+                    bare
+                  />
+                </div>
+              ) : (
+                <div className="text-caption text-sm text-center py-4 border-t border-line mt-3">
+                  날짜를 누르면 그날 거래가 나와요.
+                </div>
+              )}
+
+              {calendarItems && calendarItems.total > calendarItems.data.length && (
+                <div className="text-xs text-caption pt-2">
+                  이 달 거래 {calendarItems.total}건 중 {calendarItems.data.length}건까지 반영됩니다.
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <div className="flex gap-1 border-b border-line">
             {years.map(y => (
               <button
@@ -361,19 +574,31 @@ export default function Transactions() {
                       <span className="text-caption ml-2 text-xs">{expanded ? '▲' : '▼'}</span>
                     </span>
                     <span className="text-xs text-caption">
-                      수입 <span className="text-brand-text font-medium">{fmt(g.income)}</span>
-                      {' / '}지출 <span className="text-loss-text font-medium">{fmt(g.expense)}</span>
+                      수입 <span className="text-brand-text font-medium">{formatWon(g.income)}</span>
+                      {' / '}지출 <span className="text-loss-text font-medium">{formatWon(g.expense)}</span>
                       {' / '}{g.count}건
                     </span>
                   </button>
                   {expanded && (
                     <div className="border-t border-line p-3">
+                      {/* 펼친 달이 곧 사용자가 보고 있는 기간이다. 여기서 추가하면
+                          그 달 기준 날짜가 기본값으로 들어간다(#304). */}
+                      <div className="flex justify-end mb-2">
+                        <button
+                          type="button"
+                          onClick={() => { setEditItem(null); setShowForm(true); }}
+                          className="text-xs px-2 py-1 rounded-chip border border-line text-caption hover:bg-surface-page"
+                        >
+                          {monthNum}월에 거래 추가
+                        </button>
+                      </div>
                       {itemsData ? (
                         <>
                           <TransactionList
                             items={itemsData.data}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
+                            onMakeRecurring={handleMakeRecurring}
                             bare
                             selectedIds={selectedIds}
                             onToggleSelect={handleToggleSelect}
@@ -394,6 +619,8 @@ export default function Transactions() {
               );
             })}
           </div>
+          </>
+          )}
         </>
       )}
     </div>

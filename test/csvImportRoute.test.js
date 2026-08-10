@@ -1,43 +1,18 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const { startTestServer } = require('./helpers/testServer');
 
 const PORT = 34596; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-
-let serverOutput = '';
+let server;
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
+  // 기존 before 안에 있던 나머지 준비 작업은 이 아래에 그대로 남긴다
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 const SHINHAN_CSV = [
@@ -45,6 +20,31 @@ const SHINHAN_CSV = [
   '2026.02.10,교보문고,15000',
   '2026.02.11,이마트,32000',
 ].join('\n');
+
+// 필수 입력이 빠졌을 때의 400 은 커버리지에서 비어 있었다(#448). 화면은 두 값을
+// 항상 채워 보내지만 API 는 직접 호출될 수 있고, 그때 나가는 문구다.
+test('POST /api/csv-import - 카드사나 CSV 가 빠지면 400 이고 저장되지 않는다', async () => {
+  for (const body of [
+    { csvText: SHINHAN_CSV },
+    { cardCompany: 'shinhan' },
+    { cardCompany: '', csvText: SHINHAN_CSV },
+  ]) {
+    const resp = await fetch(`${BASE}/api/csv-import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.strictEqual(resp.status, 400, `거부돼야 한다: ${JSON.stringify(body)}`);
+    const err = await resp.json();
+    assert.ok(err.error, '거부 사유가 없다');
+    for (const bad of ['cardCompany', 'csvText']) {
+      assert.ok(!err.error.includes(bad), `문구에 내부 필드명 노출: ${err.error}`);
+    }
+  }
+
+  const listResp = await fetch(`${BASE}/api/transactions`);
+  assert.strictEqual((await listResp.json()).total, 0, '거부됐는데 저장됐다');
+});
 
 test('POST /api/csv-import?preview=true - 저장 없이 신규/중복 건수만 반환', async () => {
   const resp = await fetch(`${BASE}/api/csv-import?preview=true`, {

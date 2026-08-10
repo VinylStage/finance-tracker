@@ -1,43 +1,18 @@
+// 서버 기동은 공용 헬퍼가 맣는다(#379). 조기 종료를 즉시 감지한다.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const os = require('node:os');
+const { startTestServer } = require('./helpers/testServer');
 
 const PORT = 34597; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
-let serverProcess;
-let dbPath;
-
-let serverOutput = '';
+let server;
 
 before(async () => {
-  dbPath = path.join(os.tmpdir(), `finance-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
-  serverProcess = spawn('node', ['src/server.js'], {
-    cwd: path.join(__dirname, '..'),
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(PORT), DB_PATH: dbPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.stderr.on('data', (d) => { serverOutput += d.toString(); });
-  serverProcess.on('exit', (code, signal) => { serverOutput += `\n[server exited] code=${code} signal=${signal}\n`; });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE}/api/health`);
-      if (r.ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`서버가 15초 안에 기동하지 않음. 서버 출력:\n${serverOutput || '(출력 없음)'}`);
+  server = await startTestServer({ port: PORT });
 });
 
 after(() => {
-  if (serverProcess) serverProcess.kill();
-  for (const suffix of ['', '-wal', '-shm']) {
-    try { fs.unlinkSync(dbPath + suffix); } catch {}
-  }
+  if (server) server.stop();
 });
 
 test('POST /api/transactions - 허용되지 않은 payment_style은 400', async () => {
@@ -99,4 +74,37 @@ test('PUT /api/categories/:id - 허용되지 않은 major_type은 400', async ()
     body: JSON.stringify({ major_type: '없는분류', name: target.name, monthly_budget: target.monthly_budget })
   });
   assert.strictEqual(resp.status, 400);
+});
+
+// PUT 은 400 경로만 테스트돼 있었다. 성공 경로에서 `monthly_budget ?? 0` 과
+// `is_active ?? 1` 로 기본값을 채우는 분기가 비어 있다(커버리지 45~46행).
+//
+// 이 기본값이 사라지면 두 필드를 안 보낸 PUT 이 NULL 을 쓴다. 예산이 NULL 이면
+// 대시보드의 예산 대비 지출이 계산되지 않고, is_active 가 NULL 이면 카테고리가
+// 목록에서 사라진다. 화면은 항상 두 값을 채워 보내지만 API 는 직접 호출된다.
+test('PUT /api/categories/:id - 예산과 사용여부를 생략하면 기본값이 들어간다', async () => {
+  const created = await fetch(`${BASE}/api/categories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ major_type: '선택지출', name: '기본값검증-' + Date.now(), monthly_budget: 50000 }),
+  });
+  assert.strictEqual(created.status, 201);
+  const { id } = await created.json();
+
+  // major_type 과 name 만 보낸다.
+  const resp = await fetch(`${BASE}/api/categories/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ major_type: '선택지출', name: '기본값검증-수정' }),
+  });
+  assert.strictEqual(resp.status, 200, await resp.text());
+
+  const list = await (await fetch(`${BASE}/api/categories`)).json();
+  const rows = Array.isArray(list) ? list : list.data;
+  const after = rows.find((c) => c.id === id);
+
+  assert.ok(after, '수정한 카테고리를 목록에서 찾을 수 없다');
+  assert.strictEqual(after.name, '기본값검증-수정');
+  assert.strictEqual(after.monthly_budget, 0, '예산을 안 보내면 0 이어야 한다 (NULL 이면 예산 계산이 깨진다)');
+  assert.strictEqual(after.is_active, 1, '사용여부를 안 보내면 1 이어야 한다 (NULL 이면 목록에서 사라진다)');
 });

@@ -1,9 +1,7 @@
 import React from 'react';
 import { cashFlow, REST_KEY } from '../lib/cashFlow';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 수입이 어디로 갔는지를 한 장으로 답한다.
 //
@@ -31,13 +29,13 @@ export default function CashFlowBars({ rows, income }) {
       <div
         className="flex h-3 w-full overflow-hidden rounded-bar bg-surface-sunken"
         role="img"
-        aria-label={`수입 ${fmt(flow.income)} 중 ${flow.nodes.map((n) => `${n.key} ${Math.round(n.share * 100)}%`).join(', ')}`}
+        aria-label={`수입 ${formatWon(flow.income)} 중 ${flow.nodes.map((n) => `${n.key} ${Math.round(n.share * 100)}%`).join(', ')}`}
       >
         {flow.nodes.map((n) => (
           <div
             key={n.key}
             style={{ width: `${n.share * 100}%`, background: n.color }}
-            title={`${n.key} · ${fmt(n.value)} · ${Math.round(n.share * 100)}%`}
+            title={`${n.key} · ${formatWon(n.value)} · ${Math.round(n.share * 100)}%`}
           />
         ))}
       </div>
@@ -56,7 +54,7 @@ export default function CashFlowBars({ rows, income }) {
               {n.key}
             </span>
             <span className="shrink-0 tabular-nums">
-              <span className={n.key === REST_KEY ? 'text-body' : 'text-ink'}>{fmt(n.value)}</span>
+              <span className={n.key === REST_KEY ? 'text-body' : 'text-ink'}>{formatWon(n.value)}</span>
               <span className="ml-1.5 text-caption">{Math.round(n.share * 100)}%</span>
             </span>
           </li>
@@ -64,13 +62,13 @@ export default function CashFlowBars({ rows, income }) {
       </ul>
 
       <p className="mt-3 border-t border-line-faint pt-2 text-meta text-caption tabular-nums">
-        수입 {fmt(flow.income)} · 지출 {fmt(flow.spent)}
+        수입 {formatWon(flow.income)} · 지출 {formatWon(flow.spent)}
         {flow.overspent > 0 ? (
           // 지출이 수입을 넘긴 달은 '남은 돈' 이 없다. 막대에 음수 밴드를 그릴 수는
           // 없으므로 초과분은 문구가 맡는다.
-          <span className="text-loss-text"> · {fmt(flow.overspent)} 초과</span>
+          <span className="text-loss-text"> · {formatWon(flow.overspent)} 초과</span>
         ) : (
-          <span> · 남은 돈 {fmt(flow.rest)}</span>
+          <span> · 남은 돈 {formatWon(flow.rest)}</span>
         )}
       </p>
     </div>

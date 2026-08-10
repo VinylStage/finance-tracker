@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { capTopCategories, shareOf, sliceColor, OTHERS_LABEL } from '../lib/categoryChart';
+import { formatWon } from '../lib/format';
 
-function fmt(n) {
-  return Number(n || 0).toLocaleString('ko-KR') + '원';
-}
 
 // 파이 조각에 마우스를 올렸을 때 뜨는 툴팁. '기타' 조각이면 어떤 카테고리가
 // 묶였는지 목록으로 펼쳐 준다 — 캡핑 때문에 사라진 정보를 여기서 되돌려준다.
@@ -14,13 +12,13 @@ function SliceTooltip({ active, payload, others }) {
   return (
     <div className="bg-surface border border-line rounded-card shadow-card px-3 py-2 text-xs">
       <p className="font-medium text-ink">{row.category}</p>
-      <p className="text-body tabular-nums">{fmt(row.total)}</p>
+      <p className="text-body tabular-nums">{formatWon(row.total)}</p>
       {row.isOthers && others.length > 0 && (
         <ul className="mt-1.5 pt-1.5 border-t border-line-faint space-y-0.5 text-caption">
           {others.map((o) => (
             <li key={o.category} className="flex justify-between gap-3">
               <span>{o.category}</span>
-              <span className="tabular-nums">{fmt(o.total)}</span>
+              <span className="tabular-nums">{formatWon(o.total)}</span>
             </li>
           ))}
         </ul>
@@ -72,7 +70,7 @@ export default function CategorySpendSection({ rows }) {
                     {c.isOthers ? `${OTHERS_LABEL} (${others.length}개)` : c.category}
                   </span>
                   <span className="shrink-0 text-ink font-medium tabular-nums">
-                    {fmt(c.total)}
+                    {formatWon(c.total)}
                     <span className="ml-1.5 text-caption">{Math.round(share * 100)}%</span>
                   </span>
                 </div>
@@ -94,7 +92,23 @@ export default function CategorySpendSection({ rows }) {
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           <PieChart>
-            <Pie data={slices} dataKey="total" nameKey="category" innerRadius={55} outerRadius={90} paddingAngle={2}>
+            {/* isAnimationActive={false} 는 취향이 아니라 렌더 조건이다(#237).
+                recharts 3.10.1 의 Pie 는 진입 애니메이션이 켜져 있으면 조각
+                path 를 끝내 만들지 않는다. 실브라우저 실측: 조각 그룹
+                (.recharts-pie-sector)은 데이터 수만큼 생기는데 그 안의
+                .recharts-shape 가 빈 채로 남아 svg 안의 path 가 0개다. 2초를
+                기다려도, resize 로 재렌더를 유도해도 0개였다 — 애니메이션이
+                느린 게 아니라 시작하지 않는다.
+                끄면 즉시 조각이 그려진다. dev/prod 빌드 양쪽에서 같고
+                prefers-reduced-motion 과도 무관하다.
+                같은 화면의 Bar/Line/Area 는 애니메이션이 정상이라 차트 전반이
+                아니라 Pie 한정이다. recharts 를 올릴 때 이 줄을 지워도 되는지
+                반드시 브라우저에서 다시 확인할 것 — jsdom 은 이 결함을 못 잡는다. */}
+            <Pie
+              data={slices} dataKey="total" nameKey="category"
+              innerRadius={55} outerRadius={90} paddingAngle={2}
+              isAnimationActive={false}
+            >
               {slices.map((c, i) => (
                 <Cell key={c.category} fill={sliceColor(i, c.isOthers)} stroke="none" />
               ))}

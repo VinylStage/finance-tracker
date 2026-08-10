@@ -2,43 +2,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { asInt, missingFields, escapeLike } = require('../utils/validate');
+const { asInt, missingFields, escapeLike, toIdList } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
-const { PAYMENT_STYLES } = require('../constants');
+const { buildTransactionFilters } = require('../utils/transactionFilters');
+const { resolvePeriod } = require('../utils/period');
+const { isEditable, lockedMessage, findLocked, countLockedAll, derivedFilter } = require('../services/transactionOrigin');
+const { PAYMENT_STYLES, SETTLEMENTS, DEFAULT_SETTLEMENT } = require('../constants');
+const { resolveBillingMonth } = require('../services/settlementBilling');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
-const { INCOME_CASE, EXPENSE_CASE, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
-
-// FND-02(감사): 화면(client/Transactions.jsx)이 최대 5000건을 요청했지만
-// 서버가 500건으로 잘라(응답의 total은 정확했지만 화면이 안 씀) 검색/월별합계/
-// 연도탭이 최신 500건 범위 안에서만 동작했다. 근본 해결은 검색·집계를 서버
-// 파라미터로 전부 넘기는 것 — 이 함수가 그 필터를 목록/월별요약 두 라우트가
-// 공유하는 단일 WHERE 절로 만든다(중복 방지).
-function buildTransactionFilters(query) {
-  const { from, to, category_id, merchant, memo, min_amount, max_amount, payment_method_id } = query;
-  let where = ' WHERE 1=1';
-  const params = [];
-  if (from) { where += ' AND t.date >= ?'; params.push(from); }
-  if (to)   { where += ' AND t.date <= ?'; params.push(to); }
-  if (category_id) {
-    const ids = String(category_id).split(',').map(s => asInt(s.trim())).filter(v => v !== null);
-    if (ids.length) { where += ` AND t.category_id IN (${ids.map(() => '?').join(',')})`; params.push(...ids); }
-  }
-  if (merchant) { where += ` AND t.merchant LIKE ? ESCAPE '\\'`; params.push(`%${escapeLike(merchant)}%`); }
-  if (memo) { where += ` AND t.memo LIKE ? ESCAPE '\\'`; params.push(`%${escapeLike(memo)}%`); }
-  if (min_amount !== undefined && min_amount !== '') {
-    const v = asInt(min_amount);
-    if (v !== null) { where += ' AND t.amount >= ?'; params.push(v); }
-  }
-  if (max_amount !== undefined && max_amount !== '') {
-    const v = asInt(max_amount);
-    if (v !== null) { where += ' AND t.amount <= ?'; params.push(v); }
-  }
-  if (payment_method_id) {
-    const v = asInt(payment_method_id);
-    if (v !== null) { where += ' AND t.payment_method_id = ?'; params.push(v); }
-  }
-  return { where, params };
-}
+const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTotalsByDate, monthlyTotalsInRange } = require('../utils/aggregation');
 
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=&merchant=&memo=&min_amount=&max_amount=&payment_method_id=
 router.get('/', (req, res) => {
@@ -278,14 +250,43 @@ router.get('/period-comparison', (req, res) => {
 // body: { ids: number[] } 선택 항목 삭제 | { all: true } 전체 초기화
 router.delete('/', (req, res) => {
   try {
-    const { ids, all } = req.body || {};
+    const { ids, all, confirm } = req.body || {};
     if (all === true) {
+      // 확인 토큰을 요구한다(#363). 같은 일(거래 전체 삭제)을 하는
+      // POST /api/data/import?mode=overwrite 가 이미 DELETE_ALL 을 요구하는데
+      // 이쪽만 무방비였다 — 화면의 확인 대화상자는 API 를 직접 부르면 우회된다.
+      // 이 저장소는 실거래 2,212건 유실 사고를 겪었고, ADR 0008 이 그 뒤에
+      // 세운 원칙이 "프리뷰 + 확인 없이 실행하지 않는다" 다.
+      if (confirm !== 'DELETE_ALL') {
+        return res.status(400).json({
+          error: '전체 삭제는 추가 확인이 필요합니다. 화면의 안내를 따라 다시 시도해 주세요.',
+        });
+      }
+
+      // 전체 삭제가 파생 거래까지 지우면 원본(할부·리볼빙·부채)과 어긋난다(#268).
+      // 감사 FND-01 이 실증한 바로 그 경로라 여기서 반드시 막는다.
+      const locked = countLockedAll(db);
+      if (locked > 0) {
+        return res.status(403).json({
+          error: `자동으로 만들어진 내역 ${locked}건이 포함돼 있어 전체 삭제를 할 수 없어요. 할부·리볼빙·부채 화면에서 원본을 먼저 정리해 주세요.`,
+        });
+      }
       const deleted = db.prepare('DELETE FROM transactions').run().changes;
       return res.json({ ok: true, deleted });
     }
     if (Array.isArray(ids) && ids.length > 0) {
-      const validIds = ids.map(Number).filter(Number.isInteger);
+      const validIds = toIdList(ids);
       if (!validIds.length) return res.status(400).json({ error: '선택한 거래를 확인할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.' });
+
+      // 선택 목록에 잠긴 거래가 섞이면 전체를 거부한다. 일부만 지우면 사용자가
+      // 무엇이 남았는지 알 수 없다.
+      const lockedRows = findLocked(db, validIds);
+      if (lockedRows.length) {
+        return res.status(403).json({
+          error: `선택한 내역 중 ${lockedRows.length}건은 자동으로 만들어진 것이라 지울 수 없어요. 원래 등록한 화면에서 정리해 주세요.`,
+        });
+      }
+
       const placeholders = validIds.map(() => '?').join(',');
       const deleted = db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
       return res.json({ ok: true, deleted });
@@ -318,15 +319,20 @@ router.get('/years', (req, res) => {
 // 등록 순서 무관(세그먼트 2개라 /:id 와 충돌 없음) — 가독성상 /:id 근처에 둔다.
 router.get('/summary/by-month', (req, res) => {
   try {
-    const { year } = req.query;
-    if (!year || !/^\d{4}$/.test(year)) return res.status(400).json({ error: '조회할 연도를 선택해 주세요.' });
+    // year 를 그대로 받되 from/to 공통 규약도 받는다(#272). 기존 호출부는
+    // year 만 보내므로 동작이 바뀌지 않는다.
+    const period = resolvePeriod(req.query);
+    if (period.error) return res.status(400).json({ error: period.error });
+    if (!period.from || !period.to) {
+      return res.status(400).json({ error: '조회할 연도를 선택해 주세요.' });
+    }
     const { where, params } = buildTransactionFilters({
-      ...req.query, from: `${year}-01-01`, to: `${year}-12-31`,
+      ...req.query, from: period.from, to: period.to,
     });
     const rows = db.prepare(`
       SELECT strftime('%Y-%m', t.date) AS month,
-        COALESCE(SUM(CASE WHEN c.major_type = '수입' THEN t.amount ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN c.major_type != '수입' AND t.payment_style NOT IN ('할부','리볼빙') THEN t.amount ELSE 0 END), 0) AS expense,
+        COALESCE(SUM(${INCOME_CASE}), 0) AS income,
+        COALESCE(SUM(${EXPENSE_CASE}), 0) AS expense,
         COUNT(*) AS count
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
@@ -362,11 +368,52 @@ function validateTxBody(body) {
   if (asInt(body.amount) === null) return 'amount must be an integer';
   if (body.payment_method_id !== undefined && body.payment_method_id !== null &&
       asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
+  if (body.card_product_id !== undefined && body.card_product_id !== null &&
+      asInt(body.card_product_id) === null) return 'card_product_id must be an integer';
   // date 형식 검증 (ISO 8601 YYYY-MM-DD)
   if (body.date && !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return 'date must be in YYYY-MM-DD format';
   if (body.payment_style !== undefined && body.payment_style !== null &&
       !PAYMENT_STYLES.includes(body.payment_style)) {
     return `payment_style must be one of ${PAYMENT_STYLES.join(', ')}`;
+  }
+  // DB 에 CHECK 를 걸지 않으므로(#289) 여기가 값을 지키는 유일한 곳이다.
+  // 잘못된 값이 들어가면 잔액 계산에서 조용히 빠진다 — 어느 합계에도 안 잡힌다.
+  if (body.settlement !== undefined && body.settlement !== null &&
+      !SETTLEMENTS.includes(body.settlement)) {
+    return `settlement must be one of ${SETTLEMENTS.join(', ')}`;
+  }
+  if (body.billing_month !== undefined && body.billing_month !== null &&
+      !/^\d{4}-\d{2}$/.test(body.billing_month)) {
+    return 'billing_month must be in YYYY-MM format';
+  }
+  return null;
+}
+
+// 청구월을 정할 때 쓸 카드의 결제 주기. 상품을 모르면 null 이고, 그러면
+// resolveBillingMonth 가 청구월을 안 적는다(#289).
+function cycleOf(cardProductId) {
+  if (cardProductId == null) return null;
+  return db.prepare(
+    'SELECT billing_cycle_day, statement_close_day FROM card_products WHERE id = ?'
+  ).get(asInt(cardProductId)) || null;
+}
+
+// 카드상품과 카드사가 어긋나지 않게 막는다(#302 2단계). 화면은 둘을 한 선택지로
+// 고르지만 API 는 따로 받으므로, 여기서 확인하지 않으면 "삼성카드로 결제한 하나
+// A카드" 같은 거래가 저장된다 — 카드 전략 계산이 그걸 그대로 믿는다.
+//
+// DB 를 봐야 해서 validateTxBody 와 분리했다(그쪽은 순수 함수다).
+// 문제가 있으면 메시지 문자열, 없으면 null 을 반환한다.
+function validateCardProduct(body) {
+  if (body.card_product_id === undefined || body.card_product_id === null) return null;
+
+  const product = db.prepare('SELECT payment_method_id FROM card_products WHERE id=?')
+    .get(asInt(body.card_product_id));
+  if (!product) return '선택한 카드를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 골라 주세요.';
+
+  const methodId = body.payment_method_id != null ? asInt(body.payment_method_id) : null;
+  if (methodId !== product.payment_method_id) {
+    return '카드와 카드사가 맞지 않습니다. 결제수단을 다시 골라 주세요.';
   }
   return null;
 }
@@ -374,14 +421,23 @@ function validateTxBody(body) {
 // POST /api/transactions
 router.post('/', (req, res) => {
   try {
-    const err = validateTxBody(req.body);
+    const err = validateTxBody(req.body) || validateCardProduct(req.body);
     if (err) return res.status(400).json({ error: err });
-    const { date, category_id, amount, payment_method_id, payment_style = '일시불', merchant, memo } = req.body;
+    const {
+      date, category_id, amount, payment_method_id, card_product_id, payment_style = '일시불', merchant, memo,
+      settlement = DEFAULT_SETTLEMENT, account_id, billing_month,
+    } = req.body;
+    // 기본값이 immediate 라 안 보내던 클라이언트의 동작이 그대로다(#289).
     const result = db.prepare(`
-      INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo, settlement, account_id, billing_month)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
-           payment_style, merchant || null, memo || null);
+           card_product_id != null ? asInt(card_product_id) : null,
+           payment_style, merchant || null, memo || null,
+           settlement, account_id != null ? asInt(account_id) : null,
+           resolveBillingMonth({
+             settlement, date, billingMonth: billing_month, cardProduct: cycleOf(card_product_id),
+           }));
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
     serverError(res, e, 'transactions');
@@ -391,15 +447,62 @@ router.post('/', (req, res) => {
 // PUT /api/transactions/:id
 router.put('/:id', (req, res) => {
   try {
-    const err = validateTxBody(req.body);
+    const err = validateTxBody(req.body) || validateCardProduct(req.body);
     if (err) return res.status(400).json({ error: err });
-    const { date, category_id, amount, payment_method_id, payment_style, merchant, memo } = req.body;
+
+    // 파생 거래는 거래내역에서 고칠 수 없다(#268). 원본을 고쳐야 계산과 맞는다.
+    const target = db.prepare('SELECT id, origin, settlement, date, card_product_id, billing_month FROM transactions WHERE id=?').get(req.params.id);
+    if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
+    if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
+
+    const {
+      date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo,
+      settlement, account_id, billing_month,
+    } = req.body;
+    // settlement 는 **보낸 경우에만** 바꾼다. PUT 이 전체 교체라 생략하면
+    // 기본값으로 덮이는데, 그러면 deferred 였던 거래를 메모만 고쳐도 잔액이
+    // 조용히 달라진다(#289). 나머지 둘도 같은 이유로 COALESCE 를 쓴다.
+    //
+    // card_product_id 는 COALESCE 를 쓰지 않는다. 카드사와 짝이라 payment_method_id
+    // 와 같은 규칙을 따라야 하고(카드사를 바꾸면 카드도 다시 정해져야 한다),
+    // 무엇보다 "카드사는 알지만 어느 카드인지 모른다"(#306 의 미상) 로 되돌릴 길이
+    // 없어진다 — COALESCE 면 null 을 보내도 옛 값이 남는다.
+    //
+    // billing_month 는 date·card_product_id·settlement 에서 나오는 **파생값**이다.
+    // 그래서 두 요구가 부딪힌다.
+    //
+    //   구매일을 고쳤는데 옛 청구월이 남으면 → 엉뚱한 달에 묶인 채로 남고
+    //     사용자는 25일에 빠질 금액을 잘못 본다
+    //   메모만 고쳤는데 청구월이 지워지면   → 사용자가 손으로 넣은 값이 사라진다
+    //
+    // 그래서 **입력이 실제로 바뀐 경우에만** 다시 계산한다. 파생값은 자기 입력을
+    // 따라가되, 입력이 그대로면 건드리지 않는다.
+    const nextSettlement = settlement || target.settlement;
+    const nextCardProduct = card_product_id != null ? asInt(card_product_id) : null;
+    const billingInputsChanged = date !== target.date
+      || nextCardProduct !== target.card_product_id
+      || nextSettlement !== target.settlement;
+
+    const nextBillingMonth = billing_month
+      ? billing_month
+      : (billingInputsChanged
+        ? resolveBillingMonth({
+          settlement: nextSettlement, date, cardProduct: cycleOf(card_product_id),
+        })
+        : target.billing_month);
     const result = db.prepare(`
-      UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?,
-        payment_style=?, merchant=?, memo=?
+      UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?, card_product_id=?,
+        payment_style=?, merchant=?, memo=?,
+        settlement=COALESCE(?, settlement),
+        account_id=COALESCE(?, account_id),
+        billing_month=?
       WHERE id=?
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
-           payment_style || '일시불', merchant || null, memo || null, req.params.id);
+           card_product_id != null ? asInt(card_product_id) : null,
+           payment_style || '일시불', merchant || null, memo || null,
+           settlement || null, account_id != null ? asInt(account_id) : null,
+           nextBillingMonth,
+           req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
   } catch (e) {
@@ -410,6 +513,11 @@ router.put('/:id', (req, res) => {
 // DELETE /api/transactions/:id
 router.delete('/:id', (req, res) => {
   try {
+    // 파생 거래는 거래내역에서 지울 수 없다(#268). 원본을 지워야 함께 사라진다.
+    const target = db.prepare('SELECT id, origin, settlement, date, card_product_id, billing_month FROM transactions WHERE id=?').get(req.params.id);
+    if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
+    if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
+
     const result = db.prepare('DELETE FROM transactions WHERE id=?').run(req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });
@@ -428,19 +536,21 @@ router.get('/summary/dashboard', (req, res) => {
     // 비교로 바꿔 이 라우트의 모든 "이번 달" 조회에서 재사용한다.
     const [monthStart, monthEnd] = monthBounds(thisMonth);
 
+    // FND-13 의 단일 상수화가 이 두 쿼리만 빠뜨려 지출 규칙이 여기에 다시
+    // 인라인으로 적혀 있었다. #269 가 파생 부채이자를 지출에서 빼면서 한쪽만
+    // 고쳐지는 문제가 실제로 드러나 공유 상수로 옮긴다.
     const income = db.prepare(`
-      SELECT COALESCE(SUM(t.amount),0) AS total
+      SELECT COALESCE(SUM(${INCOME_CASE}),0) AS total
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= ? AND t.date < ? AND c.major_type = '수입'
+      WHERE t.date >= ? AND t.date < ?
     `).get(monthStart, monthEnd).total;
 
     const expense = db.prepare(`
-      SELECT COALESCE(SUM(t.amount),0) AS total
+      SELECT COALESCE(SUM(${EXPENSE_CASE}),0) AS total
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
-      WHERE t.date >= ? AND t.date < ? AND c.major_type != '수입'
-      AND t.payment_style NOT IN ('할부','리볼빙')
+      WHERE t.date >= ? AND t.date < ?
     `).get(monthStart, monthEnd).total;
 
     // FND-05(감사): 이 정확한 버전을 /api/installments가 별도로 재구현하며
@@ -471,7 +581,7 @@ router.get('/summary/dashboard', (req, res) => {
       SELECT c.name AS category, c.major_type, COALESCE(SUM(t.amount),0) AS total, c.monthly_budget AS budget
       FROM categories c
       LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date < ?
-        AND t.payment_style NOT IN ('할부','리볼빙')
+        AND ${EXPENSE_ROW}
       WHERE c.is_active = 1 AND c.major_type != '수입'
       GROUP BY c.id
       HAVING total > 0
@@ -527,7 +637,7 @@ router.get('/summary/dashboard', (req, res) => {
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       WHERE t.date >= ? AND t.date < ? AND c.major_type != '수입'
-        AND t.payment_style NOT IN ('할부','리볼빙')
+        AND ${EXPENSE_ROW}
         AND t.merchant IS NOT NULL AND t.merchant != ''
       GROUP BY t.merchant
       ORDER BY total DESC
@@ -548,18 +658,24 @@ router.get('/summary/dashboard', (req, res) => {
 // GET /api/transactions/summary/category-breakdown?from=&to= — 임의 기간 카테고리별 지출
 router.get('/summary/category-breakdown', (req, res) => {
   try {
-    const { from, to } = req.query;
-    if (!from || !to) return res.status(400).json({ error: '조회할 기간을 선택해 주세요.' });
+    // 기간 검증을 여기서도 resolvePeriod 로 돌린다. 라우트마다 직접 비교하면
+    // "시작이 종료보다 뒤" 같은 판정이 엔드포인트마다 달라진다(#272).
+    const period = resolvePeriod(req.query);
+    if (period.error) return res.status(400).json({ error: period.error });
+    if (!period.from || !period.to) return res.status(400).json({ error: '조회할 기간을 선택해 주세요.' });
+
+    const derived = derivedFilter(req.query);
     const data = db.prepare(`
       SELECT c.name AS category, COALESCE(SUM(t.amount),0) AS total
       FROM categories c
       LEFT JOIN transactions t ON t.category_id = c.id AND t.date >= ? AND t.date <= ?
-        AND t.payment_style NOT IN ('할부','리볼빙')
+        AND ${EXPENSE_ROW}
+        ${derived.sql}
       WHERE c.is_active = 1 AND c.major_type != '수입'
       GROUP BY c.id
       HAVING total > 0
       ORDER BY total DESC
-    `).all(from, to);
+    `).all(period.from, period.to, ...derived.params);
     res.json({ data });
   } catch (e) {
     serverError(res, e, 'transactions');

@@ -3,6 +3,10 @@ const express = require('express');
 const path = require('path');
 const { csrfGuard } = require('./utils/csrfGuard');
 const { securityHeaders } = require('./utils/securityHeaders');
+const { auditContext, bindAuditDb } = require('./utils/auditContext');
+const db = require('./db/init');
+const { runCatchup, setLastCatchupSummary } = require('./services/recurringCatchup');
+const { purgeAuditLog, setLastPurgeSummary } = require('./services/auditRetention');
 const { serverError } = require('./utils/errors');
 const app = express();
 
@@ -14,6 +18,12 @@ app.use(securityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 app.use(csrfGuard);
+// 감사 컨텍스트는 라우트 앞에 둔다. csrfGuard 에서 거부된 요청은 쓰기가 없으므로
+// 그 뒤에 두어 action_id 를 낭비하지 않는다.
+// 트리거가 읽을 컨텍스트 테이블에 연결한다(#299). 마이그레이션이 먼저 돌아야 하므로
+// db 를 require 한 뒤에 건다.
+bindAuditDb(db);
+app.use(auditContext);
 
 // API routes
 app.use('/api/transactions', require('./routes/transactions'));
@@ -33,7 +43,51 @@ app.use('/api/stocks',       require('./routes/stocks'));
 app.use('/api/csv-import',   require('./routes/csvImport'));
 app.use('/api/card-import',  require('./routes/cardImport'));
 app.use('/api/guide',        require('./routes/guide'));
+app.use('/api/card-policies', require('./routes/cardPolicies'));
+app.use('/api/accounts',     require('./routes/accounts'));
+app.use('/api/audit',        require('./routes/audit'));
+app.use('/api/card-products', require('./routes/cardProducts'));
+app.use('/api/card-benefits', require('./routes/cardBenefits'));
+app.use('/api/card-strategy', require('./routes/cardStrategy'));
+app.use('/api/settlement',   require('./routes/settlement'));
+app.use('/api/billing-month', require('./routes/billingMonth'));
 app.use('/api/data-integrity', require('./routes/dataIntegrity'));
+
+// 감사로그 정리(#367). 기동 시 1회, **catch-up 보다 먼저** 돈다.
+//
+// 순서가 중요하다. 정리는 보존 기간이 지난 행만 지우므로 catch-up 이 방금 만든
+// 로그는 어차피 대상이 아니지만, 순서를 뒤집으면 "같은 기동에서 만든 것을
+// 지울 수도 있다" 는 걱정을 코드로 배제할 수 없다. 먼저 돌려 그 여지를 없앤다.
+//
+// 사전 확인 없이 돌리되 결과를 알린다 — ADR 0008 의 #279 경계 사례와 같은
+// 형태다. 실패해도 서버는 떠야 한다.
+try {
+  const purge = purgeAuditLog(db);
+  setLastPurgeSummary(purge);
+  if (purge.deleted > 0) {
+    console.log(`[audit-retention] ${purge.days}일 지난 감사로그 ${purge.deleted}건 정리 (기준 ${purge.cutoff})`);
+  }
+} catch (e) {
+  setLastPurgeSummary({ deleted: 0, cutoff: null, days: 0, ran: false, error: '감사로그 정리에 실패했습니다.' });
+  console.error('[audit-retention] 실패:', e.message);
+}
+
+// 반복거래 따라잡기(#279). 기동 시 1회, 라우트 등록 뒤에 돈다.
+//
+// 이 앱은 사용자가 열 때만 프로세스가 산다 — 상시 구동 전제의 스케줄러는 이
+// 배포 형태에서 동작하지 않는다. 실패해도 서버는 떠야 하므로 여기서 삼킨다.
+// 결과는 /api/recurring-rules/catchup 으로 화면이 가져간다.
+try {
+  const summary = runCatchup(db);
+  setLastCatchupSummary(summary);
+  if (summary.created > 0 || summary.skipped > 0) {
+    console.log(`[catchup] 생성 ${summary.created}건, 건너뜀 ${summary.skipped}건`);
+  }
+} catch (e) {
+  // 기동을 막지 않는다. 다음 기동에서 같은 구간을 다시 시도한다.
+  setLastCatchupSummary({ created: 0, skipped: 0, rules: 0, details: [], error: '반복거래 자동 생성에 실패했습니다.' });
+  console.error('[catchup] 실패:', e.message);
+}
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
