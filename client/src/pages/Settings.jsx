@@ -20,6 +20,7 @@ import CardPolicySection from '../components/CardPolicySection';
 import CardProductSection from '../components/CardProductSection';
 import CardRemapSection from '../components/CardRemapSection';
 import CardBenefitSection from '../components/CardBenefitSection';
+import CardInventorySection from '../components/CardInventorySection';
 import SettlementReclassifySection from '../components/SettlementReclassifySection';
 import BillingMonthBackfillSection from '../components/BillingMonthBackfillSection';
 import { formatWon } from '../lib/format';
@@ -93,6 +94,13 @@ export default function Settings() {
           <Anchor id="card-benefit">
             <CardBenefitSection categories={categories} />
           </Anchor>
+          {/* 등록 현황은 넣는 화면 **다음**이고 재매핑 **앞**이다(#520). 카드와
+              혜택을 넣은 직후에 "무엇이 아직 비었나" 를 보여줘야 그 자리에서
+              채우러 돌아갈 수 있고, 여기서 세는 카드사별 미지정 건수가 바로
+              아래 재매핑에서 할 일이 된다. */}
+          <Anchor id="card-inventory">
+            <CardInventorySection />
+          </Anchor>
           {/* 재매핑은 카드를 등록한 **다음** 할 일이다(#302 3단계). 등록 화면
               바로 아래에 두어 "카드를 넣었으니 지난 거래도 붙이자" 가 이어지게 한다.
               위에 두면 옮길 카드가 없는 상태에서 도구부터 만나게 된다. */}
@@ -158,6 +166,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'payment', label: '결제수단 관리' },
   { id: 'card-product', label: '보유 카드' },
   { id: 'card-benefit', label: '카드 혜택' },
+  { id: 'card-inventory', label: '카드 등록 현황' },
   { id: 'card-remap', label: '지난 거래 카드 지정' },
   { id: 'settlement-reclassify', label: '결제방식 재분류' },
   { id: 'billing-backfill', label: '청구월 소급' },
