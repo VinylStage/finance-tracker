@@ -6,6 +6,7 @@ import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
 import { formatWon } from '../lib/format';
 import { comparisonView, thresholdLine } from '../lib/cardStrategyView';
+import ThresholdExclusionSection from '../components/ThresholdExclusionSection';
 
 // 카드 전략 화면(#277).
 //
@@ -156,6 +157,10 @@ export default function CardStrategy() {
               ))}
           </ul>
         )}
+      </Section>
+
+      <Section title="실적에서 뺀 거래">
+        <ThresholdExclusionSection />
       </Section>
 
       <Section title="지난 결제 다시 계산">

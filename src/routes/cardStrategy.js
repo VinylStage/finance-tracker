@@ -6,7 +6,7 @@ const { serverError } = require('../utils/errors');
 const { asInt } = require('../utils/validate');
 const { localYMD } = require('../utils/date');
 const { computeThreshold, INCOME_MAJOR_TYPE } = require('../services/cardThreshold');
-const { compareCards } = require('../services/cardComparison');
+const { compareCards, NON_ELIGIBLE_ORIGINS } = require('../services/cardComparison');
 const { estimateBenefit } = require('../services/cardStrategy');
 
 // 카드 전략 조회(#276).
@@ -265,6 +265,55 @@ router.get('/comparison', (req, res) => {
   }
 });
 
+
+
+// GET /api/card-strategy/threshold-transactions?asOf=YYYY-MM-DD
+//
+// 전월 실적에 잡힌 거래를 **카드별로 나눠** 돌려준다(#526).
+//
+// 화면이 카드별 섹션으로 나눠 보여줘야 하기 때문이다 — 한 목록에 전 카드 거래를
+// 섞으면 어느 카드의 실적을 조정하는지 알 수 없다.
+//
+// 자동 제외(수입·파생)는 애초에 목록에 넣지 않는다. 사용자가 토글할 수 있는 것은
+// **실적에 실제로 잡히는 거래**뿐이다. 못 바꾸는 것을 보여주면 눌러 보고 나서
+// 아무 일도 안 일어난다.
+router.get('/threshold-transactions', (req, res) => {
+  try {
+    const asOf = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.asOf || '')) ? req.query.asOf : localYMD();
+    const cards = loadCards();
+    const resolve = cardIdResolver(cards);
+    const excluded = excludedTxIds();
+    const { period } = computeThreshold({ cardProduct: null, transactions: [], asOf });
+
+    const rows = db.prepare(TX_IN_RANGE).all(period.start, period.end);
+
+    const byCard = cards.map((card) => {
+      const mine = rows
+        .filter((r) => resolve(r) === card.id)
+        .filter((r) => r.major_type !== INCOME_MAJOR_TYPE)
+        .filter((r) => !NON_ELIGIBLE_ORIGINS.has(r.origin || 'manual'))
+        .map((r) => ({
+          id: r.id,
+          date: r.date,
+          merchant: r.merchant,
+          amount: r.amount,
+          excluded: excluded.has(r.id),
+        }));
+      return {
+        cardProductId: card.id,
+        issuer: card.issuer,
+        productName: card.product_name,
+        transactions: mine,
+        // 제외를 반영한 합계. 화면이 "빼면 얼마가 되나" 를 바로 보여줄 수 있다.
+        countedTotal: mine.filter((t) => !t.excluded).reduce((a, t) => a + (Number(t.amount) || 0), 0),
+      };
+    });
+
+    res.json({ data: byCard, period, asOf });
+  } catch (e) {
+    serverError(res, e, 'cardStrategy');
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────
 // 실적 구간(#526)

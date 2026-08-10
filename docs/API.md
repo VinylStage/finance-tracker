@@ -1902,6 +1902,20 @@
   목록에 없다" 가 되어 소프트 삭제로 과거를 보존한 목적이 반쯤 사라진다. 화면이 흐리게
   표시하고 추천에서만 빼도록 `isActive` 로 표시만 붙인다.
 
+### GET /api/card-strategy/threshold-transactions
+전월 실적에 잡힌 거래를 **카드별로 나눠** 돌려준다(#526).
+
+- **요청 파라미터**: `asOf` (optional, `YYYY-MM-DD`) — 없으면 오늘
+- **응답 스키마**:
+  ```
+  { "data": [{ "cardProductId", "issuer", "productName", "countedTotal",
+               "transactions": [{ "id", "date", "merchant", "amount", "excluded" }] }],
+    "period": { "start", "end" }, "asOf": "string" }
+  ```
+- **비고**: 자동 제외(수입·파생 행)는 **목록에 넣지 않는다.** 사용자가 토글할 수
+  있는 것은 실적에 실제로 잡히는 거래뿐이고, 못 바꾸는 것을 보여주면 눌러 보고
+  나서 아무 일도 안 일어난다. `countedTotal` 은 제외를 반영한 합계다.
+
 ### GET /api/card-strategy/tiers/:cardProductId
 카드에 등록된 실적 구간을 돌려준다(#526). `min_spend` 오름차순.
 
