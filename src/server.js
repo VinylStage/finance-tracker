@@ -44,13 +44,10 @@ app.use('/api/csv-import',   require('./routes/csvImport'));
 app.use('/api/card-import',  require('./routes/cardImport'));
 app.use('/api/guide',        require('./routes/guide'));
 app.use('/api/card-policies', require('./routes/cardPolicies'));
-app.use('/api/accounts',     require('./routes/accounts'));
 app.use('/api/audit',        require('./routes/audit'));
 app.use('/api/card-products', require('./routes/cardProducts'));
 app.use('/api/card-benefits', require('./routes/cardBenefits'));
 app.use('/api/card-strategy', require('./routes/cardStrategy'));
-app.use('/api/settlement',   require('./routes/settlement'));
-app.use('/api/billing-month', require('./routes/billingMonth'));
 app.use('/api/data-integrity', require('./routes/dataIntegrity'));
 
 // 감사로그 정리(#367). 기동 시 1회, **catch-up 보다 먼저** 돈다.

@@ -20,7 +20,6 @@
 | recurring_rule_months | 월 단위 처리 기록(구형). 013 이 발생일 단위로 옮겼고 롤백 여지로 남겨 둠 | id, rule_id, year_month, status, transaction_id |
 | audit_log | 모든 쓰기의 전후 값 | id, ts, actor, action_id, action_label, table_name, row_id, op, before_json, after_json, undone_at |
 | _audit_context | 트리거가 읽을 현재 요청 컨텍스트(단일 행) | id, actor, action_id, action_label |
-| accounts | 통장·계좌 | id, name, type, opening_balance, credit_limit, is_active |
 | card_products | 카드 상품. payment_methods 아래에 붙는다 | id, payment_method_id, issuer, product_name, card_type, annual_fee, prev_month_threshold, billing_cycle_day, statement_close_day, memo |
 | card_benefits | 카드별 할인·적립 조건 | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo |
 | card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
@@ -261,31 +260,3 @@ dismissed_at` 이라고 적어 뒀는데, **셋 다 실제와 달랐다.** 실�
 `card_benefits.rate` 는 0 도 100 도 유효하다. 0 은 "이 카테고리에는 혜택 없음" 을
 명시적으로 적어 두는 쓰임이 있다 — 안 적은 것과 없다고 적은 것은 다르다.
 
-### `transactions.billing_month` 는 파생값이다 (#289)
-
-`deferred`(신용카드 사용) 거래가 **어느 청구서에 실리는지**다. `date` ·
-`card_product_id` · `settlement` 세 입력에서 나온다
-(`services/settlementBilling.resolveBillingMonth`).
-
-**모르면 안 적는다.** 카드의 결제일·마감일이 없으면 NULL 로 둔다. 추측한 청구월로
-묶으면 사용자가 결제일에 빠질 금액을 잘못 보고, 왜 틀렸는지 화면에서 알 수 없다(#290).
-
-파생값이라 **입력이 바뀌면 따라가야 한다.** 입력을 바꾸는 경로가 셋이다.
-
-| 경로 | 청구월을 다시 계산하나 |
-|---|---|
-| `POST` / `PUT /api/transactions` | 한다. PUT 은 **입력이 실제로 바뀐 경우에만** — 메모만 고쳤는데 지워지면 안 된다 |
-| `POST /api/card-products/remap` | 한다 (#421) |
-| `PUT /api/card-products/:id` (주기 변경) | **안 한다.** 거래를 건드리지 않는다 |
-
-마지막 칸이 비어 있는 것은 의도다. 카드 설정을 만지는 순간 과거 거래 수백 건이
-소리 없이 바뀌면 의도한 것인지 구분할 방법이 없다(ADR 0008). 대신
-`POST /api/billing-month/backfill` 이 프리뷰 → 확인을 거쳐 소급한다.
-
-**사용자가 직접 적은 값과 계산값을 구분하는 컬럼은 없다.** 라우트가
-`billing_month` 를 그대로 받기 때문이다. 그래서 소급의 기본 모드(`fill`)는 비어
-있는 것만 채우고 적힌 값은 지나친다 — 되돌릴 수 없는 쪽이 더 비싸다.
-
-청구월이 비면 `cardUnpaid` 가 `unassigned` 로 빼고 `projectBalance` 는 그 거래를
-추이에서 **통째로 뺀다.** 조용히 빠지므로 화면이 "청구월을 모르는 거래 N건" 을
-반드시 안내해야 한다.
