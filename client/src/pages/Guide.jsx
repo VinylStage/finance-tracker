@@ -8,6 +8,11 @@ const components = {
   h3: (props) => <h3 className="text-sm font-semibold text-body mt-4 mb-2" {...props} />,
   p: (props) => <p className="text-sm text-body leading-relaxed mb-3" {...props} />,
   ul: (props) => <ul className="list-disc list-inside text-sm text-body space-y-1 mb-3" {...props} />,
+  // ol 을 빠뜨리면 번호가 사라진다. Tailwind preflight 가 `ol, ul, menu` 의
+  // list-style 을 none 으로 지우므로, 클래스를 안 주면 브라우저 기본 번호가
+  // 남아 있을 거라는 기대가 통하지 않는다. ul 은 클래스가 있어 살아 있었고
+  // ol 만 맨몸으로 나가 절차 설명이 그냥 줄글로 보였다.
+  ol: (props) => <ol className="list-decimal list-inside text-sm text-body space-y-1 mb-3" {...props} />,
   li: (props) => <li className="text-sm text-body" {...props} />,
   strong: (props) => <strong className="font-semibold text-ink" {...props} />,
   code: (props) => <code className="bg-surface-sunken text-brand-text rounded px-1.5 py-0.5 text-xs" {...props} />,

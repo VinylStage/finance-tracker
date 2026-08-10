@@ -169,3 +169,69 @@ describe('메서드별 호출 모양', () => {
     expect(opts.headers).toBeUndefined();
   });
 });
+
+describe('마크업은 사용자에게 안 보여준다 (#472)', () => {
+  it('짧은 HTML 도 태그째 노출하지 않는다', async () => {
+    // 예전에는 길이만 봤다(`length <= 200`). 주석은 "장문(HTML 등)은 노출하지
+    // 않는다" 였는데 구현이 형식을 안 봐서, 짧은 오류 페이지가 태그째 찍혔다.
+    fetchMock.mockResolvedValue(textResponse('<h1>502 Bad Gateway</h1>', { status: 502, type: 'text/html' }));
+
+    const err = await api.get('/api/x').catch((e) => e);
+
+    expect(err.message).toBe('요청 실패 (502)');
+    // 원본은 버리지 않는다. 화면에는 안 띄워도 진단에는 필요하다.
+    expect(err.body).toBe('<h1>502 Bad Gateway</h1>');
+  });
+
+  it('헤더가 없어도 태그로 시작하면 안 보여준다', async () => {
+    // 프록시가 content-type 없이 HTML 오류 페이지를 주는 경우가 있다.
+    fetchMock.mockResolvedValue(textResponse('<html>nope</html>', { status: 500, type: '' }));
+
+    const err = await api.get('/api/x').catch((e) => e);
+
+    expect(err.message).toBe('요청 실패 (500)');
+  });
+
+  it('서버가 준 짧은 평문은 그대로 보여준다', async () => {
+    // 형식만 보고 전부 막으면 서버가 사용자 말로 적어 준 오류 문구까지 사라진다.
+    // 그건 이 변경이 의도한 바가 아니다.
+    fetchMock.mockResolvedValue(textResponse('이번 달 마감이 지났어요.', { status: 400, type: 'text/plain' }));
+
+    const err = await api.get('/api/x').catch((e) => e);
+
+    expect(err.message).toBe('이번 달 마감이 지났어요.');
+  });
+
+  it('헤더가 HTML 이면 태그가 없어도 안 보여준다', async () => {
+    // nginx 등이 `text/html` 로 아주 짧은 본문만 주는 경우가 있다. 태그가 없다고
+    // 그대로 띄우면 사용자 말이 아닌 서버 상투구가 안내 문구가 된다.
+    // 본문만 보고 판정하면 이 경우가 새어 나간다.
+    fetchMock.mockResolvedValue(textResponse('502 Bad Gateway', { status: 502, type: 'text/html' }));
+
+    const err = await api.get('/api/x').catch((e) => e);
+
+    expect(err.message).toBe('요청 실패 (502)');
+  });
+
+  it('평문이라도 너무 길면 안 보여준다', async () => {
+    // 스택 트레이스나 로그가 통째로 오는 경우가 있다. 오류 안내에 수백 자를
+    // 쏟으면 사용자는 무엇이 문제인지 읽어낼 수 없다.
+    const long = '서버 처리 중 오류가 발생했습니다. '.repeat(20);
+    expect(long.length).toBeGreaterThan(200);
+    fetchMock.mockResolvedValue(textResponse(long, { status: 500, type: 'text/plain' }));
+
+    const err = await api.get('/api/x').catch((e) => e);
+
+    expect(err.message).toBe('요청 실패 (500)');
+    expect(err.body).toBe(long);
+  });
+
+  it('JSON 의 error 필드가 먼저다', async () => {
+    // 서버가 형식을 갖춰 준 문구가 가장 정확하다. 형식 판정보다 앞선다.
+    fetchMock.mockResolvedValue(jsonResponse({ error: '카드를 먼저 등록해 주세요.' }, { status: 400 }));
+
+    const err = await api.get('/api/x').catch((e) => e);
+
+    expect(err.message).toBe('카드를 먼저 등록해 주세요.');
+  });
+});
