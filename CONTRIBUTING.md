@@ -60,7 +60,8 @@ develop 대상 PR 이 빨간불로 알려 준다.
 1. **릴리즈 아티팩트가 `main` 과 맞는가** — `./scripts/check-release-sync.sh`.
    어긋나면 `./scripts/sync-release-artifacts.sh` 로 맞추고 커밋한다
 2. 열린 PR 중 `develop` 에 들어가야 할 것이 남아 있지 않은가
-3. `docs/API.md` · `docs/DATA_MODEL.md` · `docs/IMPLEMENTATION_AUDIT.md` 가 코드와 맞는가
+3. `docs/IMPLEMENTATION_AUDIT.md` 가 코드와 맞는가
+   (`docs/API.md` · `docs/DATA_MODEL.md` 는 **CI 가 강제**한다 — 아래 «문서 업데이트 체크» 참조)
 
 머지 후 release-please 가 `main` 에 릴리즈 PR 을 연다. 그 PR 이 머지되면
 **아티팩트가 다시 어긋나므로** 1번이 develop 에서 빨간불이 된다 — 그때 동기화한다.
@@ -88,6 +89,21 @@ release-please 는 `main` 에서만 돈다. 릴리즈마다 `main` 의 네 파�
 ## 문서 업데이트 체크
 
 - 기능을 추가하거나 변경할 때, 관련 문서(`docs/API.md`, `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md` 등)를 함께 업데이트했는지 PR 전에 확인한다. `CHANGELOG.md` 는 release-please 가 만들므로 손으로 고치지 않는다. 진행 상태는 GitHub 마일스톤·이슈가 정본이라 문서에 따로 적지 않는다.
+
+### 무엇이 CI 로 강제되나
+
+**이 절의 체크리스트는 세 번 실패했다**(#33, FND-17, 그리고 릴리즈 체크리스트 3번). 그래서 기계가 볼 수 있는 것은 기계에 넘겼다.
+
+| 문서 | 수단 | 무엇을 보는가 |
+|---|---|---|
+| `docs/ARCHITECTURE.md` | `npm run docs:inventory:check` | 라우트·서비스·페이지·컴포넌트·마이그레이션 **목록을 생성**해 대조 |
+| `docs/API.md` | `npm run docs:check` | 마운트된 라우트마다 `## <파일명>` 절이 있는가 |
+| `docs/DATA_MODEL.md` | `npm run docs:check` | `CREATE TABLE` 되는 표가 문서에 나오는가 |
+| `docs/GUIDE.md` | 아직 없음 | #490 이 내용을 채운 뒤 켠다 (`scripts/check-docs.js` 주석 참조) |
+
+`docs:check` 가 보는 것은 **존재 여부까지**다. API.md 는 엔드포인트마다 요청·응답을 적는 문서이고 DATA_MODEL.md 는 컬럼과 관계를 설명하는 문서라, 본문을 코드에서 만들어 낼 수 없다. 만들 수 있는 척하면 "자동 생성됨" 표시만 붙은 빈 껍데기가 된다. **내용이 맞는지는 사람이 본다 — 다만 통째로 빠지는 것은 막는다.**
+
+새 표를 만들었는데 문서에 실릴 성격이 아니면 `scripts/check-docs.js` 의 `TABLE_EXCLUDE` 에 **이유와 함께** 더한다.
 
 ## 문서 변경 승인 게이트 (confirm-chain)
 

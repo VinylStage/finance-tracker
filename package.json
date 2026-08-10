@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "docs:inventory": "node scripts/gen-inventory.js",
     "docs:inventory:check": "node scripts/gen-inventory.js --check",
+    "docs:check": "node scripts/check-docs.js",
     "test:ports": "node scripts/check-test-ports.js"
   },
   "dependencies": {
