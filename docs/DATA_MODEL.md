@@ -26,6 +26,8 @@
 | card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
 | installment_duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | transaction_id, dismissed_at |
 | merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |
+| card_threshold_tiers | 카드별 전월실적 구간과 그 구간의 요율 (#526). 구간 수가 카드마다 달라 컬럼이 아니라 행으로 둔다 | id, card_product_id, min_spend, rate, label, created_at |
+| card_threshold_exclusions | 사용자가 카드 실적 집계에서 뺀 거래 (#526). 행이 있으면 제외, 지우면 재포함 | id, transaction_id, reason, excluded_at |
 | schema_migrations | 적용된 마이그레이션 파일 이름 | id, name, applied_at |
 
 ## 테이블 관계

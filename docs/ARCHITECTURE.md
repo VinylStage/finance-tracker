@@ -75,9 +75,9 @@ CSS 에서 사라진다.
 
 `AnchorNav` · `BalanceProjection` · `BillingMonthBackfillSection` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `RetentionNotice` · `SavingsGoalBar` · `SettlementReclassifySection` · `SpendHeatmap` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
-### 마이그레이션 (23개)
+### 마이그레이션 (24개)
 
-최신: `023-card-product-active`
+최신: `026-card-threshold-tiers`
 
 
 <!-- inventory:end -->

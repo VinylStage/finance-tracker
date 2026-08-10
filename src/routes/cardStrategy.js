@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { asInt } = require('../utils/validate');
 const { localYMD } = require('../utils/date');
 const { computeThreshold, INCOME_MAJOR_TYPE } = require('../services/cardThreshold');
 const { compareCards } = require('../services/cardComparison');
@@ -103,8 +104,25 @@ function loadCards() {
   return cards.map((c) => ({ ...c, benefits: byCard.get(c.id) || [] }));
 }
 
+// 카드에 등록된 실적 구간(#526). 없으면 빈 배열이고, 그러면 computeThreshold 가
+// 단일 임계값으로 예전처럼 판정한다.
+function tiersFor(cardProductId) {
+  return db.prepare(`
+    SELECT id, min_spend, rate, label FROM card_threshold_tiers
+    WHERE card_product_id = ? ORDER BY min_spend
+  `).all(cardProductId);
+}
+
+// 사용자가 실적에서 뺀 거래 id(#526). 카드사 실적 규칙은 카드마다 달라
+// 자동 판정만으로 못 맞춘다.
+function excludedTxIds() {
+  return new Set(
+    db.prepare('SELECT transaction_id FROM card_threshold_exclusions').all().map((r) => r.transaction_id)
+  );
+}
+
 // 카드 한 장의 전월 실적. 구간이 카드마다 다르므로 카드별로 조회한다.
-function thresholdFor(card, asOf, resolve) {
+function thresholdFor(card, asOf, resolve, excluded) {
   // 구간을 알아야 조회 범위가 정해지는데, 구간 계산은 카드 정보만 있으면
   // 된다. 그래서 빈 목록으로 한 번 불러 구간만 얻고 다시 합산한다 —
   // 구간 계산 규칙을 여기 복사하지 않기 위해서다.
@@ -116,13 +134,20 @@ function thresholdFor(card, asOf, resolve) {
     .all(period.start, period.end)
     .filter((r) => resolve(r) === card.id);
 
-  return computeThreshold({ cardProduct: card, transactions: rows, asOf });
+  return computeThreshold({
+    cardProduct: card, transactions: rows, asOf,
+    tiers: tiersFor(card.id),
+    excludedIds: excluded,
+  });
 }
 
 function withThresholds(cards, asOf) {
   const resolve = cardIdResolver(cards);
+  // 제외 목록은 카드마다 다시 읽을 이유가 없다. 카드 수만큼 같은 쿼리가
+  // 도는 것을 막는다.
+  const excluded = excludedTxIds();
   return cards.map((card) => {
-    const threshold = thresholdFor(card, asOf, resolve);
+    const threshold = thresholdFor(card, asOf, resolve, excluded);
     return { ...card, thresholdMet: threshold.met, threshold };
   });
 }
@@ -235,6 +260,116 @@ router.get('/comparison', (req, res) => {
       // 실적 판정이 추정이면 차액도 추정이다. 화면이 이어서 말해야 한다.
       thresholdEstimated: cards.some((c) => c.threshold.estimated),
     });
+  } catch (e) {
+    serverError(res, e, 'cardStrategy');
+  }
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 실적 구간(#526)
+//
+// 카드마다 구간 수도 금액도 달라서 카드 단위로 통째로 받고 통째로 바꾼다.
+// 행 하나씩 PATCH 하면 "구간 3개를 2개로 줄이기" 가 삭제+수정 조합이 되어
+// 중간 상태에서 하한이 겹칠 수 있다 — 겹치면 어느 요율을 쓸지 정할 수 없다.
+// ─────────────────────────────────────────────────────────────────────────
+
+// GET /api/card-strategy/tiers/:cardProductId
+router.get('/tiers/:cardProductId', (req, res) => {
+  try {
+    const id = asInt(req.params.cardProductId);
+    if (id === null) return res.status(400).json({ error: '카드를 찾을 수 없습니다.' });
+    res.json({ data: tiersFor(id) });
+  } catch (e) {
+    serverError(res, e, 'cardStrategy');
+  }
+});
+
+// PUT /api/card-strategy/tiers/:cardProductId  { tiers: [{ min_spend, rate, label }] }
+router.put('/tiers/:cardProductId', (req, res) => {
+  try {
+    const id = asInt(req.params.cardProductId);
+    if (id === null) return res.status(400).json({ error: '카드를 찾을 수 없습니다.' });
+
+    const card = db.prepare('SELECT id FROM card_products WHERE id = ?').get(id);
+    if (!card) return res.status(404).json({ error: '카드를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.' });
+
+    const incoming = Array.isArray((req.body || {}).tiers) ? req.body.tiers : null;
+    if (!incoming) return res.status(400).json({ error: '구간 목록을 보내 주세요.' });
+
+    const seen = new Set();
+    const rows = [];
+    for (const t of incoming) {
+      const min = asInt((t || {}).min_spend);
+      if (min === null || min < 0) {
+        return res.status(400).json({ error: '구간 하한은 0 이상의 숫자여야 합니다.' });
+      }
+      // 하한이 겹치면 어느 요율을 쓸지 정할 수 없다. 저장 뒤에 발견하면
+      // 이미 계산이 틀린 뒤다.
+      if (seen.has(min)) {
+        return res.status(400).json({ error: `구간 하한 ${min} 이 두 번 있습니다. 하한은 구간마다 달라야 합니다.` });
+      }
+      seen.add(min);
+
+      let rate = null;
+      if (t.rate !== null && t.rate !== undefined && t.rate !== '') {
+        rate = Number(t.rate);
+        if (!Number.isFinite(rate) || rate < 0) {
+          return res.status(400).json({ error: '요율은 0 이상의 숫자여야 합니다.' });
+        }
+      }
+      rows.push({ min, rate, label: t.label ? String(t.label) : null });
+    }
+
+    // 통째로 교체한다. 트랜잭션으로 감싸 중간 상태가 남지 않게 한다 —
+    // 지우고 넣는 사이에 실패하면 구간이 통째로 사라진 카드가 된다.
+    db.transaction(() => {
+      db.prepare('DELETE FROM card_threshold_tiers WHERE card_product_id = ?').run(id);
+      const ins = db.prepare(
+        'INSERT INTO card_threshold_tiers (card_product_id, min_spend, rate, label) VALUES (?,?,?,?)'
+      );
+      for (const r of rows) ins.run(id, r.min, r.rate, r.label);
+    })();
+
+    res.json({ ok: true, data: tiersFor(id) });
+  } catch (e) {
+    serverError(res, e, 'cardStrategy');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// 거래별 실적 제외(#526)
+//
+// 행이 있으면 제외, 없으면 포함이다. 재포함은 행을 지우는 것이라 "되돌렸다"
+// 가 별도 상태로 남지 않는다 — 감사 로그가 그 이력을 들고 있다.
+// ─────────────────────────────────────────────────────────────────────────
+
+// POST /api/card-strategy/exclusions  { transaction_id, reason }
+router.post('/exclusions', (req, res) => {
+  try {
+    const txId = asInt((req.body || {}).transaction_id);
+    if (txId === null) return res.status(400).json({ error: '거래를 찾을 수 없습니다.' });
+
+    const tx = db.prepare('SELECT id FROM transactions WHERE id = ?').get(txId);
+    if (!tx) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
+
+    const reason = (req.body || {}).reason ? String(req.body.reason) : null;
+    db.prepare(
+      'INSERT OR IGNORE INTO card_threshold_exclusions (transaction_id, reason) VALUES (?,?)'
+    ).run(txId, reason);
+    res.json({ ok: true });
+  } catch (e) {
+    serverError(res, e, 'cardStrategy');
+  }
+});
+
+// DELETE /api/card-strategy/exclusions/:transactionId — 다시 실적에 넣는다.
+router.delete('/exclusions/:transactionId', (req, res) => {
+  try {
+    const txId = asInt(req.params.transactionId);
+    if (txId === null) return res.status(400).json({ error: '거래를 찾을 수 없습니다.' });
+    const r = db.prepare('DELETE FROM card_threshold_exclusions WHERE transaction_id = ?').run(txId);
+    res.json({ ok: true, restored: r.changes });
   } catch (e) {
     serverError(res, e, 'cardStrategy');
   }
