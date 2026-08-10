@@ -1,5 +1,5 @@
 import React from 'react';
-import { PRESETS, rangeForPreset, validateRange } from '../lib/periodFilter';
+import { PRESETS, rangeForPreset, validateRange, rangeForMonth, monthShorthand } from '../lib/periodFilter';
 
 // 기간 선택 컨트롤(#272).
 //
@@ -13,12 +13,28 @@ import { PRESETS, rangeForPreset, validateRange } from '../lib/periodFilter';
 export default function PeriodFilter({ period, onChange, className = '' }) {
   const { preset, from, to, includeDerived, invalid } = period;
 
+  // '월 선택' 이 열 때 보여줄 달. 보고 있던 기간의 시작월을 그대로 쓴다 —
+  // 최근 3개월(6~8월)에서 월 선택으로 넘어가면 6월이 잡힌다. 오늘 달로 튀면
+  // 사용자가 보던 곳을 잃는다.
+  const currentMonth = monthShorthand({ from, to }) || (from || '').slice(0, 7);
+
   const pick = (key) => {
     if (key === 'custom') {
       onChange({ from, to });
       return;
     }
+    if (key === 'month') {
+      // 이미 한 달 범위면 그대로 두고 컨트롤만 연다. 아니면 시작월 전체로 편다.
+      onChange(rangeForMonth(currentMonth) || { from, to });
+      return;
+    }
     onChange(rangeForPreset(key));
+  };
+
+  const setMonth = (ym) => {
+    const r = rangeForMonth(ym);
+    // 사용자가 입력칸을 비우는 중간 상태가 있다. 그때 조회하지 않는다.
+    if (r) onChange(r);
   };
 
   const setCustom = (nextFrom, nextTo) => {
@@ -46,6 +62,22 @@ export default function PeriodFilter({ period, onChange, className = '' }) {
           </button>
         ))}
       </div>
+
+      {preset === 'month' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor="period-month">조회할 달</label>
+          {/* `<input type="month">` 를 쓰는 이유: 말일이 달마다 달라(28/30/31)
+              시작일·종료일을 손으로 채우면 사용자가 그걸 기억해야 한다.
+              브라우저 기본 컨트롤이라 키보드·스크린리더도 그대로 동작한다. */}
+          <input
+            id="period-month"
+            type="month"
+            value={currentMonth}
+            onChange={(e) => setMonth(e.target.value)}
+            className="text-xs border border-line rounded-control px-2 py-1.5 bg-surface text-ink"
+          />
+        </div>
+      )}
 
       {preset === 'custom' && (
         <div className="flex flex-wrap items-center gap-2">

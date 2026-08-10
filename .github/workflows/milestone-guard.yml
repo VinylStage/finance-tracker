@@ -1,0 +1,224 @@
+name: Milestone Guard
+
+# 마일스톤이 진행 상태를 나타내게 유지한다(#497).
+#
+# ROADMAP.md 를 없애면서 GitHub 마일스톤을 진행 정본으로 삼았는데(#443), 2026-08-06
+# 실측에서 그 정본이 상태를 못 나타내고 있었다 — 마일스톤 18개가 전부 열려 있는데
+# 그중 17개는 열린 이슈가 0개였고, 최근 닫힌 이슈 30건 중 13건에 마일스톤이 없었다.
+#
+# 관행으로 두면 유지되지 않는다는 게 이 저장소의 실측이다(#33 이 문서 체크리스트로
+# 같은 시도를 했다가 실패했다). 그래서 기계가 본다.
+
+on:
+  issues:
+    types: [opened, reopened, closed, milestoned, demilestoned]
+  schedule:
+    # 월요일 09:30 KST. maintenance-audit(09:00 KST) 와 겹치지 않게 30분 뒤로 둔다.
+    - cron: '30 0 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 마일스톤 없는 이슈에 라벨을 붙인다.
+  #
+  # GitHub 은 이슈 생성 시 마일스톤을 **강제할 수 없다.** 이슈 템플릿의 마일스톤은
+  # 기본값일 뿐이고 지울 수 있으며, 생성을 막는 수단은 없다. 그래서 막는 대신
+  # 보이게 한다 — 라벨이 붙으면 이슈 목록에서 바로 눈에 띈다.
+  #
+  # 코멘트는 **닫힐 때만** 단다. 열릴 때마다 달면 새 이슈마다 봇 코멘트가 하나씩
+  # 붙어 소음이 된다. 실제 유실이 확정되는 지점은 마일스톤 없이 닫히는 순간이다.
+  # ─────────────────────────────────────────────────────────────────────────
+  label:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const LABEL = 'needs-milestone';
+            const MARKER = '<!-- milestone-guard -->';
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            const issue_number = issue.number;
+
+            // 라벨이 없는 저장소에서도 동작해야 한다. 이미 있으면 422 가 나는데
+            // 그건 정상이므로 삼킨다.
+            async function ensureLabel() {
+              try {
+                await github.rest.issues.createLabel({
+                  owner, repo, name: LABEL, color: 'fbca04',
+                  description: '마일스톤이 지정되지 않았다',
+                });
+              } catch (err) {
+                if (err.status !== 422) throw err;
+              }
+            }
+
+            async function addLabel() {
+              await ensureLabel();
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number, labels: [LABEL],
+              });
+              core.info(`#${issue_number} 에 ${LABEL} 부착`);
+            }
+
+            async function removeLabel() {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number, name: LABEL,
+                });
+                core.info(`#${issue_number} 에서 ${LABEL} 제거`);
+              } catch (err) {
+                // 애초에 안 붙어 있었으면 404. 지우려던 상태가 이미 참이다.
+                if (err.status !== 404) throw err;
+              }
+            }
+
+            const action = context.payload.action;
+
+            if (action === 'milestoned') {
+              await removeLabel();
+              return;
+            }
+
+            if (issue.milestone) {
+              core.info(`#${issue_number} 은 마일스톤(${issue.milestone.title})이 있다`);
+              return;
+            }
+
+            await addLabel();
+
+            if (action !== 'closed') return;
+
+            // 같은 이슈가 여러 번 닫히고 열려도 코멘트는 하나만 남긴다.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            if (comments.some((c) => c.body?.includes(MARKER))) {
+              core.info('이미 안내 코멘트가 있다');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: [
+                MARKER,
+                '**마일스톤 없이 닫혔다.**',
+                '',
+                '어느 마일스톤에서 한 일인지 기록이 남지 않아, 나중에 "그 마일스톤에서 무엇을 했나" 를 되짚을 수 없다.',
+                '지금 지정하면 이 라벨은 자동으로 떨어진다. 어느 마일스톤에도 속하지 않는 일이면 그대로 두면 된다.',
+                '',
+                '근거: #497',
+              ].join('\n'),
+            });
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 마지막 이슈가 닫히면 그 마일스톤을 닫는다.
+  #
+  # **이 잡은 방금 닫힌 이슈의 마일스톤 하나만 본다.** 저장소 전체를 훑어 "열린
+  # 이슈 0개" 인 마일스톤을 일괄로 닫지 않는다 — "이슈가 0개" 와 "목표가 달성됐다"
+  # 는 다르고, 착수만 하고 멈춘 마일스톤이 섞여 있을 수 있다(M5 는 closed=1 이다).
+  # 기존 17개는 사람이 판단해 닫는다(#497 의 일회성 정리).
+  #
+  # 여기서 닫는 것은 다르다. 방금 사람이 마지막 이슈를 닫은 직후이고, 그 행위가
+  # 판단을 포함한다. 잘못 닫혔으면 마일스톤 재열기는 클릭 한 번이다.
+  # ─────────────────────────────────────────────────────────────────────────
+  close-completed-milestone:
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const ms = context.payload.issue.milestone;
+            if (!ms) {
+              core.info('마일스톤 없는 이슈다');
+              return;
+            }
+
+            // 웹훅 페이로드의 open_issues 는 닫기 직전 값일 수 있다. 직접 센다.
+            // 이 목록에는 PR 도 포함된다 — 그게 맞다. 해당 마일스톤을 향한 PR 이
+            // 열려 있으면 아직 끝난 게 아니다.
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, milestone: String(ms.number), state: 'open', per_page: 100,
+            });
+
+            if (open.length > 0) {
+              core.info(`${ms.title}: 열린 항목 ${open.length}개 — 그대로 둔다`);
+              return;
+            }
+
+            const { data: fresh } = await github.rest.issues.getMilestone({
+              owner, repo, milestone_number: ms.number,
+            });
+            if (fresh.state !== 'open') {
+              core.info(`${ms.title} 은 이미 닫혀 있다`);
+              return;
+            }
+
+            await github.rest.issues.updateMilestone({
+              owner, repo, milestone_number: ms.number, state: 'closed',
+            });
+
+            const line = `**${ms.title}** 을 닫았다 — 마지막 항목 #${context.payload.issue.number} 이 닫히며 열린 항목이 0개가 됐다.`;
+            core.info(line);
+            await core.summary
+              .addHeading('마일스톤 자동 닫힘', 3)
+              .addRaw(line)
+              .addRaw('\n\n잘못 닫혔으면 마일스톤 페이지에서 다시 열면 된다.')
+              .write();
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 주간 점검 — 마일스톤 없이 열려 있는 이슈에 라벨을 채운다.
+  #
+  # 이벤트 기반 잡은 앞으로 생기는 것만 잡는다. 이미 열려 있는 것들은 이 잡이 훑는다.
+  #
+  # **여기서는 마일스톤을 닫지 않는다.** 위 잡의 주석에 적은 이유 그대로다.
+  # 코멘트도 달지 않는다 — 최초 실행에서 수십 건에 한꺼번에 달리면 소음이 된다.
+  # ─────────────────────────────────────────────────────────────────────────
+  sweep:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const LABEL = 'needs-milestone';
+            const { owner, repo } = context.repo;
+
+            try {
+              await github.rest.issues.createLabel({
+                owner, repo, name: LABEL, color: 'fbca04',
+                description: '마일스톤이 지정되지 않았다',
+              });
+            } catch (err) {
+              if (err.status !== 422) throw err;
+            }
+
+            const all = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            // listForRepo 는 PR 도 준다. 마일스톤 규칙은 이슈에만 적용한다.
+            const missing = all.filter((i) => !i.pull_request && !i.milestone);
+
+            for (const i of missing) {
+              if (i.labels.some((l) => (l.name || l) === LABEL)) continue;
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: i.number, labels: [LABEL],
+              });
+              core.info(`#${i.number} 에 ${LABEL} 부착`);
+            }
+
+            const summary = core.summary
+              .addHeading('마일스톤 점검', 3)
+              .addRaw(`열린 이슈 ${all.filter((i) => !i.pull_request).length}건 중 마일스톤 없음 **${missing.length}건**`);
+
+            if (missing.length) {
+              summary.addList(missing.map((i) => `#${i.number} ${i.title}`));
+            }
+            await summary.write();

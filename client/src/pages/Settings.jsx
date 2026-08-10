@@ -324,10 +324,14 @@ function CategorySection({ categories, onChanged }) {
     }
   };
 
-  const handleReActivate = async (id) => {
+  // PUT /api/categories/:id 는 부분 갱신이 아니라 레코드 전체를 덮는다.
+  // major_type 을 빼고 보내면 서버가 400 으로 막는다(routes/categories.js:42) —
+  // is_active 만 보내던 동안 재활성화는 한 번도 성공한 적이 없고, 사용자에게는
+  // "major_type must be one of ..." 라는 영문 메시지만 떴다.
+  const handleReActivate = async (cat) => {
     if (!await confirm('재활성화하시겠습니까?')) return;
     try {
-      await api.put(`/api/categories/${id}`, { is_active: 1 });
+      await api.put(`/api/categories/${cat.id}`, { ...cat, is_active: 1 });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -443,7 +447,7 @@ function CategorySection({ categories, onChanged }) {
                       {c.is_active ? (
                         <button onClick={() => handleDeactivate(c.id)} className="text-caption hover:text-loss-text text-xs">비활성화</button>
                       ) : (
-                        <button onClick={() => handleReActivate(c.id)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
+                        <button onClick={() => handleReActivate(c)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
                       )}
                     </td>
                   </>
@@ -532,6 +536,26 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
 
   const filteredRules = showInactive ? rules : rules.filter(r => r.is_active);
 
+  const [catchupBusy, setCatchupBusy] = useState(false);
+  const [catchupResult, setCatchupResult] = useState(null);
+
+  // 되돌릴 수 있고(생긴 거래를 지우면 된다) 같은 회차를 두 번 만들지 않으므로
+  // 프리뷰를 요구하지 않는다. 다만 **몇 건이 생겼는지 반드시 말한다** — 공백이
+  // 길면 수십 건이 한 번에 생긴다(#280 과 같은 이유).
+  const runCatchup = async () => {
+    setCatchupBusy(true);
+    setCatchupResult(null);
+    try {
+      const r = await api.post('/api/recurring-rules/catchup/run', {});
+      setCatchupResult(r);
+      onChanged?.();
+    } catch (e) {
+      setCatchupResult({ error: e.message || '반영에 실패했어요.' });
+    } finally {
+      setCatchupBusy(false);
+    }
+  };
+
   return (
     <div className="bg-surface shadow-card rounded-card border border-line p-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -543,12 +567,27 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
           <button onClick={() => setShowInactive(s => !s)} className="text-xs text-caption hover:text-body">
             {showInactive ? '활성 항목만 보기' : '비활성 항목 보기'}
           </button>
+          {/* 따라잡기는 기동 시 1회만 돈다(#279). 이 앱은 사용자가 열 때만
+              프로세스가 살아서, 규칙을 새로 만들어도 다음 기동까지 아무 일도
+              안 일어난다 — 며칠이 지날 수도 있다(#498). */}
+          <button onClick={runCatchup} disabled={catchupBusy} className="text-xs text-caption hover:text-body disabled:opacity-40">
+            {catchupBusy ? '실행 중…' : '지금 반영'}
+          </button>
         </div>
       </div>
       <p className="text-xs text-caption">
         매달 금액이 완전히 고정된 지출(구독료 등)만 등록하세요. 통신비처럼 매달 금액이 달라지는 항목은 계속 직접 입력해야 합니다.
         등록해도 자동으로 거래가 생기지 않고, 대시보드의 "이번 달 반복 거래 확인"에서 매달 확인 후 생성합니다.
       </p>
+      {catchupResult && (
+        <p className={`text-xs ${catchupResult.error ? 'text-loss-text' : 'text-brand-text'}`} role="status">
+          {catchupResult.error
+            ? catchupResult.error
+            : catchupResult.created > 0
+              ? `거래 ${catchupResult.created}건을 만들었어요.${catchupResult.details?.length ? ' ' + catchupResult.details.map(d => `${d.merchant} ${d.created}건`).join(', ') : ''}`
+              : '새로 만들 거래가 없어요. 이미 다 반영돼 있습니다.'}
+        </p>
+      )}
       {showForm && fromTransaction && (
         <p className="text-xs text-brand-text bg-brand-tint border border-brand-tint-strong rounded-control px-3 py-2">
           거래내역에서 값을 가져왔어요. 날짜는 복사하지 않았으니 시작일과 주기를 정해 주세요.
@@ -725,10 +764,14 @@ function PaymentMethodSection({ paymentMethods, accounts, onChanged }) {
     }
   };
 
-  const handleReActivate = async (id) => {
+  // 카테고리 쪽과 같은 이유다 — 이 PUT 도 전체 교체다. is_active 만 보내면
+  // name·type 이 NULL 로 덮이려다 스키마 제약에 걸려 500 이 난다. 즉 지금까지
+  // 재활성화는 한 번도 성공한 적이 없고, 사용자에게는 "처리 중 문제가
+  // 생겼습니다" 만 떴다.
+  const handleReActivate = async (pm) => {
     if (!await confirm('재활성화하시겠습니까?')) return;
     try {
-      await api.put(`/api/payment-methods/${id}`, { is_active: 1 });
+      await api.put(`/api/payment-methods/${pm.id}`, { ...pm, is_active: 1 });
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -829,7 +872,7 @@ function PaymentMethodSection({ paymentMethods, accounts, onChanged }) {
                       <Icon name="close" size={14} />
                     </button>
                   ) : (
-                    <button onClick={() => handleReActivate(p.id)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="재활성화">
+                    <button onClick={() => handleReActivate(p)} className="text-caption hover:text-brand-text px-1.5 py-0.5 rounded-full hover:bg-brand-tint" aria-label="재활성화">
                       <Icon name="refresh" size={14} />
                     </button>
                   )}

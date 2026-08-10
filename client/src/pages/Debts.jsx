@@ -160,7 +160,11 @@ export default function Debts() {
       </div>
 
       {showForm && (
+        // key 가 없으면 편집 대상이 바뀌어도 폼이 재사용돼 이전 부채의 값이
+        // 남는다. 그 상태로 저장하면 지금 대상의 id 에 이전 부채의 값이 덮인다
+        // (마이너스통장에 일반대출 값이 들어가고 한도가 null 로 지워진다).
         <DebtForm
+          key={editItem ? editItem.id : 'new'}
           initial={editItem}
           onSave={handleSave}
           onCancel={() => { setShowForm(false); setEditItem(null); }}

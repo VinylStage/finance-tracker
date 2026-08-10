@@ -14,6 +14,10 @@ spec=${spec:A}
 REPO=${DELEGATE_REPO:-${0:A:h:h:h}}
 SC=${DELEGATE_WORK:-$(mktemp -d -t delegate)}
 M=${DELEGATE_METRICS:-$SC}
+# 라운드를 이슈/PR 에 잇는다(M16). 이 값이 없으면 나중에 "이 PR 에서 위임한 것" 과
+# "언젠가 aider 가 건드린 적 있는 파일" 이 구분되지 않는다 — 실제로 그것 때문에
+# 위임 비율을 잘못 냈다. 비워 둔 채로 돌지 못하게 필수로 막는다.
+ISSUE=${DELEGATE_ISSUE:?DELEGATE_ISSUE 가 필요하다 (예: DELEGATE_ISSUE=526)}
 MIN_TESTS=${MIN_TESTS:-5}
 mkdir -p $SC $M
 cd $REPO || exit 1
@@ -107,6 +111,12 @@ record_numstat() {
   local add=$(awk '{a+=$1} END{print a+0}' "$out")
   printf "  numstat(%s) +%s → %s\n" "$1" "$add" "$out"
   printf "%s\t%s\t%s\n" "$label" "$1" "$add" >> "$M/numstat-summary.tsv"
+  # 라운드 원장. 헤더는 파일이 없을 때 한 번만 쓴다.
+  local ledger="$M/rounds.tsv"
+  [[ -f $ledger ]] || printf "ts\tissue\tlabel\tround\ttarget\tadded\tmodel\n" > "$ledger"
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+    "$(date +%Y-%m-%dT%H:%M:%S)" "$ISSUE" "$label" "$1" "$target" "$add" \
+    "${DELEGATE_MODEL:-ollama_chat/qwen3-coder:30b}" >> "$ledger"
 }
 
 ollama_ready || exit 1

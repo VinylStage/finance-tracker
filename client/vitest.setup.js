@@ -46,6 +46,20 @@ for (const [key, value] of Object.entries({
   Object.defineProperty(HTMLElement.prototype, key, { configurable: true, value });
 }
 
+// jsdom 은 레이아웃이 없어 scrollIntoView 를 아예 구현하지 않는다.
+// 해시로 들어온 항목을 찾아 옮기는 useHashTarget 이 requestAnimationFrame 안에서
+// 이걸 부르는데, 콜백이 테스트 밖에서 돌기 때문에 던진 예외를 아무도 못 받는다.
+// vitest 는 "unhandled error" 로 세고 "false positive 가능" 이라고 경고한다 —
+// 즉 이 자리를 비워 두면 결과를 믿을 수 없다.
+//
+// **Element.prototype 에 둔다. HTMLElement.prototype 이 아니다.**
+// 호출을 세려는 테스트는 Element.prototype 에 스파이를 꽂는데(#477 의
+// useHashTarget.test.jsx), 여기서 HTMLElement 쪽에 두면 더 가까운 프로토타입이
+// 그 스파이를 가려서 호출 수가 0 으로 잡힌다. 같은 자리에 둬야 덮어쓸 수 있다.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 // 다크모드 토글과 반응형 분기가 쓴다. jsdom 기본값은 undefined 다.
 if (!window.matchMedia) {
   window.matchMedia = (query) => ({
