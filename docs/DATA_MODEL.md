@@ -25,6 +25,7 @@
 | card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
 | installment_duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | transaction_id, dismissed_at |
 | merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |
+| recurrence_suggestion_dismissals | 반복 거래 제안에서 사용자가 거절한 가맹점 (#499). 세션이 아니라 DB 에 남긴다 — "이번엔 안 본다" 가 아니라 "이건 반복이 아니다" 라는 지속적 판단이라 기기를 바꿔도 유지돼야 한다 | id, merchant, dismissed_at |
 | schema_migrations | 적용된 마이그레이션 파일 이름 | id, name, applied_at |
 
 ## 테이블 관계
