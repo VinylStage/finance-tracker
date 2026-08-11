@@ -24,7 +24,6 @@ vi.mock('./pages/Debts', () => page('부채'));
 vi.mock('./pages/Simulator', () => page('시뮬레이터'));
 vi.mock('./pages/Savings', () => page('적금'));
 vi.mock('./pages/CardStrategy', () => page('카드전략'));
-vi.mock('./pages/Accounts', () => page('통장'));
 vi.mock('./pages/Settings', () => page('설정'));
 vi.mock('./pages/AuditLog', () => page('변경이력'));
 vi.mock('./pages/Guide', () => page('가이드'));
@@ -55,7 +54,6 @@ describe('주소가 화면을 고른다', () => {
     ['/analysis/comparison', '기간비교'],
     ['/analysis/simulator', '시뮬레이터'],
     ['/analysis/cards', '카드전략'],
-    ['/assets/accounts', '통장'],
     ['/assets/installments', '할부'],
     ['/assets/revolving', '리볼빙'],
     ['/assets/debts', '부채'],
@@ -168,7 +166,8 @@ describe('상단 내비게이션', () => {
     await show('적금');
 
     expect(screen.getByRole('link', { name: '적금' }).getAttribute('aria-current')).toBe('page');
-    expect(screen.getByRole('link', { name: '통장' }).getAttribute('aria-current')).toBeNull();
+    // 형제 항목에는 안 붙는다. 하나라도 같이 붙으면 "지금 어디인가" 가 흐려진다.
+    expect(screen.getByRole('link', { name: '할부' }).getAttribute('aria-current')).toBeNull();
   });
 
   it('가이드는 아이콘 링크로 따로 둔다', async () => {
