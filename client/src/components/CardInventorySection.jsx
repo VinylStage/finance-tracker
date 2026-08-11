@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import EmptyState from './EmptyState';
 import { formatWon } from '../lib/format';
+import { putCardEditRequest } from '../lib/cardEditRequest';
 
 // 등록 현황 한눈에 보기(#520).
 //
@@ -150,7 +151,19 @@ export default function CardInventorySection() {
                     <li key={c.id} className="bg-surface-sunken rounded-card px-3 py-2 space-y-1">
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="text-sm text-ink">{c.product_name}</span>
-                        <span className="text-[11px] text-caption shrink-0">{c.card_type}</span>
+                        <span className="flex items-baseline gap-2 shrink-0">
+                          <span className="text-[11px] text-caption">{c.card_type}</span>
+                          {/* 이 화면은 읽기 전용이라 여기서 고칠 수 없다. 그런데 "무엇이
+                              비었는지" 를 아는 곳이 여기뿐이라, 고치러 갈 자리도 여기여야
+                              한다(#533). 없으면 카드 일곱 장을 위에서 다시 찾아야 한다. */}
+                          <a
+                            href="#card-product"
+                            onClick={() => putCardEditRequest(c.id)}
+                            className="text-[11px] text-accent hover:underline"
+                          >
+                            수정
+                          </a>
+                        </span>
                       </div>
                       <p className="text-[11px] text-caption">
                         연회비 {formatWon(c.annual_fee || 0)}

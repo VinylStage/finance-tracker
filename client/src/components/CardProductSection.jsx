@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { useConfirm } from './ConfirmProvider';
 import EmptyState from './EmptyState';
 import { formatWon } from '../lib/format';
+import { takeCardEditRequest } from '../lib/cardEditRequest';
 
 // 보유 카드 등록·관리(#302 1단계).
 //
@@ -74,14 +75,31 @@ export default function CardProductSection({ paymentMethods }) {
       // 비활성 카드까지 받는다. 목록에서 아예 안 보이면 사용자는 그 카드가
       // 어디 갔는지, 왜 같은 이름으로 다시 등록이 막히는지 알 수 없다(#410).
       const res = await api.get('/api/card-products?include_inactive=1');
-      setProducts(res.data || []);
+      const list = res.data || [];
+      setProducts(list);
       setLoadError(null);
+      return list;
     } catch (e) {
       setLoadError(e.message);
+      return [];
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // 등록 현황에서 "이 카드를 고치러 간다" 를 눌렀으면 그 카드의 폼을 바로 편다(#533).
+    // 요청은 **목록을 받은 뒤에** 읽는다 — 먼저 읽으면 열 카드를 아직 모른다.
+    //
+    // 요청은 한 번만 쓰이고 사라진다(`takeCardEditRequest` 가 읽으면서 지운다).
+    // 안 그러면 다음에 설정 화면을 그냥 열었을 때 지난 요청이 살아나 엉뚱한 폼이 펼쳐진다.
+    load().then((list) => {
+      const wanted = takeCardEditRequest();
+      if (wanted === null) return;
+      const target = list.find((p) => p.id === wanted);
+      // 그 사이 지워진 카드일 수 있다. 없으면 조용히 넘어간다 — 목록은 이미 떠 있고,
+      // 여기서 오류를 띄우면 사용자가 한 적 없는 동작에 대해 사과를 받는다.
+      if (target) openEdit(target);
+    });
+  }, []);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 

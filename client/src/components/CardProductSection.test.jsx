@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import CardProductSection from './CardProductSection';
+import { putCardEditRequest } from '../lib/cardEditRequest';
 import { ConfirmProvider } from './ConfirmProvider';
 
 // #302 1단계 — 보유 카드 등록·관리.
@@ -54,6 +55,9 @@ const setup = (props = {}) =>
 beforeEach(() => {
   get.mockReset(); post.mockReset(); put.mockReset(); del.mockReset();
   get.mockResolvedValue({ data: [] });
+  // 등록 현황에서 넘어온 수정 요청이 세션에 남는다. 안 지우면 앞 테스트의
+  // 요청을 뒤 테스트가 자기 것으로 읽어 폼이 저절로 펼쳐진다(#533).
+  sessionStorage.clear();
 });
 
 describe('빈 상태', () => {
@@ -288,5 +292,48 @@ describe('수정·비활성화', () => {
     await waitFor(() =>
       expect(post.mock.calls.some(([p]) => p === '/api/card-products/10/reactivate')).toBe(true)
     );
+  });
+});
+
+// #533 — 등록 현황이 넘긴 "이 카드를 고치러 간다" 를 받는 쪽.
+//
+// 잠글 것은 **어느 카드의 폼이 열리나** 다. 그냥 "폼이 열린다" 만 보면 첫 카드를
+// 열어도 통과한다 — 카드가 여러 장일 때 그게 이 기능의 유일한 실패 방식이다.
+describe('등록 현황에서 넘어온 수정 요청', () => {
+  it('요청한 그 카드의 폼이 열린다 — 첫 카드가 아니라', async () => {
+    get.mockResolvedValue({ data: PRODUCTS });
+    const target = PRODUCTS[1];
+    putCardEditRequest(target.id);
+    setup();
+    await waitFor(() => {
+      expect(screen.getByLabelText('카드 이름 *').value).toBe(target.product_name);
+    });
+  });
+
+  it('요청이 없으면 폼이 저절로 열리지 않는다', async () => {
+    get.mockResolvedValue({ data: PRODUCTS });
+    setup();
+    await screen.findByText('하나 A');
+    expect(screen.queryByLabelText('카드 이름 *')).toBeNull();
+  });
+
+  it('요청은 한 번만 쓰인다 — 다시 그리면 열리지 않는다', async () => {
+    get.mockResolvedValue({ data: PRODUCTS });
+    putCardEditRequest(PRODUCTS[0].id);
+    const first = setup();
+    await waitFor(() => expect(screen.getByLabelText('카드 이름 *')).toBeTruthy());
+    first.unmount();
+    setup();
+    await screen.findByText('하나 A');
+    expect(screen.queryByLabelText('카드 이름 *')).toBeNull();
+  });
+
+  it('그 사이 지워진 카드면 조용히 넘어간다', async () => {
+    get.mockResolvedValue({ data: PRODUCTS });
+    putCardEditRequest(9999);
+    setup();
+    await screen.findByText('하나 A');
+    expect(screen.queryByLabelText('카드 이름 *')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
