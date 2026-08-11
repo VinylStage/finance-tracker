@@ -105,6 +105,21 @@ release-please 는 `main` 에서만 돈다. 릴리즈마다 `main` 의 네 파�
 
 새 표를 만들었는데 문서에 실릴 성격이 아니면 `scripts/check-docs.js` 의 `TABLE_EXCLUDE` 에 **이유와 함께** 더한다.
 
+## ERD 는 손으로 그리지 않는다
+
+`docs/ERD.md` 는 `migrations/` 에서 세운 스키마를 [mermerd](https://github.com/KarnerTh/mermerd) 로 그린 산출물이다. **직접 편집하지 않는다.**
+
+스키마를 바꾸는 마이그레이션을 넣었으면 다시 그리고 함께 커밋한다.
+
+```bash
+go install github.com/KarnerTh/mermerd@latest   # 최초 1회
+npm run docs:erd
+```
+
+CI 는 `npm run docs:erd:check` 로 **스키마 지문만** 대조한다. mermerd 없이 도는 검사라 CI 에 Go 를 깔지 않는다 — 스키마가 바뀌었는데 ERD 를 안 다시 그렸으면 그 자리에서 빨간불이 된다.
+
+실거래 DB 가 아니라 임시 DB 에 마이그레이션을 전부 적용해 그린다. 사용자가 앱을 안 열었으면 실거래 DB 는 아직 옛 스키마라, 그것을 그리면 **코드보다 오래된 ERD** 가 커밋된다.
+
 ## 문서 변경 승인 게이트 (confirm-chain)
 
 `docs/audit/`, `docs/design/`, `docs/decisions/` 아래 문서는 **커밋 훅으로 승인 게이트가 걸려 있다.** 감사 보고서·설계 문서·ADR은 되돌리기 어렵고 다른 결정의 근거가 되므로, 승인 없이 조용히 들어가는 것을 막는다.
