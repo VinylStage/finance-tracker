@@ -4,7 +4,6 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { PAYMENT_STYLES, MAJOR_TYPES } = require('../constants');
-const { localYMD } = require('../utils/date');
 
 // GET /api/data-integrity
 router.get('/', (req, res) => {
@@ -59,23 +58,15 @@ router.get('/', (req, res) => {
       samples: smallAmounts
     });
 
-    // 4. 종료됐어야 하는데 진행중으로 남은 할부
-    const today = localYMD();
-    const overdueInstallments = db.prepare(`
-      SELECT id FROM installments
-      WHERE status = '진행중'
-        AND ? >= strftime('%Y-%m-%d', date(start_billing_month || '-01', '+' || months || ' months'))
-      LIMIT 20
-    `).all(today);
-    checks.push({
-      name: '종료됐어야 하는데 진행중으로 남은 할부',
-      count: db.prepare(`
-        SELECT count(*) as count FROM installments
-        WHERE status = '진행중'
-          AND ? >= strftime('%Y-%m-%d', date(start_billing_month || '-01', '+' || months || ' months'))
-      `).get(today).count,
-      samples: overdueInstallments
-    });
+    // 4번 점검("종료됐어야 하는데 진행중으로 남은 할부")은 없앴다(#205).
+    //
+    // 그 점검은 `status` 컬럼이 계산 결과를 늦게 받아 적는 캐시였기 때문에
+    // 필요했다. 캐시를 갱신하는 것이 GET 요청 안의 스윕뿐이라, 조회가 한 번도
+    // 안 일어난 사이에는 저장된 값이 사실과 달랐다.
+    //
+    // 이제 상태를 조회할 때마다 계산한다. 어긋날 저장값이 없으므로 이 점검은
+    // 구조적으로 0 만 낼 수 있다 — 항상 0 인 항목을 목록에 두면 나머지 점검의
+    // 신뢰도까지 깎는다.
 
     // 5. 카테고리 없는 거래(orphan category_id) 및 중복 승인번호
     const orphanTransactions = db.prepare(`

@@ -7,7 +7,7 @@
 | payment_methods | 결제수단 정보 저장 | id, name, type, is_active, created_at |
 | categories | 지출/수입 카테고리 저장 | id, major_type, name, monthly_budget, is_active |
 | transactions | 일시불 및 일반적인 거래 내역 저장 | id, date, category_id, amount, payment_method_id, payment_style, merchant, memo, installment_id, origin, origin_ref_table, origin_ref_id, origin_seq, origin_seq_total, created_at |
-| installments | 분할 결제 정보 저장 | id, purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, status, paid_off_on |
+| installments | 분할 결제 정보 저장 | id, purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, paid_off_on |
 | revolving_history | 신용카드 회계 기록 저장 | id, month, carried_balance, new_charge, paid_amount, interest, next_carried_balance, payment_method_id |
 | debts | 부채 정보 저장 | id, name, balance, annual_rate, type, memo, loan_type, credit_limit, interest_basis, compounds, interest_day, updated_at |
 | debt_rate_history | 부채 금리의 시점별 이력 | id, debt_id, annual_rate, effective_from, effective_to, memo, created_at |

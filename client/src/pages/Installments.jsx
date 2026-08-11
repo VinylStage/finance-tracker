@@ -47,34 +47,20 @@ export default function Installments() {
 
   // 완료 처리에 확인을 받는다(#295).
   //
-  // 바로 아래 handleDelete 는 확인을 거치는데 완료는 안 거쳤다. 되돌릴 수 없다는
-  // 점에서는 둘이 같고, 기본 필터가 '진행중' 이라 목록에서 사라지는 것도 같다.
-  // 실제로 잘못 눌러 DB 를 직접 고쳐 복구한 사고가 있었다.
-  const handleComplete = async (it) => {
-    const ok = await confirm(
-      `「${it.merchant}」 할부를 완료로 표시할까요? 목록에서 사라지고, 청구 기간이 끝난 뒤에는 되돌릴 수 없어요.`,
-      { confirmLabel: '완료 처리' }
-    );
-    if (!ok) return;
-    try {
-      await api.put(`/api/installments/${it.id}`, { status: '완료' });
-      reload();
-    } catch (err) {
-      await alert(err.message);
-    }
-  };
-
-  // 완료를 되돌린다(#295). 되는지 여부는 서버가 판정해 내려준다 — 화면이 날짜
-  // 계산을 다시 하면 스윕 조건과 어긋난다.
-  const handleReopen = async (it) => {
-    try {
-      await api.post(`/api/installments/${it.id}/reopen`, {});
-      reload();
-    } catch (err) {
-      await alert(err.message);
-    }
-  };
-
+  // «완료처리» 와 «되돌리기» 는 없앴다(#205).
+  //
+  // 상태를 이제 저장하지 않고 시작월·개월수로 계산한다. 그래서 손으로 «완료» 를
+  // 찍어 둘 자리가 없고, 찍을 필요도 없다 — 청구 기간이 끝나면 목록이 스스로
+  // 완료로 보인다.
+  //
+  // 두 버튼은 서로를 필요로 하던 한 쌍이었다. «완료처리» 가 플래그를 세우고,
+  // 그것을 잘못 눌렀을 때 «되돌리기» 가 도로 눕혔다. 플래그가 사라지면 둘 다
+  // 할 일이 없다.
+  //
+  // **빚을 미리 갚은 경우는 아직 다루지 않는다.** 옛 «완료처리» 는 그 용도로
+  // 쓰였지만 플래그만 바꿔서, 앞으로 청구될 회차 거래는 그대로 남겨 두고
+  // 목록에서만 사라지게 했다. 제대로 하려면 남은 회차를 지워야 한다 —
+  // #488(할부 즉시결제·선결제)이 그 자리다.
   const handleDelete = async (id) => {
     if (!await confirm('삭제하시겠습니까?', { tone: 'danger' })) return;
     try {
@@ -202,33 +188,6 @@ export default function Installments() {
                       >
                         청구 내역 {openId === it.id ? '▲' : '▼'}
                       </button>
-                      {it.status === '진행중' && (
-                        <button
-                          onClick={() => handleComplete(it)}
-                          className="text-caption hover:text-brand-text transition-colors text-xs"
-                        >
-                          완료처리
-                        </button>
-                      )}
-                      {it.status === '완료' && (
-                        it.can_reopen ? (
-                          <button
-                            onClick={() => handleReopen(it)}
-                            className="text-caption hover:text-brand-text transition-colors text-xs"
-                          >
-                            되돌리기
-                          </button>
-                        ) : (
-                          // 비활성 버튼 대신 사유를 그대로 적는다. 눌리지 않는
-                          // 버튼은 고장으로 읽히고 이유도 알려주지 않는다(#270 과 같은 기준).
-                          <span
-                            className="text-disabled text-xs"
-                            title={it.reopen_blocked_reason || ''}
-                          >
-                            되돌릴 수 없음
-                          </span>
-                        )
-                      )}
                       <button
                         onClick={() => handleDelete(it.id)}
                         className="text-caption hover:text-loss-text transition-colors text-xs"
