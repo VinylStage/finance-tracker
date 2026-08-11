@@ -1,6 +1,7 @@
 'use strict';
 
 const { UserInputError } = require('../utils/errors');
+const { unguardFormula } = require('../utils/csvFormulaGuard');
 
 /**
  * 간단한 CSV 파서 - 쉼표로 분리, 따옴표 처리
@@ -172,7 +173,13 @@ function parseWithSpec(csvText, spec) {
 
     transactions.push({
       date: parsedDate,
-      merchant: row[merchantIndex] || '',
+      // 우리가 내보낸 CSV 를 다시 들여올 때 수식 방어 접두사를 벗긴다(#460).
+      // 붙이는 쪽만 있고 벗기는 쪽이 없으면 왕복이 무손실이 아니게 된다 —
+      // 가맹점명이 `'=이마트` 로 한 글자 늘어난 채 저장된다.
+      //
+      // 카드사가 준 파일에는 이 접두사가 없다. `unguardFormula` 는 뒤따르는
+      // 문자가 수식 시작 문자일 때만 벗기므로 그런 파일은 그대로 지나간다.
+      merchant: unguardFormula(row[merchantIndex] || ''),
       amount: parsedAmount,
       memo: '',
       error: parsedDate === null || isNaN(parsedAmount) ? 'Invalid data' : null
