@@ -34,6 +34,10 @@ jobs:
       # 빠진 채였다(#496). 내용까지 검사하지는 못해도 통째로 빠지는 것은 막는다.
       - name: Docs cover routes and tables
         run: npm run docs:check
+      # ERD 는 mermerd(Go) 로 그리지만, 이 검사는 스키마 지문만 다시 계산해
+      # 비교하므로 CI 에 Go 를 깔 필요가 없다.
+      - name: ERD matches schema
+        run: npm run docs:erd:check
       # node --check 는 문법만 보고 서버 src/ 만 본다. 정의되지 않은 식별자는
       # 잡지 못해, import 를 빠뜨린 코드가 테스트 전부 초록인 채로 배포됐다가
       # 브라우저에서 ReferenceError 로 죽은 적이 있다. 여기가 그 자리를 막는다.
