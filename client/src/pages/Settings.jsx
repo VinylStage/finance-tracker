@@ -20,6 +20,7 @@ import CardPolicySection from '../components/CardPolicySection';
 import CardProductSection from '../components/CardProductSection';
 import CardRemapSection from '../components/CardRemapSection';
 import CardBenefitSection from '../components/CardBenefitSection';
+import CardTierSection from '../components/CardTierSection';
 import CardInventorySection from '../components/CardInventorySection';
 import { formatWon } from '../lib/format';
 
@@ -88,6 +89,12 @@ export default function Settings() {
           <Anchor id="card-benefit">
             <CardBenefitSection categories={categories} />
           </Anchor>
+          {/* 실적 구간은 혜택 **다음**이다(#526). 구간이 정하는 것은 "이번 달에
+              어느 요율이 적용되나" 라, 요율(혜택)을 먼저 넣어야 구간이 무엇을
+              가르는지 이해된다. */}
+          <Anchor id="card-tier">
+            <CardTierSection />
+          </Anchor>
           {/* 등록 현황은 넣는 화면 **다음**이고 재매핑 **앞**이다(#520). 카드와
               혜택을 넣은 직후에 "무엇이 아직 비었나" 를 보여줘야 그 자리에서
               채우러 돌아갈 수 있고, 여기서 세는 카드사별 미지정 건수가 바로
@@ -147,6 +154,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'payment', label: '결제수단 관리' },
   { id: 'card-product', label: '보유 카드' },
   { id: 'card-benefit', label: '카드 혜택' },
+  { id: 'card-tier', label: '카드 실적 구간' },
   { id: 'card-inventory', label: '카드 등록 현황' },
   { id: 'card-remap', label: '지난 거래 카드 지정' },
   { id: 'card-policy', label: '카드 할부 정책' },

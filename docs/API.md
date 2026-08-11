@@ -1723,6 +1723,54 @@
   목록에 없다" 가 되어 소프트 삭제로 과거를 보존한 목적이 반쯤 사라진다. 화면이 흐리게
   표시하고 추천에서만 빼도록 `isActive` 로 표시만 붙인다.
 
+### GET /api/card-strategy/threshold-transactions
+전월 실적에 잡힌 거래를 **카드별로 나눠** 돌려준다(#526).
+
+- **요청 파라미터**: `asOf` (optional, `YYYY-MM-DD`) — 없으면 오늘
+- **응답 스키마**:
+  ```
+  { "data": [{ "cardProductId", "issuer", "productName", "countedTotal",
+               "transactions": [{ "id", "date", "merchant", "amount", "excluded" }] }],
+    "period": { "start", "end" }, "asOf": "string" }
+  ```
+- **비고**: 자동 제외(수입·파생 행)는 **목록에 넣지 않는다.** 사용자가 토글할 수
+  있는 것은 실적에 실제로 잡히는 거래뿐이고, 못 바꾸는 것을 보여주면 눌러 보고
+  나서 아무 일도 안 일어난다. `countedTotal` 은 제외를 반영한 합계다.
+
+### GET /api/card-strategy/tiers/:cardProductId
+카드에 등록된 실적 구간을 돌려준다(#526). `min_spend` 오름차순.
+
+- **응답 스키마**: `{ "data": [{ "id", "min_spend", "rate", "label" }] }`
+- **비고**: 구간이 없으면 빈 배열이다. 그 카드는 `card_products.prev_month_threshold`
+  단일 임계값으로 예전처럼 판정된다.
+
+### PUT /api/card-strategy/tiers/:cardProductId
+그 카드의 구간을 **통째로 교체**한다(#526).
+
+- **요청 파라미터**: `tiers` (required) — `[{ min_spend, rate?, label? }]`
+- **응답 스키마**: `{ "ok": true, "data": [...] }`
+- **에러 케이스**: 400 — 구간 목록 없음 / `min_spend` 가 숫자가 아니거나 음수 /
+  같은 `min_spend` 가 둘 / `rate` 가 음수. 404 — 없는 카드
+- **비고**: 행 단위 수정이 아니라 통째 교체다. "구간 3개를 2개로" 가 삭제+수정
+  조합이 되면 중간 상태에서 하한이 겹칠 수 있고, 겹치면 어느 요율을 쓸지
+  정할 수 없다. 트랜잭션으로 감싸 중간 상태가 남지 않게 한다.
+
+### POST /api/card-strategy/exclusions
+거래 하나를 카드 실적 집계에서 뺀다(#526).
+
+- **요청 파라미터**: `transaction_id` (required), `reason` (optional)
+- **응답 스키마**: `{ "ok": true }`
+- **에러 케이스**: 400 — id 가 숫자가 아님. 404 — 없는 거래
+- **비고**: 카드사 실적 규칙은 카드마다 달라 자동 판정만으로 못 맞춘다. 같은
+  거래를 두 번 넣어도 안전하다(`INSERT OR IGNORE`).
+
+### DELETE /api/card-strategy/exclusions/:transactionId
+다시 실적에 넣는다.
+
+- **응답 스키마**: `{ "ok": true, "restored": "number" }`
+- **비고**: 행을 지우는 것이라 "되돌렸다" 가 별도 상태로 남지 않는다 — 그 이력은
+  감사 로그가 들고 있다. 없는 것을 지워도 200 이고 `restored` 가 0 이다.
+
 ### GET /api/card-strategy/estimate
 지금 결제하면 어느 카드가 나은가. 거래 입력 화면이 부른다.
 

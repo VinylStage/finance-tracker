@@ -168,6 +168,13 @@ export function estimateReason(card) {
  */
 export function thresholdLine(threshold) {
   if (!threshold) return null;
+
+  // 구간이 등록된 카드(#526). 단일 임계값과 다른 것을 말해야 한다 —
+  // "충족/미달" 이 아니라 **지금 어느 구간이고 다음까지 얼마 남았나** 다.
+  if (Array.isArray(threshold.tiers) && threshold.tiers.length > 0) {
+    return tierLine(threshold);
+  }
+
   if (threshold.threshold === null) {
     return { label: '실적 조건 없음', tone: 'neutral', text: '전월 실적 조건이 없는 카드예요.' };
   }
@@ -182,6 +189,47 @@ export function thresholdLine(threshold) {
     label: '실적 미달',
     tone: 'warn',
     text: `${periodText(threshold.period)}에 ${formatWon(threshold.spend)} 썼어요. 조건까지 ${formatWon(threshold.shortfall)} 남았어요.`,
+  };
+}
+
+
+// 구간제 카드의 한 줄(#526).
+//
+// 구간이 여럿이면 "채웠다/못 채웠다" 로는 부족하다. 사용자가 알아야 하는 것은
+// **지금 어느 구간에 있고, 한 칸 올리려면 얼마가 더 필요한가** 다.
+export function tierLine(threshold) {
+  const spent = formatWon(threshold.spend);
+  const period = periodText(threshold.period);
+  const tier = threshold.tier;
+  const next = threshold.nextTier;
+
+  // 최하위 구간에도 못 든 경우. 하한 0 짜리 구간을 안 만든 카드에서 생긴다.
+  if (!tier) {
+    const need = next ? ` 첫 구간까지 ${formatWon(threshold.toNextTier)} 남았어요.` : '';
+    return {
+      label: '구간 미달',
+      tone: 'warn',
+      text: `${period}에 ${spent} 썼어요.${need}`,
+    };
+  }
+
+  const name = tier.label || `${formatWon(tier.min_spend)} 이상`;
+  const rate = tier.rate === null || tier.rate === undefined ? null : tier.rate;
+  const rateText = rate === null ? '' : ` 적립 ${rate}%.`;
+
+  if (!next) {
+    return {
+      label: name,
+      tone: rate ? 'ok' : 'neutral',
+      text: `${period}에 ${spent} 써서 가장 높은 구간이에요.${rateText}`,
+    };
+  }
+
+  const nextName = next.label || `${formatWon(next.min_spend)} 이상`;
+  return {
+    label: name,
+    tone: rate ? 'ok' : 'neutral',
+    text: `${period}에 ${spent} 썼어요.${rateText} ${nextName} 구간까지 ${formatWon(threshold.toNextTier)} 남았어요.`,
   };
 }
 

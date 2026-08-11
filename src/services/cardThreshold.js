@@ -91,6 +91,38 @@ function thresholdOf(cardProduct) {
   return n;
 }
 
+// 구간을 하한 오름차순으로 정리한다. 숫자가 아닌 하한은 버린다 — 판정에 쓰면
+// 비교가 조용히 false 로 떨어져 그 구간이 없는 것처럼 동작한다.
+function normalizeTiers(tiers) {
+  if (!Array.isArray(tiers)) return [];
+  return tiers
+    .filter((t) => t && Number.isFinite(Number(t.min_spend)) && Number(t.min_spend) >= 0)
+    .map((t) => ({
+      id: t.id ?? null,
+      min_spend: Number(t.min_spend),
+      rate: t.rate === null || t.rate === undefined ? null : Number(t.rate),
+      label: t.label ?? null,
+    }))
+    .sort((a, b) => a.min_spend - b.min_spend);
+}
+
+// 실적 금액이 어느 구간에 드는가. **하한 이하로 가장 큰 구간**이다.
+//
+// 경계는 "이상" 으로 본다 — 카드사 안내가 "40만원 이상 사용 시" 형태라
+// 40만원 정확히 쓴 사람은 채운 쪽에 들어간다.
+function tierFor(tiers, spend) {
+  let active = null;
+  for (const t of tiers) {
+    if (spend >= t.min_spend) active = t; else break;
+  }
+  return active;
+}
+
+function nextTierAfter(tiers, spend) {
+  for (const t of tiers) if (spend < t.min_spend) return t;
+  return null;
+}
+
 /**
  * 카드 한 장의 전월 실적을 합산하고 조건 충족 여부를 낸다.
  *
@@ -100,17 +132,25 @@ function thresholdOf(cardProduct) {
  *
  * @param {object} input
  * @param {object|null} input.cardProduct { prev_month_threshold }
- * @param {Array} input.transactions      { date, amount, origin, major_type }
+ * @param {Array} input.transactions      { id, date, amount, origin, major_type }
  * @param {string} input.asOf             'YYYY-MM-DD'
+ * @param {Array} [input.tiers]           카드 실적 구간 { min_spend, rate, label }
+ * @param {Set|Array} [input.excludedIds] 사용자가 실적에서 뺀 거래 id (#526)
  */
-function computeThreshold({ cardProduct, transactions, asOf } = {}) {
+function computeThreshold({ cardProduct, transactions, asOf, tiers, excludedIds } = {}) {
   const period = prevPeriodFor(asOf);
   const threshold = thresholdOf(cardProduct);
   const list = Array.isArray(transactions) ? transactions : [];
+  const tierList = normalizeTiers(tiers);
+  // Set 이 아니어도 받는다 — 라우트가 배열로 넘기는 실수를 조용한 오작동으로
+  // 만들지 않는다. 배열을 그대로 쓰면 has 가 없어 제외가 통째로 무시된다.
+  const skip = excludedIds instanceof Set
+    ? excludedIds
+    : new Set(Array.isArray(excludedIds) ? excludedIds : []);
 
   let spend = 0;
   let counted = 0;
-  const excluded = { derived: 0, income: 0 };
+  const excluded = { derived: 0, income: 0, manual: 0 };
 
   for (const tx of list) {
     if (!tx) continue;
@@ -120,6 +160,13 @@ function computeThreshold({ cardProduct, transactions, asOf } = {}) {
 
     if (tx.major_type === INCOME_MAJOR_TYPE) {
       excluded.income++;
+      continue;
+    }
+
+    // 사용자가 손으로 뺀 거래(#526). 카드사 실적 규칙은 카드마다 달라
+    // 자동 판정만으로는 못 맞춘다.
+    if (tx.id !== undefined && skip.has(tx.id)) {
+      excluded.manual++;
       continue;
     }
 
@@ -140,13 +187,32 @@ function computeThreshold({ cardProduct, transactions, asOf } = {}) {
     counted,
     excluded,
     threshold,
-    // 조건이 없으면 채운 것으로 본다. compareCards 의 thresholdMet 계약과 같다.
-    met: threshold === null ? true : spend >= threshold,
-    shortfall: threshold === null ? 0 : Math.max(0, threshold - spend),
+    // ── 구간(#526) ──────────────────────────────────────────────────────
+    // 구간이 없으면 전부 null 이고 아래 met/shortfall 이 예전 그대로 동작한다.
+    // 구간을 안 넣은 카드의 계산이 이 변경으로 달라지면 안 된다.
+    tiers: tierList,
+    tier: tierList.length ? tierFor(tierList, spend) : null,
+    rate: tierList.length ? (tierFor(tierList, spend)?.rate ?? null) : null,
+    nextTier: tierList.length ? nextTierAfter(tierList, spend) : null,
+    // 다음 구간까지 남은 금액. 최상위 구간이면 0 이다.
+    toNextTier: tierList.length
+      ? Math.max(0, (nextTierAfter(tierList, spend)?.min_spend ?? spend) - spend)
+      : 0,
+    // 구간이 있으면 "요율이 붙는 구간에 들었나" 가 곧 충족이다. 구간이 없으면
+    // 예전 계약 그대로 단일 임계값으로 판정한다.
+    met: tierList.length
+      ? (tierFor(tierList, spend)?.rate ?? 0) > 0
+      : (threshold === null ? true : spend >= threshold),
+    shortfall: tierList.length
+      ? Math.max(0, (nextTierAfter(tierList, spend)?.min_spend ?? spend) - spend)
+      : (threshold === null ? 0 : Math.max(0, threshold - spend)),
     // 카드사 실적 제외 항목을 반영하지 못한다. 항상 참이다 — 화면이 이걸
     // 보고 한계를 말한다.
     estimated: true,
   };
 }
 
-module.exports = { prevPeriodFor, computeThreshold, thresholdOf, INCOME_MAJOR_TYPE };
+module.exports = {
+  prevPeriodFor, computeThreshold, thresholdOf, INCOME_MAJOR_TYPE,
+  normalizeTiers, tierFor, nextTierAfter,
+};
