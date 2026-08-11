@@ -60,9 +60,9 @@ CSS 에서 사라진다.
 | `/api/stocks` | `stocks.js` |
 | `/api/transactions` | `transactions.js` |
 
-### 서비스 (24개)
+### 서비스 (25개)
 
-`auditRetention.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurrenceDetect.js` · `recurringCatchup.js` · `transactionOrigin.js` · `undo.js`
+`auditRetention.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `installmentStatus.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurrenceDetect.js` · `recurringCatchup.js` · `transactionOrigin.js` · `undo.js`
 
 ### 프론트엔드 페이지 (12개)
 
@@ -72,9 +72,9 @@ CSS 에서 사라진다.
 
 `AnchorNav` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardInventorySection` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CardTierSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `RetentionNotice` · `SavingsGoalBar` · `SpendHeatmap` · `ThresholdExclusionSection` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
-### 마이그레이션 (26개)
+### 마이그레이션 (27개)
 
-최신: `026-card-threshold-tiers`
+최신: `027-drop-installment-status`
 
 
 <!-- inventory:end -->
