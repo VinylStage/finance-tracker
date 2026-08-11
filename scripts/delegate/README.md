@@ -15,7 +15,7 @@
 | `make-spec.py` | 파일에서 바꿀 조각만 뽑아 찾기/바꾸기 명세를 만든다 |
 | `dry-run.py` | 그 명세를 직접 적용해 테스트가 통과하는지 본다. **위임 전에 돌린다** |
 | `run-batch.sh` | 명세로 Aider 를 돌리고 검수한다. 실패하면 사유를 되던져 재시도 |
-| `run-client-batch.sh` | **새** 클라이언트 테스트 파일을 쓰게 하고 vitest 로 검수한다 |
+| `run-new-batch.sh` | **새** 테스트 파일을 쓰게 하고 검수한다. 클라이언트는 vitest, 서버는 `node --test` |
 | `mutate-client.py` | 소스를 일부러 망가뜨려 그 테스트가 잡는지 본다 |
 
 ## 환경변수
@@ -28,6 +28,7 @@
 | `MIN_TESTS` | `5` — 이보다 적으면 껍데기로 보고 실패시킨다 |
 | `DELEGATE_ISSUE` | **필수.** 이 라운드가 속한 이슈/PR 번호 |
 | `DELEGATE_MODEL` | `ollama_chat/qwen3-coder:30b` — 원장에 남길 모델 이름 |
+| `DELEGATE_TARGET_KIND` | `client` — 검수 방식. 서버 테스트를 신설할 때만 `server` |
 
 ## 순서
 
@@ -57,8 +58,8 @@ scripts/delegate/run-batch.sh 1 "$DELEGATE_WORK" test/aRoute.test.js test/bRoute
 export DELEGATE_WORK=$(mktemp -d -t delegate)
 export DELEGATE_ISSUE=526   # 없으면 러너가 시작하지 않는다
 
-MIN_TESTS=8 scripts/delegate/run-client-batch.sh \
-  debts spec-debts.md \
+MIN_TESTS=8 scripts/delegate/run-new-batch.sh \
+  debts /abs/path/spec-debts.md \
   client/src/pages/Debts.test.jsx \
   client/src/pages/Debts.jsx          # 뒤는 전부 읽기 전용으로 붙는다
 
@@ -67,6 +68,32 @@ python3 scripts/delegate/mutate-client.py \
   src/pages/Debts.jsx src/pages/Debts.test.jsx \
   "#329 판정 되돌리기" "d.loan_type === 'credit_line'" "d.type === '마이너스통장'"
 ```
+
+### 새 서버 테스트를 쓰게 할 때
+
+`DELEGATE_TARGET_KIND=server` 를 준다. 나머지는 같다.
+
+```bash
+DELEGATE_TARGET_KIND=server MIN_TESTS=8 scripts/delegate/run-new-batch.sh \
+  savings /abs/path/spec-savings.md \
+  test/savingsRoute.test.js \
+  src/routes/savings.js
+```
+
+검수만 갈린다 — `node --test <파일>` 을 돌리고 `ℹ pass N` · `ℹ fail 0` 요약줄로
+판정한다. **요약줄이 아예 없으면 통과가 아니라 "테스트가 돌지 않은 것"** 으로 본다.
+import 가 깨져 파일이 로드조차 안 되면 실패 문자열도 안 나오기 때문이다.
+
+테스트 개수는 `it(` 과 `test(` 를 둘 다 센다. 서버 테스트는 `node:test` 라
+`test(` 를 주로 쓴다.
+
+명세에 적어야 하는 것이 클라이언트와 다르다.
+
+- 서버 테스트는 `mkdtemp` 로 임시 DB 를 만들고 `DB_PATH` 로 주입한다. 실거래 DB 에
+  닿지 않게 하는 규칙이라 명세에 그 뼈대를 그대로 적는다
+- HTTP 를 태우는 테스트는 `test/helpers/testServer.js` 의 `startTestServer({ port })`
+  를 쓴다. **포트를 명세에 박고, 겹치지 않는 값인지 `npm run test:ports` 로 먼저 확인한다**
+- 파일 위치는 `test/` 다. `client/` 안에 두면 vitest 쪽으로 샌다
 
 명세에 **반드시 적어야 하는 것** — 빠뜨려서 라운드를 버린 것들이다.
 
