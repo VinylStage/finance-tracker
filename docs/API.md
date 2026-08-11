@@ -1400,73 +1400,6 @@
   ```
 - **에러 케이스**: 없음
 
-## settlement.js
-
-기존 거래의 결제 방식(`settlement`)을 결제수단 단위로 일괄 재분류한다(#289).
-**프리뷰 → 확인 → 실행**(ADR 0008).
-
-021 은 기존 거래를 전부 `immediate` 로 남겼다. **자동 변환하지 않기로 한 결정**이다 —
-이 저장소는 실거래 2,212건 유실 사고가 있었고 조용한 대량 변경은 같은 범주의
-위험이다. 사용자가 직접 "이 카드로 쓴 건 전부 카드 사용" 을 지정하는 도구가 이것이다.
-
-### POST /api/settlement/reclassify/preview
-**DB 를 바꾸지 않는다.**
-
-- **요청 파라미터**:
-  - `payment_method_id` (required, 숫자검증): 대상 결제수단
-  - `settlement` (required): 바꿀 결제 방식. `immediate` / `deferred` / `settlement`
-  - `from` / `to` (optional): 기간. `YYYY-MM-DD`
-- **응답 스키마**:
-  ```
-  { "target": {...}, "count": "number",
-    "billing_month_filled": "number", "billing_month_cleared": "number",
-    "samples": [{ "id", "date", "merchant", "amount", "before", "after",
-                  "billing_month_before", "billing_month_after" }],
-    "impact": [{ "accountId", "accountName", "balanceBefore", "balanceAfter",
-                 "balanceDelta", "cardUnpaidBefore", "cardUnpaidAfter" }],
-    "preview_token": "string", "undoable": true }
-  ```
-- **에러 케이스**: 400 — 결제수단 미지정 / 없는 결제수단 / 모르는 결제 방식 /
-  기간 형식이 `YYYY-MM-DD` 아님 / 시작일이 종료일보다 뒤
-- **비고**: **잔액 영향을 손으로 유도하지 않는다.** 실제 `computeBalance` 를 두 번
-  돌린다(지금 행 / 바꾼 행). `deferred` 제외 · 수입지출 방향 · 기준일 · 개설일
-  경계가 얽혀 있어 약식 계산은 경계에서 틀린다.
-
-  **잔액이 늘었다고 돈이 생긴 게 아니다.** `deferred` 로 바꾸면 잔액이 늘지만 그만큼
-  카드 미결제액이 는다. 실거래 사본에서 두 숫자가 정확히 일치했다. 그래서
-  `cardUnpaidBefore` / `cardUnpaidAfter` 를 같이 낸다 — 잔액만 보여주면 사용자가
-  반대로 읽는다.
-
-  **결제 방식이 바뀌면 청구월도 바뀐다.** `settlement` 은 `billing_month` 의
-  입력이다(#289). `deferred` 로 바꾸면 채워지고, 벗어나면 지워진다 —
-  `billing_month_filled` / `billing_month_cleared` 가 그 건수다. 카드의 결제일·마감일을
-  모르면 채우지 않는다(#290). 그 경우 나중에
-  `POST /api/billing-month/backfill` 로 소급한다.
-
-  **잔액은 계좌 단위로 낸다.** "12만원 늘어난다" 만 보여주면 어느 통장 이야기인지
-  알 수 없고 사용자가 통장을 열어 대조할 수 없다.
-
-### POST /api/settlement/reclassify
-확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
-
-- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
-- **에러 케이스**:
-  - 400: 프리뷰와 같음
-  - 428: `preview_token` 없음 (`preview_required: true`)
-  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
-- **비고**: 지문에 각 행의 `id` · 금액 · **현재 `settlement`** · `date` ·
-  `card_product_id` · `billing_month` 를 전부 담는다.
-
-  현재 `settlement` 을 담는 이유는 뮤테이션 테스트가 찾아낸 진짜 구멍이다 — id·금액만
-  담으면 **프리뷰 뒤에 대상 중 한 건의 상태만 바뀐 경우** 건수도 id 목록도 그대로라
-  지문이 통과하고, 사용자가 본 적 없는 상태의 거래가 조용히 재분류된다.
-
-  나머지 셋은 청구월의 입력이라 같은 이유로 담는다. `test/settlementReclassify.test.js`
-  의 `E-5`~`E-5c` 가 각 입력을 고립시켜 잠근다.
-
-  재분류 전체가 한 `action_id` 로 묶이고 라벨이 붙어 `/api/audit/undo` 로 통째로
-  되돌아간다.
-
 ## audit.js
 
 모든 쓰기의 전후 값과 1단계 실행취소(#297, #300, #301). 캡처는 라우트가 아니라 DB
@@ -1508,35 +1441,6 @@
 - **응답 스키마**: `{ "data": [ audit_log 행 ], "total": "number" }`
 - **비고**: 화면 기본값은 `user` 다. 조회마다 도는 시스템 스윕(#205)을 섞으면 목록을
   뒤덮어 사용자가 자기 작업을 찾을 수 없다.
-
-## accounts.js
-
-통장·계좌(#288). 잔액 추적(M11)의 바탕이다.
-
-### GET /api/accounts
-- **요청 파라미터**: `include_inactive` (query, optional)
-- **응답 스키마**: `{ "data": [ accounts 행 ] }`
-
-### POST /api/accounts
-- **요청 파라미터**: `name`, `type` (required), `opening_balance`, `credit_limit` (optional, 숫자검증)
-- **응답 스키마**: `{ "id": "number" }`
-
-### GET /api/accounts/balances
-활성 계좌별 현재 잔액과 가용액.
-
-- **응답 스키마**: `{ "data": [{ "id", "name", "type", "balance", "available", ... }] }`
-- **비고**: 잔액은 `opening_balance` 에 그 계좌에 걸린 결제수단의 거래를 더해 센다.
-  수입은 더하고 나머지는 뺀다. **`/:id` 보다 먼저 선언해야 한다** — 뒤에 두면
-  `balances` 가 id 로 잡힌다.
-
-### GET /api/accounts/:id
-계좌 1건 + 잔액.
-
-- **에러 케이스**: 404 — 없는 계좌
-
-### PUT /api/accounts/:id
-- **요청 파라미터**: 위와 같음 + `is_active` (숫자검증)
-- **에러 케이스**: 404 — 없는 계좌
 
 ## dataIntegrity.js
 
@@ -1582,9 +1486,7 @@
 - **응답 스키마**:
   ```
   { "target": {...}, "count": "number", "already_assigned": "number",
-    "billing_month_filled": "number", "billing_month_cleared": "number",
-    "samples": [{ "id", "date", "merchant", "amount", "before", "after",
-                  "billing_month_before", "billing_month_after" }],
+    "samples": [{ "id", "date", "merchant", "amount", "before", "after" }],
     "preview_token": "string", "remaining_unassigned": "number", "undoable": true }
   ```
 - **에러 케이스**: 400 — 카드 미지정 / 없는 카드 / 기간 형식이 `YYYY-MM-DD` 아님 /
@@ -1602,12 +1504,6 @@
   기간 형식이 틀리면 400 이다. SQLite 의 문자열 비교라 `2026-8-1` 같은 값은 오류
   없이 조용히 0건이 되거나 엉뚱하게 걸린다 — 사용자는 조건을 걸었다고 믿는다.
 
-  **카드가 바뀌면 청구월도 바뀐다**(#421). `card_product_id` 는 `billing_month` 의
-  입력이라(#289) 재매핑이 그것도 다시 계산한다. `billing_month_filled` 는 비어
-  있던 것이 채워지는 건수, `billing_month_cleared` 는 옮겨 갈 카드의 결제일·마감일을
-  몰라 지워지는 건수다. 건수만 보여주면 사용자가 **무엇을 승인하는지 모른 채**
-  승인한다 — 청구월은 "이번 결제일에 얼마 빠지나" 를 정하는 값이다.
-
 ### POST /api/card-products/remap
 확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
 
@@ -1618,10 +1514,8 @@
   - 428: `preview_token` 없음 (`preview_required: true`)
   - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
 - **비고**: **화면에서만 막고 엔드포인트가 열려 있으면 원칙이 반쪽이 된다**(ADR 0008).
-  지문은 대상의 id 뿐 아니라 금액과 현재 카드, **현재 청구월**까지 넣어 만든다 —
-  id 만 넣으면 그 사이 같은 거래가 다른 카드로 지정된 것을 못 잡고, 청구월을 빼면
-  프리뷰 뒤에 청구월만 손으로 바뀐 경우 건수도 id 목록도 그대로라 지문이 통과한다
-  (#421, #419 의 `C-3b` 와 같은 구멍).
+  지문은 대상의 id 뿐 아니라 금액과 현재 카드까지 넣어 만든다 — id 만 넣으면 그
+  사이 같은 거래가 다른 카드로 지정된 것을 못 잡는다.
 
   재매핑 전체가 한 `action_id` 로 묶이고 `카드 재매핑 → <카드 이름>` 라벨이 붙어,
   `/api/audit/undo` 로 통째로 되돌아간다.
@@ -1655,79 +1549,6 @@
 ### DELETE /api/card-products/:id
 - **비고**: 삭제해도 거래는 남는다. `card_product_id` 가 NULL 로 돌아가 "미상" 이
   될 뿐이다 — 거래를 지우면 가계부 기록이 사라지므로 그럴 수 없다.
-
-## billingMonth.js
-
-청구월 소급(#289). 카드 주기를 **나중에** 넣거나 고쳤을 때 기존 거래의 청구월을
-다시 맞춘다.
-
-`resolveBillingMonth` 는 카드의 결제일·마감일을 모르면 아무것도 안 적는다(#290).
-그런데 사용자는 카드를 등록한 뒤에 그 값을 채워 넣는다 — 명세서를 찾아봐야 알 수
-있어서 나중에 들어온다. 그 사이에 쌓인 거래는 청구월이 빈 채로 남고 **스스로
-되살아나지 않는다.** `PUT /api/card-products/:id` 는 `card_products` 만 UPDATE 한다.
-
-비어 있으면 `cardUnpaid` 가 `unassigned` 로 빼고, `projectBalance` 는 청구월 없는
-`deferred` 를 추이에서 **통째로 뺀다** — 앞으로 빠질 카드값이 없는 것처럼 보인다.
-
-### GET /api/billing-month/missing-count
-- **응답 스키마**: `{ "missing": "number" }`
-- **비고**: 청구월이 비어 있는 `deferred` 거래 수. 소급이 필요한 상태인지 화면을
-  열기 전에 알 수 있어야 한다. 즉시 결제는 청구월이 없는 것이 정상이라 안 센다.
-
-### POST /api/billing-month/backfill/preview
-**DB 를 바꾸지 않는다** — ADR 0008 의 프리뷰 단계다.
-
-- **요청 파라미터**:
-  - `mode` (optional): `fill`(기본) 또는 `recompute`
-  - `card_product_id` (optional, 숫자검증): 그 카드 거래만. 안 주면 전체
-- **응답 스키마**:
-  ```
-  { "mode": "string", "card": {...} | null,
-    "scanned": "number", "count": "number",
-    "filled": "number", "cleared": "number", "rewritten": "number",
-    "skipped_written": "number",
-    "samples": [{ "id", "date", "merchant", "amount", "card_product_name",
-                  "before", "after" }],
-    "preview_token": "string", "undoable": true }
-  ```
-- **에러 케이스**: 400 — 모르는 `mode` / 없는 카드
-- **비고**: **두 모드가 있는 이유는 손으로 적은 값을 구분할 컬럼이 없기 때문이다.**
-  라우트가 `billing_month` 를 직접 받으므로 명세서를 보고 넣은 값이 섞여 있을 수 있다.
-
-  | 모드 | 무엇을 하나 |
-  |---|---|
-  | `fill` (기본) | 비어 있는 것만 채운다. 적힌 값은 지나치고 `skipped_written` 로 센다 |
-  | `recompute` | 전부 다시 계산한다. 마감일을 고쳤을 때 쓴다 |
-
-  `fill` 이 기본인 이유는 **되돌릴 수 없는 쪽이 더 비싸기 때문이다.** 손으로 넣은
-  값이 지워지면 사용자는 그것이 무엇이었는지 알 방법이 없다. 덜 채워진 것은 다시
-  돌리면 된다.
-
-  대상은 `deferred` 만이 아니라 **청구월이 적힌 행 전부**다. 즉시 결제·카드대금
-  인출에는 청구월이 없어야 하는데(#289) 재분류로 `deferred` 를 벗은 거래에 값이
-  남을 수 있다. 대상에서 빼면 그 찌꺼기를 치울 방법이 없어진다.
-
-  `cleared` 가 0 이 아니면 옮겨 갈 카드의 결제일·마감일을 모른다는 뜻이다. 근거
-  없는 달에 묶인 채 남는 것보다 "아직 모른다" 가 낫다(#290).
-
-### POST /api/billing-month/backfill
-확인한 뒤에만 쓴다. 프리뷰가 준 지문을 요구한다.
-
-- **요청 파라미터**: 프리뷰와 같음 + `preview_token` (required)
-- **응답 스키마**: `{ "ok": true, "updated": "number", "missing": "number", "mode": "string", "card": {...} | null }`
-- **에러 케이스**:
-  - 400: 프리뷰와 같음
-  - 428: `preview_token` 없음 (`preview_required: true`)
-  - 409: 프리뷰 이후 대상이 달라짐 (`preview_stale: true`)
-- **비고**: 지문은 **바뀔 값과 그 입력 전부**를 담는다 — `id` · `date` ·
-  `settlement` · `card_product_id` · 지금 `billing_month`. 청구월은 앞의 셋에서
-  나오므로 하나라도 빠지면, 프리뷰 뒤에 그 입력이 바뀌었을 때 **건수도 id 목록도
-  그대로라 지문이 통과하고** 사용자가 본 적 없는 계산 결과가 적힌다(#419 의
-  `C-3b` 와 같은 구멍). `test/billingMonthBackfillRoute.test.js` 의 `G-1b`~`G-1e`
-  가 네 입력을 각각 고립시켜 잠근다.
-
-  소급 전체가 한 `action_id` 로 묶이고 `청구월 소급` 라벨이 붙어
-  `/api/audit/undo` 로 통째로 되돌아간다.
 
 ## cardBenefits.js
 

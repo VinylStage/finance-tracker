@@ -51,7 +51,6 @@ function mockApi({ rules = [ACTIVE_RULE, INACTIVE_RULE] } = {}) {
     if (url.startsWith('/api/payment-methods')) return Promise.resolve(METHODS);
     if (url.startsWith('/api/settings')) return Promise.resolve({ initial_balance: 0, monthly_income: 0 });
     if (url.startsWith('/api/recurring-rules')) return Promise.resolve(rules);
-    if (url.startsWith('/api/accounts')) return Promise.resolve({ data: [] });
     return Promise.resolve([]);
   });
   post.mockResolvedValue({ id: 99 });
