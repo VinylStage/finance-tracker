@@ -30,7 +30,6 @@ function mockApi() {
     if (url.startsWith('/api/payment-methods')) return Promise.resolve([]);
     if (url.startsWith('/api/settings')) return Promise.resolve({ initial_balance: 0, monthly_income: 0 });
     if (url.startsWith('/api/recurring-rules')) return Promise.resolve([]);
-    if (url.startsWith('/api/accounts')) return Promise.resolve({ data: [] });
     return Promise.resolve([]);
   });
 }

@@ -4,7 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { runAs } = require('../utils/auditContext');
-const { TRANSACTION_ORIGINS, SETTLEMENTS, DEFAULT_SETTLEMENT } = require('../constants');
+const { TRANSACTION_ORIGINS } = require('../constants');
 const { localYMD } = require('../utils/date');
 const { asInt } = require('../utils/validate');
 
@@ -67,30 +67,15 @@ function resolveImportRow(tx, lookups) {
   const origin_ref_table = tx.origin_ref_table !== undefined ? tx.origin_ref_table : null;
   const origin_ref_id = tx.origin_ref_id !== undefined ? tx.origin_ref_id : null;
 
-  // 현금흐름 시점(#289). 백업에 없으면(v3 이하) immediate 로 둔다 — 구분이
-  // 없던 시절의 거래가 그렇게 기록돼 있었고, 복원이 잔액을 바꾸면 안 된다.
+  // `settlement` · `account_id` · `billing_month` 는 읽지 않는다(#289 축 제거).
   //
-  // **여기가 잘못된 settlement 값이 들어올 수 있는 유일한 경로다.** DB CHECK 를
-  // 걸지 않기로 했으므로(constants.js) origin 과 같은 방식으로 걸러낸다. 손으로
-  // 고친 백업 파일이 'deferred ' 같은 값을 들고 와도 계산이 조용히 틀어지지 않는다.
-  const settlement = SETTLEMENTS.includes(tx.settlement) ? tx.settlement : DEFAULT_SETTLEMENT;
-
-  // 계좌는 참조 무결성을 검사한다. 없는 계좌를 가리키면 NULL 로 떨어뜨리고,
-  // 읽는 쪽이 결제수단의 계좌로 폴백한다.
-  let account_id = tx.account_id !== undefined ? tx.account_id : null;
-  if (account_id !== null && !lookups.accountIds.has(account_id)) {
-    account_id = null;
-    fkFallback = true;
-  }
-
-  // 'YYYY-MM' 이 아니면 버린다. 청구월은 계산으로 다시 채울 수 있다(#290).
-  const billing_month = /^\d{4}-\d{2}$/.test(tx.billing_month || '') ? tx.billing_month : null;
-
+  // 그 축이 있던 시절 백업에는 세 필드가 들어 있다. **여기서 무시하고 넘어간다** —
+  // 백업을 거부하면 사용자가 자기 데이터를 되돌릴 길이 없어진다. 거래 자체는
+  // 그 필드 없이도 온전하므로, 모르는 필드로 취급해 조용히 버린다.
   return {
     date: tx.date, merchant: tx.merchant, amount, categoryId, memo: tx.memo,
     payment_method_id, payment_style, approval_number, installment_id, created_at,
     origin, origin_ref_table, origin_ref_id,
-    settlement, account_id, billing_month,
     isLegacy, fkFallback,
   };
 }
@@ -105,8 +90,7 @@ router.get('/export', (req, res) => {
     const txSql = `
       SELECT t.date, t.merchant, t.amount, t.category_id, c.name AS category_name, t.memo,
         t.payment_method_id, t.payment_style, t.approval_number, t.installment_id, t.created_at,
-        t.origin, t.origin_ref_table, t.origin_ref_id,
-        t.settlement, t.account_id, t.billing_month
+        t.origin, t.origin_ref_table, t.origin_ref_id
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
       ORDER BY t.date DESC, t.id DESC
@@ -119,10 +103,13 @@ router.get('/export', (req, res) => {
       // origin 3필드가 추가돼 3 으로 올린다(#268). 이걸 안 내보내면 복원 시
       // 파생 거래가 전부 manual 이 되어 잠금이 풀린다.
       //
-      // settlement 3필드가 추가돼 4 로 올린다(#289). 안 내보내면 복원 시
-      // deferred 였던 거래가 전부 immediate 로 돌아와 **잔액이 틀어진다** —
-      // 통장에서 아직 안 빠진 카드값이 빠진 것으로 계산된다.
-      schema_version: 4,
+      // settlement 3필드가 빠져 5 로 올린다(계좌·결제방식 축 제거). 4 로 두면
+      // 같은 번호가 서로 다른 필드 구성을 뜻하게 되어, 나중에 이 파일을 읽는
+      // 쪽이 필드 유무로 되짚어야 한다.
+      //
+      // **버전을 올려도 4 이하 백업은 그대로 복원된다.** 없어진 세 필드는
+      // 읽는 쪽에서 무시한다(resolveImportRow).
+      schema_version: 5,
       transactions: transactions.map(t => ({
         date: t.date,
         merchant: t.merchant,
@@ -138,9 +125,6 @@ router.get('/export', (req, res) => {
         origin: t.origin,
         origin_ref_table: t.origin_ref_table,
         origin_ref_id: t.origin_ref_id,
-        settlement: t.settlement,
-        account_id: t.account_id,
-        billing_month: t.billing_month,
         source: 'manual'
       }))
     };
@@ -187,7 +171,6 @@ router.post('/import', (req, res) => {
       categoryByName: new Map(allCategories.map(c => [c.name, c.id])),
       paymentMethodIds: new Set(db.prepare('SELECT id FROM payment_methods').all().map(r => r.id)),
       installmentIds: new Set(db.prepare('SELECT id FROM installments').all().map(r => r.id)),
-      accountIds: new Set(db.prepare('SELECT id FROM accounts').all().map(r => r.id)),
     };
 
     const restore = db.transaction(() => {
@@ -198,8 +181,8 @@ router.post('/import', (req, res) => {
 
       // created_at 은 백업값을 복원하되, 없으면(구버전 백업) COALESCE 로 현재 시각을 쓴다
       const insertTx = db.prepare(`
-        INSERT INTO transactions (date, merchant, amount, category_id, memo, payment_method_id, payment_style, approval_number, installment_id, created_at, origin, origin_ref_table, origin_ref_id, settlement, account_id, billing_month)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, ?, ?, ?)
+        INSERT INTO transactions (date, merchant, amount, category_id, memo, payment_method_id, payment_style, approval_number, installment_id, created_at, origin, origin_ref_table, origin_ref_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?)
       `);
 
       for (const tx of transactions) {
@@ -210,8 +193,7 @@ router.post('/import', (req, res) => {
         insertTx.run(
           row.date, row.merchant, row.amount, row.categoryId, row.memo,
           row.payment_method_id, row.payment_style, row.approval_number, row.installment_id, row.created_at,
-          row.origin, row.origin_ref_table, row.origin_ref_id,
-          row.settlement, row.account_id, row.billing_month
+          row.origin, row.origin_ref_table, row.origin_ref_id
         );
         imported++;
       }

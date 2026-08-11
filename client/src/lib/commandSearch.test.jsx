@@ -102,7 +102,7 @@ describe('검색', () => {
   it('초성으로 찾는다', () => {
     // 한글은 조합 중간 상태가 있어 두 글자 치기 전에는 아무것도 안 잡힌다.
     expect(searchCommands('ㅂㅊ').map((x) => x.path)).toContain('/assets/debts');
-    expect(searchCommands('ㅌㅈ').map((x) => x.path)).toContain('/assets/accounts');
+    expect(searchCommands('ㅎㅂ').map((x) => x.path)).toContain('/assets/installments');
   });
 
   it('초성 검색은 자음만 쳤을 때만 돈다', () => {

@@ -286,7 +286,6 @@ const PAGES = [
   ['Settings', () => import('./Settings')],
   // 전용 테스트가 있어도 목록에 넣는다. 전용 테스트는 그 화면의 동작을 보고,
   // 여기서는 "열면 죽는가" 를 본다. 목적이 다르므로 서로를 대신하지 못한다.
-  ['Accounts', () => import('./Accounts')],
   ['AuditLog', () => import('./AuditLog')],
 ];
 
