@@ -108,6 +108,48 @@ router.get('/unassigned-count', (_req, res) => {
   }
 });
 
+// GET /api/card-products/inventory — 지금 뭐가 들어가 있고 뭐가 비었는가(#520).
+//
+// 카드 등록 화면(#302)은 **넣는 곳**이라 "무엇이 아직 안 들어갔는지" 를 말하지
+// 않는다. 실사용 DB 가 카드 0장·혜택 0건인 채로 넉 달을 갔던 이유가 그거다 —
+// 화면 어디에도 비어 있다는 신호가 없었다.
+//
+// 그래서 등록 상태를 **세는** 경로를 따로 둔다. 혜택 건수와 붙은 거래 건수는
+// 카드 목록 조회에 없던 값이고, 이 둘이 0 인 카드가 곧 "설명서를 더 받아야 할
+// 카드" 다.
+//
+// 비활성 카드도 싣는다. 안 실으면 "왜 이 카드가 목록에 없지" 를 사용자가 알
+// 방법이 없다(#410 이 등록 화면에서 같은 이유로 include_inactive 를 쓴다).
+router.get('/inventory', (_req, res) => {
+  try {
+    const cards = db.prepare(`
+      SELECT cp.*, p.name AS payment_method_name,
+             (SELECT COUNT(*) FROM card_benefits b WHERE b.card_product_id = cp.id) AS benefit_count,
+             (SELECT COUNT(*) FROM transactions t WHERE t.card_product_id = cp.id) AS transaction_count
+      FROM card_products cp
+      LEFT JOIN payment_methods p ON p.id = cp.payment_method_id
+      ORDER BY cp.is_active DESC, cp.issuer, cp.product_name
+    `).all();
+
+    // 카드사별 미지정 건수. 총합(unassigned-count)만으로는 **어느 카드사의
+    // 등록이 덜 됐는지** 를 알 수 없다 — 273건이 한 카드사에 몰려 있는 것과
+    // 여섯 카드사에 흩어진 것은 다음에 할 일이 다르다.
+    const placeholders = CARD_TYPES.map(() => '?').join(',');
+    const unassigned = db.prepare(`
+      SELECT p.id AS payment_method_id, p.name, COUNT(t.id) AS count
+      FROM payment_methods p
+      JOIN transactions t ON t.payment_method_id = p.id AND t.card_product_id IS NULL
+      WHERE p.type IN (${placeholders})
+      GROUP BY p.id, p.name
+      ORDER BY count DESC, p.name
+    `).all(...CARD_TYPES);
+
+    res.json({ data: { cards, unassigned } });
+  } catch (e) {
+    serverError(res, e, 'cardProducts');
+  }
+});
+
 // POST /api/card-products/remap/preview — 무엇이 몇 건 바뀌는지 계산한다.
 //
 // **DB 를 바꾸지 않는다**(ADR 0008). 조건을 고칠 때마다 화면이 이 엔드포인트를
