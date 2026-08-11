@@ -169,7 +169,20 @@ export default function Installments() {
                 >
                   <td className="px-4 py-3 text-ink">{it.merchant}</td>
                   <td className="px-4 py-3 text-right text-body tabular-nums">{formatWon(it.total_amount)}</td>
-                  <td className="px-4 py-3 text-right text-ink tabular-nums">{formatWon(it.monthly_amount)}</td>
+                  <td className="px-4 py-3 text-right text-ink tabular-nums">
+                    {formatWon(it.monthly_amount)}
+                    {/* 정책이 없으면 수수료가 0 으로 계산된다(#500). 무이자라서 0 인
+                        것과 요율을 안 넣어서 0 인 것은 사용자에게 전혀 다른 말이다.
+                        실제 청구서에 수수료가 붙으면 그때 처음 알게 된다. */}
+                    {it.basis?.source === 'none' && (
+                      <span
+                        className="ml-1.5 text-[10px] text-loss-text align-middle"
+                        title={it.basis.reason}
+                      >
+                        요율 미입력
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center text-caption">{it.billed_months}/{it.months}</td>
                   <td className="px-4 py-3 text-center text-caption">
                     {it.remaining_months > 0 ? `${it.remaining_months}개월` : '-'}

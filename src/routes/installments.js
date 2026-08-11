@@ -123,7 +123,23 @@ router.get('/', (req, res) => {
     sql += ' ORDER BY i.status ASC, i.start_billing_month DESC';
     // 되돌릴 수 있는지를 서버가 판정한다(#295). 화면이 날짜 계산을 다시 하면
     // 스윕 조건과 어긋난다.
-    const data = db.prepare(sql).all(...params).map((row) => ({ ...row, ...reopenability(row) }));
+    // 각 할부에 적용되는 정책을 함께 낸다(#500).
+    //
+    // **정책이 없으면 수수료가 0 으로 계산된다.** 그런데 목록은 그 사실을 말하지
+    // 않아서, 사용자는 무이자라서 0 인지 요율을 안 넣어서 0 인지 구분할 수 없었다.
+    // 실제 청구서에 수수료가 붙으면 그때 처음 안다.
+    //
+    // 미리보기(`/billing-estimate`)는 `billingBasis` 로 이미 이 사실을 말한다. 목록만
+    // 빠져 있었다 — 저장하고 나면 그 경고가 사라지는 셈이었다.
+    //
+    // 할부는 보통 한 자리 수라 행마다 정책을 찾아도 문제가 안 된다. 수백 건이
+    // 되면 payment_method_id·months 로 묶어 한 번에 읽어야 한다(#144 유형).
+    const data = db.prepare(sql).all(...params).map((row) => {
+      const { policy, source } = row.payment_method_id
+        ? resolvePolicy(db, row.payment_method_id, row.months, row.purchase_date, row.category_id ?? null)
+        : { policy: null, source: 'none' };
+      return { ...row, ...reopenability(row), basis: billingBasis(policy, source) };
+    });
 
     const thisMonth = `${curYear}-${String(curMonth).padStart(2, '0')}`;
     // FND-05(감사): 여기서 청구 기간 종료를 반영하지 않던 별도 쿼리를 쓰고 있었다.
