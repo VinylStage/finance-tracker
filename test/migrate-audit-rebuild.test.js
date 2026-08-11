@@ -34,23 +34,42 @@ const triggers = () => new Set(db.prepare(
   "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'audit_%'"
 ).all().map((r) => r.name));
 
-describe('A. 018 의 개별 호출을 뺀 뒤에도 캡처가 완전한가', () => {
-  test('A-1. accounts — 018 이 만든 테이블에 트리거가 있다', () => {
+// 예시로 삼는 마이그레이션 산출물은 018(accounts · payment_methods.account_id)
+// 이었다. 025 가 그 둘을 지웠으므로 **살아 있는 산출물로 갈아끼운다** — 검사의
+// 뜻은 그대로다. "표를 만든 마이그레이션이 스스로 부르지 않아도 러너가 체인
+// 끝에서 재생성하는가"(#346).
+describe('A. 마이그레이션의 개별 호출을 뺀 뒤에도 캡처가 완전한가', () => {
+  test('A-1. merchant_category_map — 022 가 만든 테이블에 트리거가 있다', () => {
     const names = triggers();
     for (const op of ['ins', 'upd', 'del']) {
-      assert.ok(names.has(`audit_accounts_${op}`), `audit_accounts_${op} 가 없다`);
+      assert.ok(names.has(`audit_merchant_category_map_${op}`), `audit_merchant_category_map_${op} 가 없다`);
     }
   });
 
-  test('A-2. payment_methods — 018 이 늘린 컬럼(account_id)까지 잡는다', () => {
+  test('A-2. card_products — 023 이 늘린 컬럼(is_active)까지 잡는다', () => {
     db.prepare("UPDATE _audit_context SET actor='user', action_id='m346-a2' WHERE id=1").run();
-    db.prepare("INSERT INTO payment_methods (name, type) VALUES ('감사테스트카드', '신용')").run();
+    const pm = db.prepare("INSERT INTO payment_methods (name, type) VALUES ('감사테스트카드', '신용')").run();
+    db.prepare(
+      "INSERT INTO card_products (payment_method_id, issuer, product_name, card_type) VALUES (?, '하나', '감사테스트상품', '신용')"
+    ).run(pm.lastInsertRowid);
 
     const row = db.prepare(
-      "SELECT after_json FROM audit_log WHERE table_name='payment_methods' ORDER BY id DESC LIMIT 1"
+      "SELECT after_json FROM audit_log WHERE table_name='card_products' ORDER BY id DESC LIMIT 1"
     ).get();
-    assert.ok(row, 'payment_methods INSERT 가 감사로그에 안 남았다');
-    assert.ok('account_id' in JSON.parse(row.after_json), '018 이 늘린 컬럼이 캡처에 없다');
+    assert.ok(row, 'card_products INSERT 가 감사로그에 안 남았다');
+    assert.ok('is_active' in JSON.parse(row.after_json), '023 이 늘린 컬럼이 캡처에 없다');
+  });
+
+  // 025 가 지운 컬럼이 트리거에 남아 있으면, 그 컬럼을 참조하는 INSERT 트리거가
+  // 실행될 때마다 거래 저장이 통째로 실패한다. 재생성이 돌았는지를 지운 쪽에서도
+  // 확인한다.
+  test('A-3. 025 가 지운 컬럼이 트리거에 남아 있지 않다', () => {
+    const sql = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE name='audit_transactions_ins'"
+    ).get().sql;
+    for (const col of ['settlement', 'account_id', 'billing_month']) {
+      assert.ok(!sql.includes(col), `지운 컬럼 ${col} 이 트리거에 남아 있다`);
+    }
   });
 });
 
