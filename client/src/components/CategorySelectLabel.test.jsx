@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, act} from '@testing-library/react';
 import TransactionForm from './TransactionForm';
 import { CATEGORY_STYLE } from '../lib/categoryStyle';
 
@@ -27,7 +27,9 @@ const categories = [
 ];
 const paymentMethods = [{ id: 10, name: '신한카드' }];
 
-function renderForm() {
+// TransactionForm 은 그리자마자 최근 가맹점·카테고리 지출을 받아온다. 그 응답이
+// 테스트 본문 뒤에 도착하면 상태 변경이 act 밖에서 일어나 경고가 난다.
+async function renderForm() {
   render(
     <TransactionForm
       categories={categories}
@@ -36,12 +38,13 @@ function renderForm() {
       onCancel={vi.fn()}
     />
   );
+  await act(async () => {});
   return document.querySelector('#tx-category');
 }
 
 describe('카테고리 선택 라벨', () => {
-  it('아이콘 키가 optgroup 라벨에 노출되지 않는다', () => {
-    const sel = renderForm();
+  it('아이콘 키가 optgroup 라벨에 노출되지 않는다', async () => {
+    const sel = await renderForm();
     expect(sel).toBeTruthy();
 
     const labels = [...sel.querySelectorAll('optgroup')].map((g) => g.label);
@@ -56,16 +59,16 @@ describe('카테고리 선택 라벨', () => {
     expect(leaked).toEqual([]);
   });
 
-  it('대분류 이름은 그대로 나온다', () => {
-    const sel = renderForm();
+  it('대분류 이름은 그대로 나온다', async () => {
+    const sel = await renderForm();
     const labels = [...sel.querySelectorAll('optgroup')].map((g) => g.label);
     for (const type of ['변동필수', '수입', '고정지출']) {
       expect(labels).toContain(type);
     }
   });
 
-  it('옵션 텍스트가 카테고리 이름과 정확히 일치한다', () => {
-    const sel = renderForm();
+  it('옵션 텍스트가 카테고리 이름과 정확히 일치한다', async () => {
+    const sel = await renderForm();
     // 첫 항목은 '선택...' 플레이스홀더라 optgroup 안의 option 만 본다
     const texts = [...sel.querySelectorAll('optgroup option')].map((o) => o.textContent);
     expect(texts.sort()).toEqual(['급여', '식비', '월세']);
@@ -74,7 +77,7 @@ describe('카테고리 선택 라벨', () => {
     expect(leaked).toEqual([]);
   });
 
-  it('검사할 아이콘 키가 실제로 수집됐다', () => {
+  it('검사할 아이콘 키가 실제로 수집됐다', async () => {
     // ICON_KEYS 가 비면 위 검사가 아무것도 안 하고 통과한다.
     expect(ICON_KEYS.length).toBeGreaterThanOrEqual(5);
     expect(ICON_KEYS).toContain('payments');
