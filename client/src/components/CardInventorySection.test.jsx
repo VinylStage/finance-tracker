@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import CardInventorySection, { gapsOf } from './CardInventorySection';
+import { takeCardEditRequest } from '../lib/cardEditRequest';
 
 // #520 — 카드 등록 현황.
 //
@@ -69,6 +70,9 @@ function payload(over = {}) {
 beforeEach(() => {
   get.mockReset();
   get.mockResolvedValue(payload());
+  // 수정 요청은 세션 저장소에 남는다. 안 지우면 앞 테스트가 남긴 요청을
+  // 뒤 테스트가 자기 것으로 읽는다(#533).
+  sessionStorage.clear();
 });
 
 describe('A. 비어 있는 것을 말한다', () => {
@@ -204,5 +208,41 @@ describe('E. 빈 상태와 오류', () => {
     expect(get).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole('button', { name: '새로고침' }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
+});
+
+// #533 — 여기서 곧장 고치러 갈 수 있는가.
+//
+// 이 화면은 읽기 전용이라 고치는 자리는 «보유 카드» 다. 그런데 **무엇이 비었는지
+// 아는 곳은 여기뿐**이라, 여기서 그 카드로 못 가면 사용자가 위에서 다시 찾아야 한다.
+// 잠글 것은 "링크가 있나" 가 아니라 **"누른 카드의 id 가 넘어가나"** 다 — 카드가
+// 여러 장일 때 엉뚱한 카드가 열리는 것이 이 기능의 유일한 실패 방식이다.
+describe('F. 카드 수정으로 건너가기', () => {
+  it('F-1. 카드마다 수정 링크가 있다', async () => {
+    render(<CardInventorySection />);
+    await screen.findByText('완비카드');
+    const links = screen.getAllByRole('link', { name: '수정' });
+    expect(links.length).toBe(CARDS.length);
+  });
+
+  it('F-2. 수정 링크는 보유 카드 절을 가리킨다', async () => {
+    render(<CardInventorySection />);
+    await screen.findByText('완비카드');
+    const link = screen.getAllByRole('link', { name: '수정' })[0];
+    expect(link.getAttribute('href')).toBe('#card-product');
+  });
+
+  it('F-3. 누른 그 카드의 id 가 넘어간다 — 첫 카드가 아니라', async () => {
+    render(<CardInventorySection />);
+    const target = CARDS[CARDS.length - 1];
+    const row = (await screen.findByText(target.product_name)).closest('li');
+    await userEvent.click(within(row).getByRole('link', { name: '수정' }));
+    expect(takeCardEditRequest()).toBe(target.id);
+  });
+
+  it('F-4. 누르기 전에는 아무 요청도 남지 않는다', async () => {
+    render(<CardInventorySection />);
+    await screen.findByText('완비카드');
+    expect(takeCardEditRequest()).toBe(null);
   });
 });
