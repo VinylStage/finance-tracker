@@ -120,4 +120,26 @@ describe('useLoader 아직 한 번도 성공 못 했을 때', () => {
 
     expect(result.current.error).toBe(boom);
   });
+
+  it('옛 요청이 끝나도 새 요청이 도는 동안은 로딩을 유지한다', async () => {
+    const first = deferred();
+    const second = deferred();
+    const loadFn = vi.fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+
+    const { result } = renderHook(() => useLoader(loadFn, []));
+
+    let reloading;
+    await act(async () => { reloading = result.current.reload(); });
+    expect(result.current.loading).toBe(true);
+
+    // 옛 요청만 끝난다. 새 요청은 아직 돌고 있다.
+    await act(async () => { first.resolve(); await first.promise; });
+    expect(result.current.loading).toBe(true);
+
+    // 새 요청까지 끝나야 내린다
+    await act(async () => { second.resolve(); await reloading; });
+    expect(result.current.loading).toBe(false);
+  });
 });
