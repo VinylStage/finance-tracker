@@ -24,16 +24,17 @@ const EXPENSE_ROW = `t.payment_style NOT IN ('할부','리볼빙') AND COALESCE(
 const EXPENSE_CASE = `CASE WHEN c.major_type != '수입' AND ${EXPENSE_ROW} THEN t.amount ELSE 0 END`;
 
 // FND-05(감사): installments.js가 청구 기간 종료를 반영하지 않고 "진행중"
-// 상태 + 시작월만 보고 합산해, 종료된 할부까지 계속 이번 달 합계에 포함시켰다
-// (할부 상태 자동 전이가 없어 사람이 수동으로 '완료' 처리하기 전까지는 종료 후에도
-// '진행중'으로 남아있는 게 정상 상태다 — 그래서 쿼리가 청구 기간 종료를 직접
-// 계산해야 한다). transactions.js 대시보드가 쓰던 정확한 버전으로 통일한다.
+// 상태 + 시작월만 보고 합산해, 종료된 할부까지 계속 이번 달 합계에 포함시켰다.
+// transactions.js 대시보드가 쓰던 정확한 버전으로 통일한다.
+//
+// `status = '진행중'` 조건은 뺐다(#205). 컬럼 자체가 없어졌지만, 그 전에도 이
+// 쿼리는 저장된 status 를 믿지 않고 청구 기간 종료를 아래 두 줄로 직접 계산하고
+// 있었다 — **저장된 status 가 정본이 아니라는 증거가 여기 있었다.**
 function installmentsDueForMonth(month) {
   return db.prepare(`
     SELECT COALESCE(SUM(monthly_amount), 0) AS total
     FROM installments
-    WHERE status = '진행중'
-      AND start_billing_month <= ?
+    WHERE start_billing_month <= ?
       AND ? < strftime('%Y-%m', date(start_billing_month || '-01', '+' || months || ' months'))
   `).get(month, month).total;
 }

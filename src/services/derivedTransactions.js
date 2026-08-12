@@ -358,12 +358,12 @@ function applyInstallmentDerived(db, installmentId, opts = {}) {
       db.prepare(`
         UPDATE installments
         SET purchase_date=?, merchant=?, total_amount=?, months=?, monthly_amount=?,
-            fee_per_month=?, payment_method_id=?, start_billing_month=?, status=?, paid_off_on=?
+            fee_per_month=?, payment_method_id=?, start_billing_month=?, paid_off_on=?
         WHERE id=?
       `).run(
         t.purchase_date, t.merchant, t.total_amount, t.months, t.monthly_amount,
         t.fee_per_month, t.payment_method_id || null, t.start_billing_month,
-        t.status, t.paid_off_on || null, installmentId
+        t.paid_off_on || null, installmentId
       );
     }
     deleteDerivedFor(db, 'installments', installmentId);

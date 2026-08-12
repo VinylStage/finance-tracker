@@ -34,15 +34,15 @@ function makeInstallment(over = {}) {
   const v = {
     purchase_date: '2026-01-15', merchant: '노트북', total_amount: 1200000,
     months: 12, monthly_amount: 100000, fee_per_month: 0,
-    payment_method_id: cardId, start_billing_month: '2026-02', status: '진행중',
+    payment_method_id: cardId, start_billing_month: '2026-02',
     ...over,
   };
   const info = db.prepare(`
     INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount,
-      fee_per_month, payment_method_id, start_billing_month, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      fee_per_month, payment_method_id, start_billing_month)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(v.purchase_date, v.merchant, v.total_amount, v.months, v.monthly_amount,
-         v.fee_per_month, v.payment_method_id, v.start_billing_month, v.status);
+         v.fee_per_month, v.payment_method_id, v.start_billing_month);
   return Number(info.lastInsertRowid);
 }
 

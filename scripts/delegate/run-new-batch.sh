@@ -1,8 +1,17 @@
 #!/bin/zsh
-# 클라이언트 테스트 파일 "신설" 을 위임한다. run-batch.sh 는 기계적 find/replace
-# 전용이라 생성형에는 안 맞는다. 가드는 같은 사고에서 나온 것들을 가져왔다.
+# 테스트 파일 "신설" 을 위임한다. run-batch.sh 는 기계적 find/replace 전용이라
+# 생성형에는 안 맞는다. 가드는 같은 사고에서 나온 것들을 가져왔다.
 #
-# 사용: run-client-batch.sh <라벨> <스펙파일> <생성할테스트파일> <읽기전용소스...>
+# 사용: run-new-batch.sh <라벨> <스펙파일> <생성할테스트파일> <읽기전용소스...>
+#
+# 클라이언트(vitest)와 서버(node --test)를 둘 다 받는다. 기본은 클라이언트고,
+# 서버는 DELEGATE_TARGET_KIND=server 로 바꾼다.
+#
+#   DELEGATE_TARGET_KIND=server run-new-batch.sh 라벨 /abs/spec.md test/x.test.js src/y.js
+#
+# 러너를 둘로 복제하지 않는 이유는 가드 때문이다. 아래 가드는 전부 실제 사고에서
+# 하나씩 붙은 것이고, 파일을 나누면 다음 사고 때 한쪽만 고쳐진다. 실제로 다른
+# 것은 `verify()` 안 세 줄뿐이라 거기서만 갈래를 탄다.
 set -u
 label=${1:?라벨}; spec=${2:?스펙파일}; target=${3:?생성할 테스트파일}; shift 3
 reads=("$@")
@@ -19,6 +28,11 @@ M=${DELEGATE_METRICS:-$SC}
 # 위임 비율을 잘못 냈다. 비워 둔 채로 돌지 못하게 필수로 막는다.
 ISSUE=${DELEGATE_ISSUE:?DELEGATE_ISSUE 가 필요하다 (예: DELEGATE_ISSUE=526)}
 MIN_TESTS=${MIN_TESTS:-5}
+# 검수 방식을 고른다. client 는 vitest, server 는 node --test 다.
+KIND=${DELEGATE_TARGET_KIND:-client}
+if [[ $KIND != client && $KIND != server ]]; then
+  print "DELEGATE_TARGET_KIND 는 client 또는 server 여야 한다 (받은 값: $KIND)"; exit 1
+fi
 mkdir -p $SC $M
 cd $REPO || exit 1
 
@@ -82,22 +96,50 @@ verify() {   # 통과하면 0, 실패 사유를 $SC/fail-$label.txt 로
   if [[ ! -f "$REPO/$target" ]]; then
     print "파일이 만들어지지 않았다: $target" >> "$SC/fail-$label.txt"; return 1
   fi
-  # 껍데기 방지 — it 개수를 센다. 삭제형/빈껍데기 실패는 실행결과로 안 잡힌다
-  local its=$(grep -cE "^\s*it\(" "$REPO/$target")
+  # 껍데기 방지 — 테스트 개수를 센다. 삭제형/빈껍데기 실패는 실행결과로 안 잡힌다.
+  # 서버는 node:test 라 `test(` 도 쓴다. 둘 다 세지 않으면 멀쩡한 산출물이
+  # "0 개" 로 반려된다.
+  local its=$(grep -cE "^\s*(it|test)\(" "$REPO/$target")
   if (( its < MIN_TESTS )); then
     print "테스트가 $its 개다. $MIN_TESTS 개 이상이어야 한다" >> "$SC/fail-$label.txt"; return 1
   fi
-  local out=$(cd $REPO/client && npx vitest run "${target#client/}" --reporter=verbose 2>&1)
-  print -r -- "$out" > "$SC/vitest-$label.log"
-  if ! print -r -- "$out" | grep -qE "Tests +[0-9]+ passed"; then
-    print "vitest 실패:" >> "$SC/fail-$label.txt"
-    print -r -- "$out" | grep -E "^ *(×|→|AssertionError|TestingLibraryElementError)|Error:" | head -30 >> "$SC/fail-$label.txt"
-    return 1
+
+  local out
+  if [[ $KIND == server ]]; then
+    out=$(cd $REPO && node --test "$target" 2>&1)
+    print -r -- "$out" > "$SC/testrun-$label.log"
+    # node:test 는 요약을 `ℹ pass N` / `ℹ fail N` 으로 낸다. 요약줄이 아예 없으면
+    # **테스트가 안 돈 것**이지 통과가 아니다 — 그 둘을 구분해야 한다.
+    if ! print -r -- "$out" | grep -qE "^ℹ pass [0-9]+"; then
+      print "node --test 요약줄이 없다 — 테스트가 돌지 않았다:" >> "$SC/fail-$label.txt"
+      print -r -- "$out" | grep -E "^(not ok|✖)|Error|Cannot find" | head -30 >> "$SC/fail-$label.txt"
+      return 1
+    fi
+    if ! print -r -- "$out" | grep -qE "^ℹ fail 0$"; then
+      print "node --test 실패:" >> "$SC/fail-$label.txt"
+      # `Error:` 만 잡으면 부족하다. node 의 실제 원인은 들여쓰인 `[cause]:` 줄과
+      # `Error [ConnectTimeoutError]` 처럼 대괄호가 붙은 형태로 나오는데, 그 줄이
+      # 빠지면 모델에게 "fetch failed" 만 전달돼 세 라운드를 헛돈다.
+      # 주소·포트가 그 줄에만 있어 오타를 그것 없이는 못 고친다(실측).
+      print -r -- "$out" \
+        | grep -E "^(not ok|✖)|AssertionError|Error|cause|attempted address|code:|expected|actual" \
+        | head -40 >> "$SC/fail-$label.txt"
+      return 1
+    fi
+  else
+    out=$(cd $REPO/client && npx vitest run "${target#client/}" --reporter=verbose 2>&1)
+    print -r -- "$out" > "$SC/vitest-$label.log"
+    if ! print -r -- "$out" | grep -qE "Tests +[0-9]+ passed"; then
+      print "vitest 실패:" >> "$SC/fail-$label.txt"
+      print -r -- "$out" | grep -E "^ *(×|→|AssertionError|TestingLibraryElementError)|Error:" | head -30 >> "$SC/fail-$label.txt"
+      return 1
+    fi
+    if print -r -- "$out" | grep -qE "Tests +[0-9]+ failed"; then
+      print "일부 실패" >> "$SC/fail-$label.txt"; return 1
+    fi
   fi
-  if print -r -- "$out" | grep -qE "Tests +[0-9]+ failed"; then
-    print "일부 실패" >> "$SC/fail-$label.txt"; return 1
-  fi
-  print "  ✓ it $its 개, vitest 통과"
+
+  print "  ✓ 테스트 $its 개, $KIND 검수 통과"
   return 0
 }
 

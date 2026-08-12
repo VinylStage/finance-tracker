@@ -336,16 +336,22 @@
         "payment_method_name": "string",
         "remaining_months": "integer",
         "billed_months": "integer",
-        "can_reopen": "boolean",
-        "reopen_blocked_reason": "string | null",
         "billing_ends_on": "string (YYYY-MM-DD)"
       }
     ],
     "this_month_total": "number"
   }
   ```
-- **비고**: `can_reopen` 은 완료 처리를 되돌릴 수 있는지를 **서버가 판정한** 값이다(#295).
-  화면이 같은 날짜 계산을 다시 하면 스윕 조건과 어긋날 수 있어 판정을 서버에 둔다.
+- **비고**: `status` 는 **저장된 컬럼이 아니라 조회 시점 계산값**이다(#205).
+  `paid_off_on` 이 있고 그 날이 지났거나, `billing_ends_on`(시작월 + 개월수) 이
+  지났으면 `완료`, 아니면 `진행중` 이다. `remaining_months`·`billed_months` 와 같은
+  방식이다.
+
+  `status` 질의 필터도 같은 계산값으로 거른다.
+
+  예전에는 이 GET 이 만료된 행을 `완료` 로 UPDATE 하는 스윕을 돌렸다. 조회가
+  데이터를 바꾸는 구조라 감사 로그에 사용자가 하지 않은 쓰기가 쌓였다 —
+  **지금 이 GET 은 아무것도 쓰지 않는다.**
 - **에러 케이스**:
   - 500: 서버 내부 오류
 
@@ -542,23 +548,19 @@
   - 409 / 428: PUT 과 같음
   - 500: 서버 내부 오류
 
-### POST /api/installments/:id/reopen
-완료 처리를 되돌린다(#295). `status` 하나만 `완료` → `진행중` 으로 바꾼다.
+### ~~POST /api/installments/:id/reopen~~ — 없앴다(#205)
+`#295` 가 만든 되돌리기 경로다. **스윕이 있어서 존재하던 기능이라 스윕과 함께
+사라졌다.**
 
-`PUT /api/installments/:id` 로도 `status` 를 바꿀 수 있지만 경로를 나눈다. 되돌리기는
-**"이게 먹히는가" 를 서버가 판정해야 하는 동작**이고, 일반 수정과 섞으면 그 판정을
-넣을 자리가 없다.
+되돌려도 다음 조회에서 스윕이 다시 완료로 바꿨기 때문에, `#295` 는 "기간이
+끝났으면 되돌리기를 막는다" 는 판정(`can_reopen`)을 붙여야 했다. 그 판정 조건은
+`완료 && !만료` 였는데 `완료` 를 만드는 것이 스윕뿐이고 스윕은 만료일 때만 돌아,
+**정상 흐름에서는 성립할 수 없는 조건**이었다.
 
-- **응답 스키마**: `{ "ok": true, "status": "진행중" }`
-- **에러 케이스**:
-  - 404: 할부 없음
-  - 400: 이미 진행중
-  - 409: 청구 기간이 끝나 되돌려도 스윕이 다시 완료로 바꾼다 (`billing_ends_on` 동봉)
+상태를 계산으로 바꾼 지금은 개월수나 시작월을 고치면 상태가 곧바로 따라온다 —
+`PUT /api/installments/:id` 가 되돌리기가 하려던 일을 그대로 한다.
 
-**왜 409 로 막는가.** `GET /api/installments` 는 매 호출마다 청구 기간이 끝난 할부를
-`완료` 로 바꾸는 스윕을 돈다. 기간이 끝난 항목을 되돌리면 다음 조회에서 즉시 다시
-완료가 되어 사용자 눈에는 "되돌리기가 안 먹는다" 로 보인다. 되는 것처럼 응답하고
-조용히 되뒤집히면 앱을 못 믿게 된다.
+응답 필드 `can_reopen`·`reopen_blocked_reason` 도 함께 없앴다.
 
 ### GET /api/installments/:id/derived
 이 할부가 만든 거래 목록.
@@ -1771,7 +1773,7 @@
 - **비고**: 행을 지우는 것이라 "되돌렸다" 가 별도 상태로 남지 않는다 — 그 이력은
   감사 로그가 들고 있다. 없는 것을 지워도 200 이고 `restored` 가 0 이다.
 
-### GET /api/card-strategy/estimate
+### GET /api/card-strategy/estimate · `payment_style`
 지금 결제하면 어느 카드가 나은가. 거래 입력 화면이 부른다.
 
 - **요청 파라미터**: `amount` (required, 숫자), `category_id` (optional), `merchant` (optional), `asOf` (optional)

@@ -22,6 +22,7 @@ import CardRemapSection from '../components/CardRemapSection';
 import CardBenefitSection from '../components/CardBenefitSection';
 import CardTierSection from '../components/CardTierSection';
 import CardInventorySection from '../components/CardInventorySection';
+import DataIntegritySection from '../components/DataIntegritySection';
 import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
@@ -120,6 +121,12 @@ export default function Settings() {
           <Anchor id="history">
             <HistorySection />
           </Anchor>
+          {/* 점검은 내보내기 **앞**이다(#445). 이상한 값이 섞인 채로 백업을
+              뜨면 그 백업을 되돌려도 같은 값이 다시 들어온다 — 내보내기 전에
+              한 번 훑어볼 자리를 준다. */}
+          <Anchor id="integrity">
+            <DataIntegritySection />
+          </Anchor>
           <Anchor id="export">
             <ExportSection />
           </Anchor>
@@ -160,6 +167,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
   { id: 'history', label: '변경 이력' },
+  { id: 'integrity', label: '데이터 점검' },
   { id: 'export', label: '데이터 내보내기' },
   { id: 'settings-backup', label: '설정 백업 / 복원' },
   { id: 'tx-backup', label: '거래내역 백업 / 복원' },
