@@ -92,7 +92,8 @@ function loadCards() {
 
   const benefits = db.prepare(`
     SELECT id, card_product_id, category_id, merchant_pattern,
-           benefit_type, rate, monthly_cap, min_amount, payment_style
+           benefit_type, rate, monthly_cap, min_amount, payment_style,
+           card_threshold_tier_id
     FROM card_benefits
   `).all();
 
@@ -200,6 +201,8 @@ router.get('/estimate', (req, res) => {
         categoryId,
         merchant,
         paymentStyle,
+        // 이번 달에 적용되는 구간(#563). 지난달 지출로 정해진다.
+        activeTierId: card.threshold && card.threshold.tier ? card.threshold.tier.id : null,
         thresholdMet: card.thresholdMet,
         // 이번 달 이미 받은 혜택은 아직 기록하지 않는다. 한도 소진을 알려면
         // 거래마다 어느 혜택이 걸렸는지를 저장해야 하는데, 그건 추정값을

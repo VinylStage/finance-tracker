@@ -24,8 +24,8 @@ function collectDeclarations() {
 }
 
 const EXPECTED = [
-  { file: 'cardBenefits.js', method: 'POST', routePath: '/', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
-  { file: 'cardBenefits.js', method: 'PUT', routePath: '/:id', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount'] },
+  { file: 'cardBenefits.js', method: 'POST', routePath: '/', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'card_threshold_tier_id'] },
+  { file: 'cardBenefits.js', method: 'PUT', routePath: '/:id', fields: ['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'card_threshold_tier_id'] },
   { file: 'cardPolicies.js', method: 'POST', routePath: '/range', fields: ['payment_method_id', 'from_month', 'to_month', 'free_from_sequence', 'category_id'] },
   { file: 'cardProducts.js', method: 'POST', routePath: '/remap/preview', fields: ['card_product_id', 'min_amount', 'max_amount'] },
   { file: 'cardProducts.js', method: 'POST', routePath: '/remap', fields: ['card_product_id', 'min_amount', 'max_amount'] },
