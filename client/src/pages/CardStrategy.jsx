@@ -138,6 +138,14 @@ export default function CardStrategy() {
 
   return (
     <div className="space-y-4">
+      {/* 구간이 붙은 뒤로 «어느 혜택이 이번 달에 걸리나» 가 이 화면에 안 담긴다.
+          그걸 보는 자리를 여기서 잇는다(#563). */}
+      <div className="flex justify-end">
+        <Link href="/analysis/cards/detail" className="text-xs text-brand-text hover:underline">
+          카드별 상세 보기
+        </Link>
+      </div>
+
       <Section title="전월 실적">
         {loading && <p className="text-sm text-caption py-4">불러오는 중</p>}
         {!loading && thresholds.length === 0 && (
