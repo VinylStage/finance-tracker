@@ -7,7 +7,7 @@
 | payment_methods | 결제수단 정보 저장 | id, name, type, is_active, created_at |
 | categories | 지출/수입 카테고리 저장 | id, major_type, name, monthly_budget, is_active |
 | transactions | 일시불 및 일반적인 거래 내역 저장 | id, date, category_id, amount, payment_method_id, payment_style, merchant, memo, installment_id, origin, origin_ref_table, origin_ref_id, origin_seq, origin_seq_total, created_at |
-| installments | 분할 결제 정보 저장 | id, purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, status, paid_off_on |
+| installments | 분할 결제 정보 저장 | id, purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, paid_off_on |
 | revolving_history | 신용카드 회계 기록 저장 | id, month, carried_balance, new_charge, paid_amount, interest, next_carried_balance, payment_method_id |
 | debts | 부채 정보 저장 | id, name, balance, annual_rate, type, memo, loan_type, credit_limit, interest_basis, compounds, interest_day, updated_at |
 | debt_rate_history | 부채 금리의 시점별 이력 | id, debt_id, annual_rate, effective_from, effective_to, memo, created_at |
@@ -21,7 +21,7 @@
 | audit_log | 모든 쓰기의 전후 값 | id, ts, actor, action_id, action_label, table_name, row_id, op, before_json, after_json, undone_at |
 | _audit_context | 트리거가 읽을 현재 요청 컨텍스트(단일 행) | id, actor, action_id, action_label |
 | card_products | 카드 상품. payment_methods 아래에 붙는다 | id, payment_method_id, issuer, product_name, card_type, annual_fee, prev_month_threshold, billing_cycle_day, statement_close_day, memo |
-| card_benefits | 카드별 할인·적립 조건 | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, rule_json |
+| card_benefits | 카드별 할인·적립 조건 (#563: `payment_style` 이 있으면 그 결제방식에만 적용, 비우면 무관) | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style, rule_json |
 | card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
 | installment_duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | transaction_id, dismissed_at |
 | merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |

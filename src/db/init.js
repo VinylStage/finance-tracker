@@ -57,13 +57,12 @@ db.exec(`
     monthly_amount INTEGER NOT NULL,
     fee_per_month INTEGER DEFAULT 0,
     payment_method_id INTEGER REFERENCES payment_methods(id),
-    start_billing_month TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT '진행중'
+    start_billing_month TEXT NOT NULL
   );
 
-  -- FND-08(감사): installments에 인덱스가 하나도 없어 이번달 청구 합산 등
-  -- status/start_billing_month로 거르는 조회가 전부 풀스캔이었다.
-  CREATE INDEX IF NOT EXISTS idx_installments_status_start ON installments(status, start_billing_month);
+  -- status 컬럼은 없다(#205). 할부의 진행/완료는 저장하지 않고 조회할 때
+  -- 시작월·개월수·조기완납일로 계산한다. 그래서 (status, start_billing_month)
+  -- 복합 인덱스도 두지 않는다 — 선두 컬럼이 존재하지 않는다.
 
   CREATE TABLE IF NOT EXISTS revolving_history (
     id INTEGER PRIMARY KEY,

@@ -21,7 +21,7 @@
     "test:ports": "node scripts/check-test-ports.js"
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.0",
+    "better-sqlite3": "^13.0.3",
     "express": "^5.2.1",
     "multer": "^2.2.0",
     "xlsx": "file:vendor/xlsx-0.20.3.tgz"
@@ -32,7 +32,7 @@
   "devDependencies": {
     "c8": "^12.0.0",
     "chrome-launcher": "^1.2.1",
-    "eslint": "^10.8.0",
+    "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.9.0",
     "lighthouse": "^13.4.1"

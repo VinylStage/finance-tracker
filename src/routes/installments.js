@@ -6,7 +6,6 @@ const { serverError } = require('../utils/errors');
 const { localYearMonth, localYMD } = require('../utils/date');
 const { installmentsDueForMonth } = require('../utils/aggregation');
 const { numericBody, asInt } = require('../utils/validate');
-const { runAs } = require('../utils/auditContext');
 const { INSTALLMENT_SCHEDULE_FIELDS } = require('../constants');
 const {
   planInstallmentDerived, applyInstallmentDerived, derivedRowsFor, deleteDerivedFor,
@@ -17,6 +16,7 @@ const {
 } = require('../services/installmentDuplicates');
 const { estimateBilling, billingBasis } = require('../services/installmentBilling');
 const { resolvePolicy } = require('../services/cardPolicy');
+const { BILLING_END, STATUS_EXPR } = require('../services/installmentStatus');
 
 // 프리뷰 관련 오류를 상태코드로 옮긴다(ADR 0008).
 //
@@ -49,80 +49,40 @@ function changesSchedule(existing, body) {
 // FND-20(감사): 여기서 쓰던 strftime(...,'now')는 UTC라서 KST 자정~9시 사이엔
 // remaining_months/billed_months가 1개월 어긋났다. SQL이 직접 'now'를
 // 참조하지 않도록, 현재 연/월을 JS(localYearMonth)에서 계산해 바인딩한다.
+//
+// 이름 파라미터를 쓴다. 이 조각이 SELECT 안에 두 번 들어가는데 위치 파라미터면
+// 같은 값을 네 번 순서대로 넘겨야 하고, 조각이 하나 늘 때마다 그 순서가 어긋난다.
 const MONTHS_ELAPSED = `
-  (? - CAST(strftime('%Y', i.start_billing_month || '-01') AS INT)) * 12
-  + ? - CAST(strftime('%m', i.start_billing_month || '-01') AS INT)
+  (@curYear - CAST(strftime('%Y', i.start_billing_month || '-01') AS INT)) * 12
+  + @curMonth - CAST(strftime('%m', i.start_billing_month || '-01') AS INT)
   + 1
 `;
 
-// #121(감사 파생): status='진행중'을 사람이 수동으로 '완료'로 바꿔야 했다.
-// 이 앱엔 배치/스케줄러가 없으므로, remaining_months를 매 조회마다 동적으로
-// 계산하는 이 라우트의 기존 방식과 일관되게 조회 시점에 자가교정한다 —
-// 청구 기간이 끝난 '진행중' 행을 GET 때마다 '완료'로 갱신.
-// 사용자는 조회만 했는데 데이터가 바뀐다. 감사로그에 user 로 찍히면 실행취소가
-// 사용자가 하지 않은 일을 되돌리게 된다 — runAs('system') 으로 감싼다(#298).
-// 부작용 있는 GET 자체는 #205 에서 따로 다룬다.
-function completeExpiredInstallments() {
-  const today = localYMD();
-  runAs('system', () => {
-    db.prepare(`
-      UPDATE installments
-      SET status = '완료'
-      WHERE status = '진행중'
-        AND ? >= strftime('%Y-%m-%d', date(start_billing_month || '-01', '+' || months || ' months'))
-    `).run(today);
-  });
-}
-
-// 되돌리기가 먹히는가(#295).
-//
-// 위 스윕이 GET 마다 돌기 때문에, 청구 기간이 끝난 할부를 '진행중' 으로 되돌리면
-// **다음 화면 로드에서 즉시 다시 완료가 된다.** 사용자 눈에는 "되돌리기가 안
-// 먹는다" 로 보인다.
-//
-// 그래서 되돌릴 수 있는지를 서버가 판정해 내려준다. 화면이 같은 날짜 계산을 다시
-// 하면 스윕 조건과 어긋날 수 있다 — 판정은 스윕과 같은 자리에 있어야 한다.
-//
-// A안(#295): 기간이 끝난 항목은 되돌리기를 막고 사유를 보여준다. B안(수동 표시
-// 컬럼)은 마이그레이션이 필요하고, #269 가 파생 거래를 만들기 시작하면 어차피
-// 재검토해야 한다.
-function reopenability(row) {
-  const boundary = db.prepare(`
-    SELECT strftime('%Y-%m-%d', date(? || '-01', '+' || ? || ' months')) AS b
-  `).get(row.start_billing_month, row.months).b;
-  const expired = localYMD() >= boundary;
-  return {
-    can_reopen: row.status === '완료' && !expired,
-    // 사용자에게 그대로 보이는 문구다(#231).
-    reopen_blocked_reason: row.status !== '완료'
-      ? null
-      : (expired
-        ? '청구 기간이 이미 끝난 할부예요. 되돌려도 곧 다시 완료로 바뀝니다.'
-        : null),
-    billing_ends_on: boundary,
-  };
-}
+// 상태 계산식은 `services/installmentStatus.js` 가 갖는다(#205). 경계 조건을
+// 임의 날짜로 검사할 수 있어야 해서 뺐다 — 여기 두면 오늘 날짜로만 검사된다.
 
 // GET /api/installments?status=진행중
 router.get('/', (req, res) => {
   try {
-    completeExpiredInstallments();
     const { status } = req.query;
     const [curYear, curMonth] = localYearMonth();
+    const params = { curYear, curMonth, today: localYMD() };
     let sql = `
       SELECT i.*,
         p.name AS payment_method_name,
+        ${STATUS_EXPR} AS status,
+        ${BILLING_END} AS billing_ends_on,
         MAX(0, i.months - (${MONTHS_ELAPSED})) AS remaining_months,
         MIN(i.months, MAX(0, ${MONTHS_ELAPSED})) AS billed_months
       FROM installments i
       LEFT JOIN payment_methods p ON i.payment_method_id = p.id
       WHERE 1=1
     `;
-    const params = [curYear, curMonth, curYear, curMonth];
-    if (status) { sql += ' AND i.status = ?'; params.push(status); }
-    sql += ' ORDER BY i.status ASC, i.start_billing_month DESC';
-    // 되돌릴 수 있는지를 서버가 판정한다(#295). 화면이 날짜 계산을 다시 하면
-    // 스윕 조건과 어긋난다.
+    // 별칭은 WHERE 에서 못 쓴다. 계산식을 그대로 한 번 더 쓴다 — 같은 상수를
+    // 참조하므로 한쪽만 고쳐질 일은 없다.
+    if (status) { sql += ` AND ${STATUS_EXPR} = @status`; params.status = status; }
+    // 정렬도 계산값 기준이다. 별칭은 ORDER BY 에서 쓸 수 있다.
+    sql += ' ORDER BY status ASC, i.start_billing_month DESC';
     // 각 할부에 적용되는 정책을 함께 낸다(#500).
     //
     // **정책이 없으면 수수료가 0 으로 계산된다.** 그런데 목록은 그 사실을 말하지
@@ -134,11 +94,11 @@ router.get('/', (req, res) => {
     //
     // 할부는 보통 한 자리 수라 행마다 정책을 찾아도 문제가 안 된다. 수백 건이
     // 되면 payment_method_id·months 로 묶어 한 번에 읽어야 한다(#144 유형).
-    const data = db.prepare(sql).all(...params).map((row) => {
+    const data = db.prepare(sql).all(params).map((row) => {
       const { policy, source } = row.payment_method_id
         ? resolvePolicy(db, row.payment_method_id, row.months, row.purchase_date, row.category_id ?? null)
         : { policy: null, source: 'none' };
-      return { ...row, ...reopenability(row), basis: billingBasis(policy, source) };
+      return { ...row, basis: billingBasis(policy, source) };
     });
 
     const thisMonth = `${curYear}-${String(curMonth).padStart(2, '0')}`;
@@ -314,8 +274,8 @@ router.post('/', numericBody(['total_amount', 'months', 'monthly_amount', 'fee_p
     let derived;
     db.transaction(() => {
       const result = db.prepare(`
-        INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, category_id, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '진행중')
+        INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, payment_method_id, start_billing_month, category_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month,
         payment_method_id || null, start_billing_month, category_id || null
@@ -341,7 +301,7 @@ router.post('/', numericBody(['total_amount', 'months', 'monthly_amount', 'fee_p
 //
 // 회차에 영향을 주는 값을 고치면 파생 거래를 다시 만들어야 하고, 그건 기존 행을
 // 지우는 대량 변경이다. 그래서 그 경우에만 프리뷰 지문을 요구한다(ADR 0008).
-// 메모·상태처럼 회차와 무관한 수정까지 막으면 확인 단계가 습관적으로 넘겨진다.
+// 메모처럼 회차와 무관한 수정까지 막으면 확인 단계가 습관적으로 넘겨진다.
 router.put('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM installments WHERE id=?').get(req.params.id);
@@ -365,12 +325,12 @@ router.put('/:id', (req, res) => {
     const merged = { ...existing, ...changes };
     db.prepare(`
       UPDATE installments SET purchase_date=?, merchant=?, total_amount=?, months=?, monthly_amount=?,
-        fee_per_month=?, payment_method_id=?, start_billing_month=?, category_id=?, status=?
+        fee_per_month=?, payment_method_id=?, start_billing_month=?, category_id=?
       WHERE id=?
     `).run(
       merged.purchase_date, merged.merchant, merged.total_amount, merged.months, merged.monthly_amount,
       merged.fee_per_month, merged.payment_method_id || null, merged.start_billing_month,
-      merged.category_id || null, merged.status,
+      merged.category_id || null,
       req.params.id
     );
     res.json({ ok: true });
@@ -414,33 +374,15 @@ router.post('/:id/derived/apply', (req, res) => {
   }
 });
 
-// POST /api/installments/:id/reopen — 완료 처리를 되돌린다(#295)
+// `POST /:id/reopen` 은 없앴다(#205).
 //
-// PUT 으로도 status 를 바꿀 수 있지만 경로를 나눈다. 되돌리기는 "이게 먹히는가" 를
-// 서버가 판정해야 하는 동작이고, 일반 수정과 섞으면 그 판정을 넣을 자리가 없다.
-router.post('/:id/reopen', (req, res) => {
-  try {
-    const row = db.prepare('SELECT * FROM installments WHERE id=?').get(req.params.id);
-    if (!row) return res.status(404).json({ error: '찾는 할부 내역이 없습니다. 이미 삭제됐을 수 있어요.' });
-    if (row.status !== '완료') {
-      return res.status(400).json({ error: '이미 진행중인 할부예요.' });
-    }
-
-    const state = reopenability(row);
-    if (!state.can_reopen) {
-      // 되돌려 봐야 다음 조회에서 스윕이 다시 완료로 바꾼다. 되는 것처럼
-      // 응답하고 조용히 되뒤집히면 사용자는 앱을 못 믿게 된다.
-      return res.status(409).json({ error: state.reopen_blocked_reason, billing_ends_on: state.billing_ends_on });
-    }
-
-    // status 하나만 바꾼다. #295 실측대로 완료 처리는 순수 플래그 변경이고
-    // 되돌리기도 플래그만 되돌리면 된다 — 회차 재생성은 필요 없다.
-    db.prepare("UPDATE installments SET status='진행중' WHERE id=? AND status='완료'").run(req.params.id);
-    res.json({ ok: true, status: '진행중' });
-  } catch (e) {
-    serverError(res, e, 'installments');
-  }
-});
+// 그 경로는 스윕이 있어서 존재했다. 되돌려도 다음 조회에서 스윕이 다시 완료로
+// 바꾸기 때문에 #295 는 "기간이 끝났으면 되돌리기를 막는다" 는 판정을 붙여야
+// 했고, 그 판정 조건(`완료 && !만료`)은 **정상 흐름에서 성립할 수 없었다** —
+// '완료' 를 만드는 것이 스윕뿐이고 스윕은 만료일 때만 돌았기 때문이다.
+//
+// 계산으로 바꾼 지금은 개월수나 시작월을 고치면 상태가 곧바로 따라온다. 되돌리기
+// 버튼이 하려던 일을 수정 화면이 그대로 한다.
 
 // GET /api/installments/:id/derived — 이 할부가 만든 거래 목록(#270).
 router.get('/:id/derived', (req, res) => {

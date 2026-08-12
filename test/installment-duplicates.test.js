@@ -34,8 +34,8 @@ function makeInstallment(over = {}) {
     months: 6, monthly_amount: 38817, ...over,
   };
   return Number(db.prepare(`
-    INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, start_billing_month, status)
-    VALUES (?, ?, ?, ?, ?, '2026-08', '진행중')
+    INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, start_billing_month)
+    VALUES (?, ?, ?, ?, ?, '2026-08')
   `).run(v.purchase_date, v.merchant, v.total_amount, v.months, v.monthly_amount).lastInsertRowid);
 }
 

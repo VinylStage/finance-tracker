@@ -5,6 +5,7 @@ const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { runAs } = require('../utils/auditContext');
 const { localYMD } = require('../utils/date');
+const { guardFormula } = require('../utils/csvFormulaGuard');
 
 const SCHEMA_VERSION = 1;
 
@@ -22,9 +23,15 @@ function isInvalidDateParam(value) {
 // 들여온다(`cardExcelImport.test.js` 의 `'스타벅스\r\n강남점'`). CRLF 는 `\n` 때문에
 // 걸리지만 **CR 단독은 안 걸려** 감싸지 않은 채 나가고, 그러면 리더에 따라 그 행이
 // 거기서 잘린다 — 내보낸 파일이 조용히 짧아진다.
+//
+// 수식 방어(#460)를 **감싸기보다 먼저** 건다. 순서가 뒤집히면 `=1+1,x` 처럼
+// 쉼표가 든 값에서 어포스트로피가 따옴표 바깥으로 나가 열이 어긋난다.
+//
+// 감싸기로는 수식 해석을 못 막는다. 스프레드시트는 따옴표를 벗긴 뒤 남은 값을
+// 보고 판정한다 — 자세한 근거는 `utils/csvFormulaGuard.js` 에 있다.
 function csvEscape(val) {
   if (val === null || val === undefined) return '';
-  const s = String(val);
+  const s = guardFormula(String(val));
   if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
   return s;
 }

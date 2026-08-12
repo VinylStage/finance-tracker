@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TransactionForm from './TransactionForm';
 
@@ -22,7 +22,10 @@ const paymentMethods = [{ id: 10, name: '신한카드', type: '신용' }];
 // 구분한다 — 자세한 규칙과 그룹핑은 lib/paymentOptions.test.jsx 가 본다.
 const PM_10 = 'pm:10';
 
-function renderForm(props = {}) {
+// 이 폼은 그리는 즉시 최근 가맹점 목록과 이번달 카테고리 지출을 받아온다.
+// 그 두 응답이 테스트 본문 **뒤에** 도착하면 상태 변경이 act 밖에서 일어나
+// 경고가 난다. 그려 놓고 한 번 흘려 보내 초기 로딩을 끝낸 뒤 돌려준다.
+async function renderForm(props = {}) {
   const onSave = vi.fn();
   const onCancel = vi.fn();
   render(
@@ -34,6 +37,7 @@ function renderForm(props = {}) {
       {...props}
     />
   );
+  await act(async () => {});
   return { onSave, onCancel };
 }
 
@@ -44,19 +48,19 @@ describe('TransactionForm', () => {
 
   describe('A. 필수 필드 검증', () => {
     it('날짜 입력에 required 속성이 있어야 한다', async () => {
-      renderForm();
+      await renderForm();
       const dateInput = screen.getByLabelText(/날짜 \*/);
       expect(dateInput.required).toBe(true);
     });
 
     it('금액 입력에 required 속성이 있어야 한다', async () => {
-      renderForm();
+      await renderForm();
       const amountInput = screen.getByLabelText(/금액 \(원\) \*/);
       expect(amountInput.required).toBe(true);
     });
 
     it('카테고리 선택에 required 속성이 있어야 한다', async () => {
-      renderForm();
+      await renderForm();
       const categorySelect = screen.getByLabelText(/카테고리 \*/);
       expect(categorySelect.required).toBe(true);
     });
@@ -65,7 +69,7 @@ describe('TransactionForm', () => {
   describe('B. 제출 시 숫자 필드 변환', () => {
     it('금액, 카테고리ID, 결제수단ID가 숫자로 변환되어야 한다', async () => {
       const user = userEvent.setup();
-      const { onSave } = renderForm();
+      const { onSave } = await renderForm();
 
       await user.type(screen.getByLabelText(/금액 \(원\) \*/), '50000');
       await user.selectOptions(screen.getByLabelText(/카테고리 \*/), '1');
@@ -88,7 +92,7 @@ describe('TransactionForm', () => {
   describe('C. 결제수단이 없을 때 null로 넘어감', () => {
     it('결제수단을 선택하지 않으면 payment_method_id는 null이다', async () => {
       const user = userEvent.setup();
-      const { onSave } = renderForm();
+      const { onSave } = await renderForm();
 
       await user.type(screen.getByLabelText(/금액 \(원\) \*/), '50000');
       await user.selectOptions(screen.getByLabelText(/카테고리 \*/), '1');
@@ -110,7 +114,7 @@ describe('TransactionForm', () => {
         merchant: '스타벅스', memo: '테스트',
       };
 
-      const { onSave } = renderForm({ initial });
+      const { onSave } = await renderForm({ initial });
 
       expect(screen.getByLabelText(/가맹점\/내용/).value).toBe('스타벅스');
       expect(screen.getByLabelText(/금액 \(원\) \*/).value).toBe('12345');
@@ -126,7 +130,7 @@ describe('TransactionForm', () => {
 
   describe('E. 예산 힌트', () => {
     it('카테고리를 선택하면 잔여예산 문구가 표시된다', async () => {
-      renderForm();
+      await renderForm();
 
       // 카테고리 선택
       await userEvent.selectOptions(screen.getByLabelText(/카테고리 \*/), '1');
@@ -152,19 +156,19 @@ describe('TransactionForm', () => {
       await user.click(screen.getByText('추가'));
     }
 
-    it('F-1. 카드가 상품명으로 표시된다 — 카드사는 보조 표기다', () => {
-      renderForm({ cardProducts });
+    it('F-1. 카드가 상품명으로 표시된다 — 카드사는 보조 표기다', async () => {
+      await renderForm({ cardProducts });
       expect(screen.getByRole('option', { name: '신한 A카드 · 신한카드' })).toBeTruthy();
     });
 
-    it('F-2. 같은 카드사의 카드 두 장을 따로 고를 수 있다', () => {
-      renderForm({ cardProducts });
+    it('F-2. 같은 카드사의 카드 두 장을 따로 고를 수 있다', async () => {
+      await renderForm({ cardProducts });
       expect(screen.getByRole('option', { name: '신한 A카드 · 신한카드' })).toBeTruthy();
       expect(screen.getByRole('option', { name: '신한 B카드 · 신한카드' })).toBeTruthy();
     });
 
-    it('F-3. 선택지가 카드·현금성·이체로 묶인다', () => {
-      renderForm({
+    it('F-3. 선택지가 카드·현금성·이체로 묶인다', async () => {
+      await renderForm({
         cardProducts,
         paymentMethods: [
           ...paymentMethods,
@@ -178,7 +182,7 @@ describe('TransactionForm', () => {
 
     it('F-4. 카드를 고르면 카드사와 카드가 함께 넘어간다', async () => {
       const user = userEvent.setup();
-      const { onSave } = renderForm({ cardProducts });
+      const { onSave } = await renderForm({ cardProducts });
 
       await fillAndSubmit(user, 'cp:12');
 
@@ -189,7 +193,7 @@ describe('TransactionForm', () => {
 
     it('F-5. 카드사만 고르면 카드는 미상으로 넘어간다', async () => {
       const user = userEvent.setup();
-      const { onSave } = renderForm({ cardProducts });
+      const { onSave } = await renderForm({ cardProducts });
 
       await fillAndSubmit(user, PM_10);
 
@@ -200,7 +204,7 @@ describe('TransactionForm', () => {
 
     it('F-6. 카드를 골랐다가 카드사로 되돌리면 카드가 지워진다', async () => {
       const user = userEvent.setup();
-      const { onSave } = renderForm({ cardProducts });
+      const { onSave } = await renderForm({ cardProducts });
 
       await user.selectOptions(screen.getByLabelText(/결제수단/), 'cp:12');
       await fillAndSubmit(user, PM_10);
@@ -210,7 +214,7 @@ describe('TransactionForm', () => {
 
     it('F-7. 아무것도 안 고르면 둘 다 null 이다', async () => {
       const user = userEvent.setup();
-      const { onSave } = renderForm({ cardProducts });
+      const { onSave } = await renderForm({ cardProducts });
 
       await fillAndSubmit(user, null);
 
@@ -219,8 +223,8 @@ describe('TransactionForm', () => {
       expect(args.card_product_id).toBeNull();
     });
 
-    it('F-8. 수정 모드에서 그 거래의 카드가 이미 골라져 있다', () => {
-      renderForm({
+    it('F-8. 수정 모드에서 그 거래의 카드가 이미 골라져 있다', async () => {
+      await renderForm({
         cardProducts,
         initial: {
           date: '2026-07-01', category_id: 1, amount: 12345,
@@ -230,8 +234,8 @@ describe('TransactionForm', () => {
       expect(screen.getByLabelText(/결제수단/).value).toBe('cp:11');
     });
 
-    it('F-9. 카드가 미상인 거래는 카드사만 골라져 있다', () => {
-      renderForm({
+    it('F-9. 카드가 미상인 거래는 카드사만 골라져 있다', async () => {
+      await renderForm({
         cardProducts,
         initial: {
           date: '2026-07-01', category_id: 1, amount: 12345,
@@ -243,7 +247,7 @@ describe('TransactionForm', () => {
 
     it('F-10. 수정 모드에서 카드만 바꿔도 나머지 값이 그대로 넘어간다', async () => {
       const user = userEvent.setup();
-      const { onSave } = renderForm({
+      const { onSave } = await renderForm({
         cardProducts,
         initial: {
           date: '2026-07-01', category_id: 1, amount: 12345,
@@ -261,8 +265,8 @@ describe('TransactionForm', () => {
       expect(args.amount).toBe(12345);
     });
 
-    it('F-11. 등록된 카드가 없으면 카드사 이름만 보인다 — 지금 화면 그대로다', () => {
-      renderForm();
+    it('F-11. 등록된 카드가 없으면 카드사 이름만 보인다 — 지금 화면 그대로다', async () => {
+      await renderForm();
       expect(screen.getByRole('option', { name: '신한카드' })).toBeTruthy();
     });
   });
