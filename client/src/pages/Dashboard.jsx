@@ -264,7 +264,10 @@ function Section({ title, children, caption, collapsible = false, id, defaultOpe
   );
 }
 
-function yearlyFromMonthly(monthlyTrend) {
+// 이름을 내보내는 이유는 테스트다(#616). 이 둘의 결과는 recharts 차트로만
+// 드러나는데, jsdom 에는 레이아웃이 없어 차트가 SVG 껍데기만 만든다 — 화면을
+// 통해서는 «연 단위로 접혔는가» 를 확인할 방법이 없다. 함수를 직접 부른다.
+export function yearlyFromMonthly(monthlyTrend) {
   const map = new Map();
   (monthlyTrend || []).forEach(m => {
     const year = m.month.slice(0, 4);
@@ -276,7 +279,7 @@ function yearlyFromMonthly(monthlyTrend) {
   return [...map.values()];
 }
 
-function periodConfig(period, data) {
+export function periodConfig(period, data) {
   switch (period) {
     case '일':
       return { rows: data.dailyTrend || [], xKey: 'date', tick: (v) => v.slice(5).replace('-', '/') };
