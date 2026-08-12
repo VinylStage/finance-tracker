@@ -12,6 +12,7 @@ function estimateBenefit({
   categoryId,
   merchant,
   paymentStyle,
+  activeTierId,
   thresholdMet,
   benefitUsedThisMonth,
 }) {
@@ -31,6 +32,21 @@ function estimateBenefit({
     const styleRule = b.payment_style || null;
     if (styleRule && styleRule !== paymentStyle) {
       candidates.push({ ...b, skipped: true, reason: 'payment-style-mismatch' });
+      continue;
+    }
+
+    // 실적 구간에 걸린 혜택(#563). "40만원 미만 1% / 이상 2%" 처럼 같은 대상에
+    // 요율만 다른 줄을 구간마다 하나씩 두고, **지난달 지출로 정해진 구간의 줄만**
+    // 후보가 된다.
+    //
+    // 구간을 안 가리키는 혜택(NULL)은 예전 그대로 항상 후보다. 구간을 쓰지 않는
+    // 카드가 이 변경으로 달라지면 안 된다.
+    //
+    // 활성 구간을 모를 때(activeTierId 가 없을 때)는 구간에 걸린 혜택을 전부 뺀다 —
+    // 어느 구간인지 모르는 채로 아무 요율이나 집으면 높은 쪽이 골라져 과대추정이 된다.
+    const tierRule = b.card_threshold_tier_id ?? null;
+    if (tierRule !== null && tierRule !== activeTierId) {
+      candidates.push({ ...b, skipped: true, reason: 'tier-mismatch' });
       continue;
     }
 
