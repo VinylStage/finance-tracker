@@ -438,4 +438,82 @@ function defaultFrom(to) {
   return localYMD(start);
 }
 
+// GET /api/card-strategy/detail?asOf=YYYY-MM-DD
+//
+// 카드 하나하나가 **지금 어떤 상태인가** 를 통째로 준다. 기존 화면은
+// `/thresholds` 만 써서 «충족/미달» 과 구간 이름까지만 보여줬다. 그래서
+// "왜 이 카드가 이만큼인가" 를 물으면 답할 데가 없었다.
+//
+// 특히 구간이 붙은 뒤로는 **혜택마다 지금 살아 있는지가 달라진다.** 40만원 미만
+// 구간에 걸린 1% 줄과 이상 구간에 걸린 2% 줄이 같이 등록돼 있고, 이번 달에는
+// 그중 하나만 적용된다. 목록만 보면 둘 다 있는 것처럼 보인다.
+//
+// 그래서 혜택마다 `activeNow` 를 함께 낸다 — 지금 이 카드에서 실제로 걸리는 줄이
+// 무엇인지가 이 화면의 존재 이유다.
+router.get('/detail', (req, res) => {
+  try {
+    const asOf = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.asOf || '')) ? req.query.asOf : localYMD();
+    const cards = withThresholds(loadCards(), asOf);
+
+    // 분류 이름을 붙여 준다. 화면이 내부 번호를 다시 이름으로 바꾸지 않게 한다(#231).
+    const catNames = new Map(
+      db.prepare('SELECT id, name FROM categories').all().map((c) => [c.id, c.name])
+    );
+
+    const data = cards.map((card) => {
+      const th = card.threshold || {};
+      const activeTierId = th.tier ? th.tier.id : null;
+
+      const benefits = (card.benefits || []).map((b) => {
+        const tier = (th.tiers || []).find((t) => t.id === b.card_threshold_tier_id) || null;
+        return {
+          id: b.id,
+          categoryName: b.category_id ? (catNames.get(b.category_id) || null) : null,
+          merchantPattern: b.merchant_pattern || null,
+          benefitType: b.benefit_type,
+          rate: b.rate,
+          monthlyCap: b.monthly_cap,
+          minAmount: b.min_amount,
+          paymentStyle: b.payment_style || null,
+          tierId: b.card_threshold_tier_id ?? null,
+          tierLabel: tier ? (tier.label || null) : null,
+          tierMinSpend: tier ? tier.min_spend : null,
+          // 이번 달에 실제로 걸리는가. 구간을 안 가리키면 항상 걸리고,
+          // 가리키면 그 구간이 지금 구간일 때만 걸린다. 실적 미달이면 전부 죽는다.
+          activeNow: th.met !== false
+            && (b.card_threshold_tier_id === null || b.card_threshold_tier_id === undefined
+                || b.card_threshold_tier_id === activeTierId),
+        };
+      });
+
+      return {
+        cardProductId: card.id,
+        issuer: card.issuer,
+        productName: card.product_name,
+        cardType: card.card_type,
+        isActive: card.is_active === undefined || card.is_active === null ? true : !!card.is_active,
+        threshold: {
+          period: th.period || null,
+          spend: th.spend ?? 0,
+          met: th.met !== false,
+          tier: th.tier || null,
+          tiers: th.tiers || [],
+          nextTier: th.nextTier || null,
+          toNextTier: th.toNextTier ?? 0,
+          // 카드사 실적 제외 항목을 반영하지 못한다는 사실을 화면이 말해야 한다.
+          estimated: th.estimated !== false,
+        },
+        benefits,
+        // 등록은 됐는데 이번 달에는 하나도 안 걸리는 카드가 있다. 그 사실을
+        // 화면이 바로 말할 수 있게 세어 준다.
+        activeBenefitCount: benefits.filter((b) => b.activeNow).length,
+      };
+    });
+
+    res.json({ data, asOf });
+  } catch (e) {
+    serverError(res, e, 'cardStrategy');
+  }
+});
+
 module.exports = router;
