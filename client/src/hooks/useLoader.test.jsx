@@ -69,3 +69,55 @@ describe('useLoader 다시 읽기', () => {
     expect(result.current.error).toBe(null);
   });
 });
+
+describe('useLoader 아직 한 번도 성공 못 했을 때', () => {
+  it('옛 요청이 늦게 실패해도 오류로 만들지 않는다', async () => {
+    const first = deferred();
+    const second = deferred();
+    const loadFn = vi.fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+
+    const { result } = renderHook(() => useLoader(loadFn, []));
+
+    // 첫 요청이 아직 안 끝났는데 다시 읽는다. 둘 다 진행 중이다.
+    let reloading;
+    await act(async () => { reloading = result.current.reload(); });
+
+    // 이제 옛 요청이 실패한다. 지난 요청이므로 버려야 한다.
+    await act(async () => {
+      first.reject(new Error('늦게 온 첫 실패'));
+      await first.promise.catch(() => {});
+    });
+
+    expect(result.current.error).toBe(null);
+
+    await act(async () => { second.resolve(); await reloading; });
+    expect(result.current.error).toBe(null);
+  });
+
+  it('옛 요청이 늦게 성공해도 최신 실패를 가리지 않는다', async () => {
+    const first = deferred();
+    const second = deferred();
+    const loadFn = vi.fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+
+    const { result } = renderHook(() => useLoader(loadFn, []));
+
+    let reloading;
+    await act(async () => { reloading = result.current.reload(); });
+
+    // 옛 요청이 늦게 성공한다. 이것으로 «한 번 성공했다» 를 남기면 안 된다.
+    await act(async () => { first.resolve(); await first.promise; });
+
+    // 최신 요청은 실패한다. 아직 한 번도 성공한 적이 없으므로 전면 오류다.
+    const boom = new Error('최신 실패');
+    await act(async () => {
+      second.reject(boom);
+      await reloading;
+    });
+
+    expect(result.current.error).toBe(boom);
+  });
+});
