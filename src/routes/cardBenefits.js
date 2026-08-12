@@ -5,7 +5,7 @@ const db = require('../db/init');
 const { numericBody, missingFields } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { BENEFIT_TYPES, PAYMENT_STYLES } = require('../constants');
-const { validateRule } = require('../services/benefitRules');
+const { validateRule, ruleOf, RATE_KIND } = require('../services/benefitRules');
 
 // 카드 혜택 CRUD(#274).
 //
@@ -84,12 +84,36 @@ function validate(body) {
 }
 
 function normalize(body) {
+  // 규칙을 먼저 정한다. `rate` 가 그 결과에 딸리기 때문이다(#571).
+  //
+  // `PUT` 은 `{...existing, ...body}` 를 넘긴다. 규칙을 안 보낸 부분 수정에서
+  // 여기가 무조건 NULL 을 내면 **적어 둔 규칙이 조용히 지워진다.** 그래서
+  // 세 갈래로 나눈다 — 새 규칙을 보냈으면 그것, 명시적 null 이면 지우기,
+  // 아무것도 안 보냈으면 기존 값 유지.
+  const rule_json = body.rule !== undefined
+    ? (body.rule === null ? null : JSON.stringify(body.rule))
+    : (body.rule_json ?? null);
+
+  // 요율형이 아니면 `rate` 를 0 으로 눌러 저장한다.
+  //
+  // 안 누르면 `rate: 5.0` 과 정액구간형 규칙이 한 행에 같이 앉는다. 지금은
+  // 읽는 쪽이 규칙을 먼저 보므로 `rate` 가 죽어 있어 계산이 맞다. 문제는
+  // **나중에 그 규칙을 지웠을 때**다. `ruleOf()` 가 `rate` 컬럼으로 되돌아가면서
+  // 묻혀 있던 5% 가 되살아난다 — 사용자는 규칙 하나를 지웠을 뿐인데 없던 혜택이
+  // 붙는다. 화면은 이미 0 을 보내지만 API·스크립트 경로가 열려 있다.
+  //
+  // 판정을 여기서 따로 하지 않고 `ruleOf` 에 맡긴다. "이 행이 무슨 유형인가" 를
+  // 읽는 쪽과 쓰는 쪽이 각자 판단하면 두 답이 갈라진다.
+  const rate = ruleOf({ rule_json, rate: body.rate }).kind === RATE_KIND
+    ? Number(body.rate)
+    : 0;
+
   return {
     card_product_id: Number(body.card_product_id),
     category_id: blankToNull(body.category_id),
     merchant_pattern: body.merchant_pattern || null,
     benefit_type: body.benefit_type,
-    rate: Number(body.rate),
+    rate,
     monthly_cap: blankToNull(body.monthly_cap),
     // 안 적으면 조건 없음이다. NULL 로 두면 비교할 때마다 NULL 처리를 해야 한다.
     min_amount: blankToNull(body.min_amount) ?? 0,
@@ -100,16 +124,31 @@ function normalize(body) {
     card_threshold_tier_id: blankToNull(body.card_threshold_tier_id),
     // 유형별 혜택 규칙(#564). 안 보내면 NULL 이고, 읽는 쪽이 `rate` 컬럼을 보고
     // 요율형으로 간주한다 — 이미 들어가 있는 혜택이 이 변경으로 달라지지 않는다.
-    //
-    // `PUT` 은 `{...existing, ...body}` 를 넘긴다. 규칙을 안 보낸 부분 수정에서
-    // 여기가 무조건 NULL 을 내면 **적어 둔 규칙이 조용히 지워진다.** 그래서
-    // 세 갈래로 나눈다 — 새 규칙을 보냈으면 그것, 명시적 null 이면 지우기,
-    // 아무것도 안 보냈으면 기존 값 유지.
-    rule_json: body.rule !== undefined
-      ? (body.rule === null ? null : JSON.stringify(body.rule))
-      : (body.rule_json ?? null),
+    rule_json,
   };
 }
+
+// 목록 정렬(#571).
+//
+// 예전에는 `rate DESC` 하나였다. 요율만 있던 시절에는 그것이 "큰 혜택 먼저" 의
+// 대리값이었다. 유형이 늘면서 그 대리값이 깨졌다 — 정액구간형은 `rate` 가 0 이라
+// **값과 무관하게 맨 아래로 간다.** 매달 7,000원 붙는 혜택이 0.5% 짜리 아래에 놓인다.
+//
+// 유형을 가로질러 크기를 비교하지는 않는다. 정액 3,000원과 요율 0.7% 중 무엇이
+// 큰지는 거래금액을 알아야 정해지고, 목록은 그것을 모른다. 대신 **유형끼리 묶는다.**
+// 요율형은 예전 그대로 요율 순으로 줄 세우고, 그렇지 않은 유형은 그 뒤에 모인다.
+// 맨 아래에 있는 것이 "0% 라서" 가 아니라 "다른 유형이라서" 가 된다.
+//
+// 규칙이 없는 행(이미 들어가 있는 혜택 전부)은 요율형이므로 순서가 달라지지 않는다.
+//
+// `b.id` 를 끝에 둔다. 전체 조회에는 이게 없어서 같은 요율이 여럿일 때 순서가
+// 호출마다 달라질 수 있었다 — 실 데이터에 5.0% 가 24건이다.
+const BY_SIZE = `
+  CASE WHEN b.rule_json IS NULL OR json_extract(b.rule_json, '$.kind') = 'rate'
+       THEN 0 ELSE 1 END,
+  b.rate DESC,
+  b.id
+`;
 
 // GET /api/card-benefits?card_product_id=
 router.get('/', (req, res) => {
@@ -122,8 +161,8 @@ router.get('/', (req, res) => {
       LEFT JOIN card_products cp ON cp.id = b.card_product_id
     `;
     const rows = card_product_id
-      ? db.prepare(`${sql} WHERE b.card_product_id = ? ORDER BY b.rate DESC, b.id`).all(card_product_id)
-      : db.prepare(`${sql} ORDER BY cp.issuer, cp.product_name, b.rate DESC`).all();
+      ? db.prepare(`${sql} WHERE b.card_product_id = ? ORDER BY ${BY_SIZE}`).all(card_product_id)
+      : db.prepare(`${sql} ORDER BY cp.issuer, cp.product_name, ${BY_SIZE}`).all();
     res.json({ data: rows });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
