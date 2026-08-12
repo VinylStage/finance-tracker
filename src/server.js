@@ -121,12 +121,35 @@ app.use((err, req, res, next) => {
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST);
+
+// 기동 로그는 `listening` 이벤트에서 찍는다(#583).
+//
+// `app.listen(port, host, cb)` 의 콜백은 **바인딩에 실패해도 불린다.** 그래서
+// 포트가 물린 상태에서도 «기동 성공» 이 찍혔다. `listening` 은 실제로 붙었을 때만
+// 나므로 거짓 성공이 안 남는다.
+server.on('listening', () => {
   if (HOST === '0.0.0.0' || HOST === '::') {
     console.log(`[server] http://${HOST}:${PORT} (모든 인터페이스에 노출됨)`);
   } else {
     console.log(`[server] http://${HOST}:${PORT}`);
   }
+});
+
+// 리스닝 실패를 실패로 알린다(#583).
+//
+// **express 는 이걸 안 해 주면 조용히 넘어간다.** 이미 쓰이는 포트로 띄우면
+// 바인딩에 실패했는데도 위 콜백이 불려 «기동 성공» 이 찍히고, stderr 는 비고,
+// 종료코드는 0 이다. 실측으로 갈랐다 — 같은 상황에서 `node:http` 를 직접 쓰면
+// `error` 이벤트에 리스너가 없어 던지고 프로세스가 1 로 죽는다.
+//
+// 종료코드를 1 로 두는 것이 핵심이다. 0 이면 지금과 똑같이 «스스로 정상 종료» 로
+// 보이고, 테스트 하네스가 `code=0 signal=null` 만 받아 원인을 못 가린다(#379).
+//
+// SIGTERM 핸들러의 `process.exit(0)`(#157, 커버리지 때문)과는 다른 경로다.
+server.on('error', (e) => {
+  console.error(`[server] 리스닝 실패: ${e.code || e.message} (${HOST}:${PORT})`);
+  process.exit(1);
 });
 
 // #157(FND-12 후속): HTTP 테스트가 서버를 자식 프로세스로 띄우고 SIGTERM으로
