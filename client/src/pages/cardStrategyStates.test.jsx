@@ -91,3 +91,68 @@ describe('더 안 쓰는 카드의 자리', () => {
     expect(names).toEqual(['예시 첫째카드', '예시 둘째카드']);
   });
 });
+
+// 비교가 된 응답. mockApi 는 이 파일 위쪽에서 비교 쪽에 COMPARISON 을 주므로
+// 여기서는 get 을 직접 짠다.
+function mockCompared(byCard) {
+  get.mockImplementation((path) => {
+    if (String(path).includes('/thresholds')) {
+      return Promise.resolve({ data: [row()], asOf: '2026-08-05' });
+    }
+    return Promise.resolve({
+      comparable: true,
+      totalGap: 12000,
+      byCard,
+      details: [{ id: 1 }],
+      period: { from: '2026-05-01', to: '2026-08-05' },
+      thresholdEstimated: false,
+    });
+  });
+}
+
+describe('비교 결과', () => {
+  it('카드가 둘이면 카드별 줄을 펼친다', async () => {
+    mockCompared([
+      { cardId: 1, productName: '예시 첫째카드', gapIfUsed: 8000 },
+      { cardId: 2, productName: '예시 둘째카드', gapIfUsed: 4000 },
+    ]);
+    render(<CardStrategy />);
+    await waitFor(() => expect(screen.queryByText('불러오는 중')).toBeNull());
+
+    expect(await screen.findByText('8,000원')).toBeTruthy();
+    expect(screen.getByText('4,000원')).toBeTruthy();
+  });
+
+  it('카드가 하나뿐이면 같은 말을 두 번 하지 않는다', async () => {
+    mockCompared([{ cardId: 1, productName: '예시 첫째카드', gapIfUsed: 12000 }]);
+    render(<CardStrategy />);
+    await waitFor(() => expect(screen.queryByText('불러오는 중')).toBeNull());
+
+    // 헤드라인은 나오지만 카드별 금액 줄은 안 만든다
+    expect(await screen.findByText(/12,000원 더 받았어요/)).toBeTruthy();
+    expect(screen.queryByText('12,000원')).toBe(null);
+  });
+
+  it('비교한 기간을 적는다', async () => {
+    mockCompared([
+      { cardId: 1, productName: '예시 첫째카드', gapIfUsed: 8000 },
+      { cardId: 2, productName: '예시 둘째카드', gapIfUsed: 4000 },
+    ]);
+    render(<CardStrategy />);
+    await waitFor(() => expect(screen.queryByText('불러오는 중')).toBeNull());
+
+    expect(await screen.findByText('2026-05-01 ~ 2026-08-05')).toBeTruthy();
+  });
+});
+
+describe('못 불러왔을 때', () => {
+  it('화면 전체가 오류가 되고 다시 시도할 수 있다', async () => {
+    get.mockRejectedValue(new Error('끊김'));
+    render(<CardStrategy />);
+    await waitFor(() => expect(screen.queryByText('불러오는 중')).toBeNull());
+
+    expect(screen.getByRole('button')).toBeTruthy();
+    // 실적 목록은 나오지 않는다
+    expect(screen.queryByText('전월 실적')).toBe(null);
+  });
+});
