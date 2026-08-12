@@ -6,7 +6,10 @@ import { formatWon } from '../lib/format';
 
 // 파이 조각에 마우스를 올렸을 때 뜨는 툴팁. '기타' 조각이면 어떤 카테고리가
 // 묶였는지 목록으로 펼쳐 준다 — 캡핑 때문에 사라진 정보를 여기서 되돌려준다.
-function SliceTooltip({ active, payload, others }) {
+// 이름을 내보내는 이유는 테스트다(#542). recharts 의 툴팁은 hover 로만 열리는데
+// jsdom 에는 조각 path 도 마우스 좌표도 없어 그 경로로는 열 수 없다. 컴포넌트를
+// 직접 렌더해 «기타 조각이면 묶인 목록을 펼친다» 를 확인한다.
+export function SliceTooltip({ active, payload, others }) {
   if (!active || !payload || !payload.length) return null;
   const row = payload[0].payload;
   return (
