@@ -119,7 +119,7 @@ describe('지나친 것 되돌리기', () => {
     
     // "중복 아니라고 한 것" 이 든 버튼을 누르면 쿠팡 이 보인다
     const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
-    await button.click();
+    await userEvent.click(button);
     expect(screen.getByText(/쿠팡/)).toBeTruthy();
   });
 
@@ -129,7 +129,7 @@ describe('지나친 것 되돌리기', () => {
     setup([candidate()], dismissed);
     
     const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
-    await button.click();
+    await userEvent.click(button);
     
     // 날짜와 금액이 보인다
     expect(await screen.findByText(/2026-05-15/)).toBeTruthy();
@@ -144,10 +144,10 @@ describe('지나친 것 되돌리기', () => {
     post.mockResolvedValue({ ok: true, restored: 1 });
 
     const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
-    await button.click();
+    await userEvent.click(button);
     
     const restoreButton = await screen.findByText(/다시 보기/);
-    await restoreButton.click();
+    await userEvent.click(restoreButton);
 
     expect(post).toHaveBeenCalledWith('/api/installments/duplicates/restore', { ids: [11] });
   });
@@ -159,11 +159,11 @@ describe('지나친 것 되돌리기', () => {
     post.mockResolvedValue({ ok: true, restored: 1 });
 
     const button = await screen.findByRole('button', { name: /중복 아니라고 한 것/ });
-    await button.click();
+    await userEvent.click(button);
     
     const restoreButton = await screen.findByText(/다시 보기/);
     const callCount = get.mock.calls.length;
-    await restoreButton.click();
+    await userEvent.click(restoreButton);
 
     await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(callCount));
     // 되돌렸는데 목록이 그대로면 사용자는 눌린 줄 모른다
