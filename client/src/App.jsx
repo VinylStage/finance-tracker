@@ -15,6 +15,7 @@ const Debts = lazy(() => import('./pages/Debts'));
 const Simulator = lazy(() => import('./pages/Simulator'));
 const Savings = lazy(() => import('./pages/Savings'));
 const CardStrategy = lazy(() => import('./pages/CardStrategy'));
+const CardDetail = lazy(() => import('./pages/CardDetail'));
 const Settings = lazy(() => import('./pages/Settings'));
 const AuditLog = lazy(() => import('./pages/AuditLog'));
 const Guide = lazy(() => import('./pages/Guide'));
@@ -117,6 +118,7 @@ export default function App() {
             <Route path="/analysis/comparison" component={Comparison} />
             <Route path="/analysis/simulator" component={Simulator} />
             <Route path="/analysis/cards" component={CardStrategy} />
+            <Route path="/analysis/cards/detail" component={CardDetail} />
             <Route path="/assets">
               <Redirect to="/assets/installments" />
             </Route>
