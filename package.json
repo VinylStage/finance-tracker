@@ -18,7 +18,8 @@
     "docs:check": "node scripts/check-docs.js",
     "docs:erd": "node scripts/gen-erd.js",
     "docs:erd:check": "node scripts/gen-erd.js --check",
-    "test:ports": "node scripts/check-test-ports.js"
+    "test:ports": "node scripts/check-test-ports.js",
+    "measure:startup": "node scripts/measure-server-startup.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
