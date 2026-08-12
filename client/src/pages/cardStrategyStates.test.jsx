@@ -156,3 +156,37 @@ describe('못 불러왔을 때', () => {
     expect(screen.queryByText('전월 실적')).toBe(null);
   });
 });
+
+describe('더 볼 것', () => {
+  it('둘 다 안 쓰는 카드면 자리를 바꾸지 않는다', async () => {
+    await renderLoaded([
+      row({ cardProductId: 1, productName: '예시 첫째카드', isActive: false }),
+      row({ cardProductId: 2, productName: '예시 둘째카드', isActive: false }),
+    ]);
+
+    const names = screen.getAllByText(/예시 (첫째|둘째)카드/).map((el) => el.textContent);
+    expect(names).toEqual(['예시 첫째카드', '예시 둘째카드']);
+  });
+
+  it('그 기간에 결제가 없으면 설정 링크를 붙이지 않는다', async () => {
+    get.mockImplementation((path) => {
+      if (String(path).includes('/thresholds')) {
+        return Promise.resolve({ data: [row()], asOf: '2026-08-05' });
+      }
+      return Promise.resolve({
+        comparable: false,
+        reason: 'no-transactions',
+        totalGap: 0,
+        byCard: [],
+        details: [],
+        period: { from: '2026-05-01', to: '2026-08-05' },
+        thresholdEstimated: false,
+      });
+    });
+    render(<CardStrategy />);
+    await waitFor(() => expect(screen.queryByText('불러오는 중')).toBeNull());
+
+    expect(await screen.findByText(/이 기간에는 비교할 카드 결제가 없어요/)).toBeTruthy();
+    expect(screen.queryByText('설정에서 카드 등록')).toBe(null);
+  });
+});
