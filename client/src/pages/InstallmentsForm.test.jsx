@@ -34,13 +34,13 @@ vi.mock('../lib/date', () => ({
 const ROW = {
   id: 3, merchant: '노트북', total_amount: 1200000, monthly_amount: 200000,
   months: 6, billed_months: 2, remaining_months: 4, status: '진행중',
-  payment_method_name: '신한카드', can_reopen: false, reopen_blocked_reason: null,
+  payment_method_name: '신한카드',
 };
 // 결제수단·잔여가 비어 있는 쪽. 한 픽스처로 겸하면 '—'·'-' 분기를 안 밟는다.
 const BARE = {
   id: 4, merchant: '정수기', total_amount: 600000, monthly_amount: 100000,
   months: 6, billed_months: 6, remaining_months: 0, status: '완료',
-  payment_method_name: null, can_reopen: false, reopen_blocked_reason: '청구가 끝났어요',
+  payment_method_name: null,
 };
 
 const METHODS = [{ id: 5, name: '신한카드' }, { id: 6, name: '현대카드' }];

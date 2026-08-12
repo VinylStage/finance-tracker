@@ -17,7 +17,7 @@ vi.mock('../lib/api', () => ({
 const ROW = {
   id: 3, merchant: '노트북', total_amount: 1200000, monthly_amount: 200000,
   months: 6, billed_months: 2, remaining_months: 4, status: '진행중',
-  payment_method_name: '신한카드', can_reopen: false, reopen_blocked_reason: null,
+  payment_method_name: '신한카드',
 };
 
 // 화면이 부르는 주소가 여럿이라 URL 로 갈라 답한다. 목록만 바꿔 가며 쓴다.
@@ -106,90 +106,38 @@ describe('할부 관리 화면', () => {
     expect(screen.getByText('불러오지 못했습니다')).toBeTruthy();
   });
 
-  it('완료 처리는 확인을 받는다 (#295)', async () => {
+  // «완료처리»·«되돌리기» 는 없앴다(#205). 상태를 저장하지 않고 계산하므로
+  // 손으로 세우거나 되돌릴 플래그가 없다.
+  //
+  // 버튼이 사라졌다는 것만 확인한다. 눌러서 어떤 요청이 나가는지 보던 예전
+  // 테스트는 검사할 동작 자체가 없어졌다.
+  it('완료처리 버튼이 없다', async () => {
     mockGet();
-    const user = userEvent.setup();
     renderPage();
-    
-    // 로딩이 끝날 때까지 기다림
     await waitFor(() => expect(screen.queryByText('로딩 중...')).toBeNull());
-    
-    // 완료처리 버튼 클릭
-    const completeButton = screen.getByText('완료처리');
-    await user.click(completeButton);
-    
-    // 확인창이 떠야 함
-    const confirmButton = screen.getByText('완료 처리');
-    const cancelButton = screen.getByText('취소');
-    
-    // 취소 버튼 클릭
-    await user.click(cancelButton);
-    
-    // put이 호출되지 않았는지 확인
-    expect(put).not.toHaveBeenCalled();
+    expect(screen.queryByText('완료처리')).toBeNull();
   });
 
-  it('확인하면 상태를 완료로 바꿔 보낸다', async () => {
-    mockGet();
-    const user = userEvent.setup();
+  it('완료된 건에도 되돌리기가 없다', async () => {
+    mockGet({ rows: [{ ...ROW, status: '완료' }] });
     renderPage();
-    
-    // 로딩이 끝날 때까지 기다림
     await waitFor(() => expect(screen.queryByText('로딩 중...')).toBeNull());
-    
-    // 완료처리 버튼 클릭
-    const completeButton = screen.getByText('완료처리');
-    await user.click(completeButton);
-    
-    // 확인창에서 확인 버튼 클릭
-    const confirmButton = screen.getByText('완료 처리');
-    await user.click(confirmButton);
-    
-    // put이 호출되었는지 확인
-    expect(put).toHaveBeenCalledWith('/api/installments/3', { status: '완료' });
+    expect(screen.queryByText('되돌리기')).toBeNull();
+    expect(screen.queryByText('되돌릴 수 없음')).toBeNull();
   });
 
-  it('되돌릴 수 없는 완료 건은 사유를 달아 알린다', async () => {
-    const row = {
-      ...ROW,
-      status: '완료',
-      can_reopen: false,
-      reopen_blocked_reason: '청구 기간이 끝났어요'
-    };
-    mockGet({ rows: [row] });
+  // 상태는 서버가 계산해 내려준다. 화면이 날짜로 다시 판정하면 서버와 어긋난다.
+  //
+  // «완료» 는 상태 필터 탭에도 있다. 태그로 좁히지 않으면 탭 하나만 있어도
+  // 통과해서, 상태 칸이 비어 있는 것을 못 잡는다.
+  it('서버가 내려준 상태를 그대로 보여준다', async () => {
+    mockGet({ rows: [{ ...ROW, status: '완료' }] });
     renderPage();
-    
-    // 로딩이 끝날 때까지 기다림
     await waitFor(() => expect(screen.queryByText('로딩 중...')).toBeNull());
-    
-    // 되돌리기 버튼이 없어야 함
-    const reopenButton = screen.queryByText('되돌리기');
-    expect(reopenButton).toBeNull();
-    
-    // 되돌릴 수 없음 문구 확인
-    const noReopenText = screen.getByText('되돌릴 수 없음');
-    expect(noReopenText).toBeTruthy();
-    
-    // title 속성 확인
-    expect(noReopenText.getAttribute('title')).toBe('청구 기간이 끝났어요');
+    const badges = screen.getAllByText('완료').filter((el) => el.tagName === 'SPAN');
+    expect(badges).toHaveLength(1);
   });
 
-  it('되돌릴 수 있는 완료 건은 되돌리기 버튼을 보여준다', async () => {
-    const row = {
-      ...ROW,
-      status: '완료',
-      can_reopen: true
-    };
-    mockGet({ rows: [row] });
-    renderPage();
-    
-    // 로딩이 끝날 때까지 기다림
-    await waitFor(() => expect(screen.queryByText('로딩 중...')).toBeNull());
-    
-    // 되돌리기 버튼이 있어야 함
-    const reopenButton = screen.getByText('되돌리기');
-    expect(reopenButton).toBeTruthy();
-  });
 
   it('「전체」 필터는 상태 조건 없이 부른다', async () => {
     mockGet();

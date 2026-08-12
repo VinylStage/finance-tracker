@@ -20,7 +20,8 @@ test('데이터 무결성 점검 — 정상 데이터일 때 모든 항목 count
   const resp = await fetch(`${BASE}/api/data-integrity`);
   assert.strictEqual(resp.status, 200);
   const data = await resp.json();
-  assert.strictEqual(data.checks.length, 7);
+  // 7 이었다. "종료됐어야 하는데 진행중으로 남은 할부" 를 뺐다(#205).
+  assert.strictEqual(data.checks.length, 6);
   for (const check of data.checks) {
     assert.strictEqual(check.count, 0, `check ${check.name} should have count=0`);
     assert.deepStrictEqual(check.samples, [], `check ${check.name} should have empty samples`);
@@ -45,13 +46,10 @@ test('데이터 무결성 점검 — 각 이상 유형 테스트', async () => {
   // 4. 금액이 비정상적으로 작은 임포트 건
   db.prepare("INSERT INTO transactions (date, amount, payment_style, category_id) VALUES ('2023-01-03', 50, '일시불', ?)").run(catId);
 
-  // 5. 종료됐어야 하는데 진행중으로 남은 할부(2020년 시작 12개월이면 이미 한참 지남)
-  db.prepare(`
-    INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, start_billing_month, status)
-    VALUES ('2020-01-01', '테스트할부', 12000, 12, 1000, '2020-01', '진행중')
-  `).run();
+  // "종료됐어야 하는데 진행중으로 남은 할부" 점검은 없어졌다(#205). 상태를 저장하지
+  // 않고 계산하므로 어긋날 값이 없다 — 그 자리를 만들던 픽스처도 같이 뺐다.
 
-  // 6. 카테고리 없는 거래 — FK 제약이 걸려있어 정상 INSERT로는 만들 수 없다.
+  // 5. 카테고리 없는 거래 — FK 제약이 걸려있어 정상 INSERT로는 만들 수 없다.
   // 유효한 카테고리로 넣은 뒤, 그 카테고리 행을 FK 검사를 끄고 강제로 지워서
   // 고아 상태(orphan)를 실제로 재현한다.
   const orphanCatId = db.prepare("INSERT INTO categories (name, major_type) VALUES ('삭제될카테고리', '선택지출')").run().lastInsertRowid;
@@ -70,11 +68,24 @@ test('데이터 무결성 점검 — 각 이상 유형 테스트', async () => {
   assert.strictEqual(resp.status, 200);
   const data = await resp.json();
 
-  assert.strictEqual(data.checks[0].count, 1, '비ISO 날짜 형식');
-  assert.strictEqual(data.checks[1].count, 1, 'payment_style 이상값');
-  assert.strictEqual(data.checks[2].count, 1, 'major_type 이상값');
-  assert.strictEqual(data.checks[3].count, 1, '금액이 비정상적으로 작은 임포트 건');
-  assert.strictEqual(data.checks[4].count, 1, '종료됐어야 하는데 진행중으로 남은 할부');
-  assert.strictEqual(data.checks[5].count, 1, '카테고리 없는 거래');
-  assert.strictEqual(data.checks[6].count, 1, '중복 승인번호');
+  // 이름으로 찾는다. 번호로 짚으면 점검이 하나 늘거나 빠질 때마다 뒤쪽 단언이
+  // 통째로 밀린다 — #205 에서 실제로 그렇게 깨졌다.
+  const countOf = (name) => {
+    const c = data.checks.find((x) => x.name === name);
+    assert.ok(c, `점검 항목이 없다: ${name}`);
+    return c.count;
+  };
+
+  assert.strictEqual(countOf('비ISO 날짜 형식'), 1);
+  assert.strictEqual(countOf('payment_style 이상값'), 1);
+  assert.strictEqual(countOf('major_type 이상값'), 1);
+  assert.strictEqual(countOf('금액이 비정상적으로 작은 임포트 건'), 1);
+  assert.strictEqual(countOf('카테고리 없는 거래'), 1);
+  assert.strictEqual(countOf('중복 승인번호'), 1);
+
+  // 없어진 점검이 되살아나면 여기서 걸린다(#205).
+  assert.strictEqual(
+    data.checks.find((x) => x.name === '종료됐어야 하는데 진행중으로 남은 할부'),
+    undefined
+  );
 });

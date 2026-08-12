@@ -37,8 +37,8 @@ test('FND-05: 감사 PoC — 종료된 할부가 있어도 /api/installments와 
   });
   assert.strictEqual(activeResp.status, 201);
 
-  // 청구가 이미 끝났지만 status는 여전히 '진행중'으로 남아있는 할부
-  // (자동 전이가 없으므로 이 상태 자체는 정상 — 감사가 재현한 바로 그 상황)
+  // 청구가 이미 끝난 할부. 상태는 저장하지 않고 계산하므로(#205) '완료' 로
+  // 보이지만, 이 파일이 재는 것은 두 엔드포인트의 합계가 같은지다.
   const expiredResp = await fetch(`${BASE}/api/installments`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

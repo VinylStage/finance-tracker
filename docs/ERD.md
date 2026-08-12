@@ -12,7 +12,7 @@
 
 컬럼 설명의 `{NOT_NULL}` 은 NOT NULL 제약이다.
 
-<!-- schema-fingerprint: 33df9ccb014e81ea -->
+<!-- schema-fingerprint: c5c20c49e8c1e7a4 -->
 
 ```mermaid
 erDiagram
@@ -155,7 +155,6 @@ erDiagram
         INTEGER payment_method_id FK 
         TEXT purchase_date "{NOT_NULL}"
         TEXT start_billing_month "{NOT_NULL}"
-        TEXT status "{NOT_NULL}"
         INTEGER total_amount "{NOT_NULL}"
     }
 
