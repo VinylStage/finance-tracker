@@ -71,3 +71,28 @@ describe('응답에 목록 칸이 없을 때', () => {
     expect(screen.queryByRole('checkbox')).toBe(null);
   });
 });
+
+describe('선택을 풀 때', () => {
+  it('다시 누르면 풀리고 지우기 버튼이 사라진다', async () => {
+    const user = userEvent.setup();
+    setup([candidate()]);
+
+    const box = await screen.findByRole('checkbox');
+    await user.click(box);
+    expect(screen.getByRole('button', { name: /지우기/ })).toBeTruthy();
+
+    await user.click(box);
+    expect(screen.queryByRole('button', { name: /지우기/ })).toBe(null);
+  });
+});
+
+describe('지나친 목록에 가맹점이 없을 때', () => {
+  it('괄호 붙은 표기로 자리를 지킨다', async () => {
+    const user = userEvent.setup();
+    setup([], [{ transaction_id: 9, date: '2026-06-02', merchant: null, amount: 15000 }]);
+
+    await user.click(await screen.findByRole('button', { name: /중복 아니라고 한 것/ }));
+
+    expect(await screen.findByText('(가맹점 없음)')).toBeTruthy();
+  });
+});
