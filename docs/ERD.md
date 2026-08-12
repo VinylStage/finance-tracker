@@ -12,7 +12,7 @@
 
 컬럼 설명의 `{NOT_NULL}` 은 NOT NULL 제약이다.
 
-<!-- schema-fingerprint: 9f12d11e35b3d1e1 -->
+<!-- schema-fingerprint: 33df9ccb014e81ea -->
 
 ```mermaid
 erDiagram
@@ -32,6 +32,7 @@ erDiagram
         TEXT merchant_pattern 
         INTEGER min_amount 
         INTEGER monthly_cap 
+        TEXT payment_style 
         REAL rate "{NOT_NULL}"
     }
 
