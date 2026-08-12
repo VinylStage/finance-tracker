@@ -118,6 +118,26 @@ function tierFor(tiers, spend) {
   return active;
 }
 
+// 이 구간이 혜택을 주는가. **요율이 있느냐와는 다른 질문이다.**
+//
+// 카드에 따라 구간이 요율을 가르지 않고 **통합한도만** 가른다(하나 나라사랑:
+// 10만↑ 5천 / 20만↑ 2만 …). 그런 카드는 항목마다 요율이 달라 구간에 대표 요율을
+// 적을 수 없다. 적으면 화면이 «적립 20%» 처럼 일부에만 맞는 값을 말한다.
+//
+// 그래서 세 상태를 구분한다.
+//
+//   rate > 0    이 구간의 요율이 그 값이다
+//   rate = null 이 구간은 충족이고, **요율은 혜택 줄마다 다르다**
+//   rate = 0    이 구간에는 혜택이 없다
+//
+// 예전에는 `(rate ?? 0) > 0` 이라 null 이 0 과 같이 취급돼, 요율을 못 적는 카드는
+// 혜택이 통째로 죽었다.
+function tierQualifies(tier) {
+  if (!tier) return false;
+  if (tier.rate === null || tier.rate === undefined) return true;
+  return Number(tier.rate) > 0;
+}
+
 function nextTierAfter(tiers, spend) {
   for (const t of tiers) if (spend < t.min_spend) return t;
   return null;
@@ -201,7 +221,7 @@ function computeThreshold({ cardProduct, transactions, asOf, tiers, excludedIds 
     // 구간이 있으면 "요율이 붙는 구간에 들었나" 가 곧 충족이다. 구간이 없으면
     // 예전 계약 그대로 단일 임계값으로 판정한다.
     met: tierList.length
-      ? (tierFor(tierList, spend)?.rate ?? 0) > 0
+      ? tierQualifies(tierFor(tierList, spend))
       : (threshold === null ? true : spend >= threshold),
     shortfall: tierList.length
       ? Math.max(0, (nextTierAfter(tierList, spend)?.min_spend ?? spend) - spend)
@@ -214,5 +234,5 @@ function computeThreshold({ cardProduct, transactions, asOf, tiers, excludedIds 
 
 module.exports = {
   prevPeriodFor, computeThreshold, thresholdOf, INCOME_MAJOR_TYPE,
-  normalizeTiers, tierFor, nextTierAfter,
+  normalizeTiers, tierFor, nextTierAfter, tierQualifies,
 };
