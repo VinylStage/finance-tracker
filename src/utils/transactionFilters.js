@@ -12,7 +12,10 @@ const { asInt, escapeLike } = require('./validate');
 // 금액대를 다르게 해석하면 "목록에 보이던 건수" 와 "바뀐 건수" 가 어긋난다.
 // 라우트 안에 두면 공유할 수 없어 여기로 옮겼다.
 function buildTransactionFilters(query) {
-  const { from, to, category_id, merchant, memo, min_amount, max_amount, payment_method_id } = query;
+  const {
+    from, to, category_id, merchant, memo, min_amount, max_amount, payment_method_id,
+    card_product_id,
+  } = query;
   let where = ' WHERE 1=1';
   const params = [];
   if (from) { where += ' AND t.date >= ?'; params.push(from); }
@@ -35,6 +38,23 @@ function buildTransactionFilters(query) {
     const v = asInt(payment_method_id);
     if (v !== null) { where += ' AND t.payment_method_id = ?'; params.push(v); }
   }
+
+  // 카드별로 가르기(#485). 흐름 분석의 달력뷰가 이 필터를 쓴다.
+  //
+  // **`none` 을 따로 받는다.** 실 데이터의 다섯에 하나가 카드 미지정이라
+  // (580건 중 108건), 그 덩어리를 볼 방법이 없으면 카드별 합이 전체와 안 맞는
+  // 이유를 사용자가 알 수 없다. 숫자만 받으면 `card_product_id IS NULL` 을
+  // 표현할 길이 없어 «미지정» 이 화면에서 사라진다.
+  //
+  // 빈 문자열은 «전부» 다. 위 필터들과 같은 규칙이라 화면이 값을 지우면 필터가
+  // 풀린다.
+  if (card_product_id === 'none') {
+    where += ' AND t.card_product_id IS NULL';
+  } else if (card_product_id) {
+    const v = asInt(card_product_id);
+    if (v !== null) { where += ' AND t.card_product_id = ?'; params.push(v); }
+  }
+
   return { where, params };
 }
 

@@ -21,6 +21,7 @@ import {
 import CategorySpendSection from '../components/CategorySpendSection';
 import SpendHeatmap from '../components/SpendHeatmap';
 import YearHeatmap from '../components/YearHeatmap';
+import HeatmapCardPicker from '../components/HeatmapCardPicker';
 import HeatmapPeriodPicker from '../components/HeatmapPeriodPicker';
 // 히트맵 전용 월 범위다. 화면 전역 기간(usePeriod)과 다른 축이라 별칭으로 구분한다 —
 // 히트맵은 "어느 달의 달력을 그리는가" 이고 전역 기간은 "어느 구간을 집계하는가" 다.
@@ -327,6 +328,8 @@ export default function Dashboard() {
   const [period, setPeriod] = useState('월');
   const [heatPeriod, setHeatPeriod] = useState(readHeatPeriod);
   const [heatBuckets, setHeatBuckets] = useState(null);
+  // 달력뷰의 카드 필터(#485). '' 는 전체, 'none' 은 카드 미지정이다.
+  const [heatCard, setHeatCard] = useState('');
 
   const { loading, error, reload } = useLoader(async () => {
     const [d, debts] = await Promise.all([
@@ -348,13 +351,16 @@ export default function Dashboard() {
 
     setHeatBuckets(null);
     const p = new URLSearchParams({ from: range.from, to: range.to, limit: '500' });
+    // 빈 값이면 아예 안 보낸다. 서버는 빈 문자열도 «전부» 로 읽지만, 안 보내는
+    // 쪽이 다른 필터들과 같은 모양이라 요청을 읽기 쉽다.
+    if (heatCard) p.set('card_product_id', heatCard);
     api.get(`/api/transactions?${p}`).then((res) => {
       if (!cancelled) setHeatBuckets(bucketByDay(res.data || []));
     }).catch(() => {
       if (!cancelled) setHeatBuckets({});
     });
     return () => { cancelled = true; };
-  }, [heatPeriod]);
+  }, [heatPeriod, heatCard]);
 
   useEffect(() => { writeHeatPeriod(heatPeriod); }, [heatPeriod]);
 
@@ -569,6 +575,7 @@ export default function Dashboard() {
         {/* 일별 지출 강도 히트맵 */}
         <div className="mt-5">
           <h3 className="text-xs font-medium text-caption mb-2">일별 지출 강도</h3>
+          <HeatmapCardPicker value={heatCard} onChange={setHeatCard} />
           <HeatmapPeriodPicker
             mode={heatPeriod.mode}
             year={heatPeriod.year}
