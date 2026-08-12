@@ -15,19 +15,31 @@ const ConfirmContext = createContext(null);
 export function ConfirmProvider({ children }) {
   const [dialog, setDialog] = useState(null);
   const resolverRef = useRef(null);
+  // 대기 중인 요청이 confirm 이었는지 alert 이었는지. 밀려날 때 돌려줄 값이
+  // 종류마다 다른데, 그 판단을 **새 요청**이 아니라 **밀려나는 요청** 기준으로
+  // 해야 한다.
+  const pendingKindRef = useRef(null);
 
   // 다이얼로그를 닫고 대기 중인 Promise 를 해소한다.
   const settle = useCallback((value) => {
     setDialog(null);
     const resolve = resolverRef.current;
     resolverRef.current = null;
+    pendingKindRef.current = null;
     if (resolve) resolve(value);
   }, []);
 
   const request = useCallback((config) => new Promise((resolve) => {
     // 이전 다이얼로그가 열려 있으면 취소 값으로 정리한 뒤 새 것을 연다.
-    if (resolverRef.current) resolverRef.current(config.kind === 'alert' ? undefined : false);
+    //
+    // 돌려줄 값은 **밀려나는 쪽의 종류**로 정한다. 새 요청의 종류로 정하면
+    // confirm 을 기다리던 쪽이 alert 때문에 undefined 를 받는다 — 선언은
+    // Promise<boolean> 인데 boolean 이 아닌 값이 나간다.
+    if (resolverRef.current) {
+      resolverRef.current(pendingKindRef.current === 'alert' ? undefined : false);
+    }
     resolverRef.current = resolve;
+    pendingKindRef.current = config.kind;
     setDialog(config);
   }), []);
 
