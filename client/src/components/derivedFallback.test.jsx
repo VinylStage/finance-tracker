@@ -61,3 +61,13 @@ describe('못 읽었을 때', () => {
     expect(onLoaded).not.toHaveBeenCalled();
   });
 });
+
+describe('목록 칸이 없어도 화면이 선다', () => {
+  it('거래가 없다고 말한다', async () => {
+    get.mockResolvedValue({});
+
+    render(<DerivedTransactions kind="installment" id={7} />);
+
+    expect(await screen.findByText(/아직 만들어진 거래가 없어요/)).toBeTruthy();
+  });
+});
