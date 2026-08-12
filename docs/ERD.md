@@ -12,7 +12,7 @@
 
 컬럼 설명의 `{NOT_NULL}` 은 NOT NULL 제약이다.
 
-<!-- schema-fingerprint: db56f88898aec1c5 -->
+<!-- schema-fingerprint: 9f12d11e35b3d1e1 -->
 
 ```mermaid
 erDiagram
@@ -24,6 +24,7 @@ erDiagram
     card_benefits {
         TEXT benefit_type "{NOT_NULL}"
         INTEGER card_product_id FK "{NOT_NULL}"
+        INTEGER card_threshold_tier_id FK 
         INTEGER category_id FK 
         TEXT created_at 
         INTEGER id PK 
@@ -61,6 +62,22 @@ erDiagram
         INTEGER prev_month_threshold 
         TEXT product_name "{NOT_NULL}"
         INTEGER statement_close_day 
+    }
+
+    card_threshold_exclusions {
+        TEXT excluded_at 
+        INTEGER id PK 
+        TEXT reason 
+        INTEGER transaction_id FK "{NOT_NULL}"
+    }
+
+    card_threshold_tiers {
+        INTEGER card_product_id FK "{NOT_NULL}"
+        TEXT created_at 
+        INTEGER id PK 
+        TEXT label 
+        INTEGER min_spend "{NOT_NULL}"
+        REAL rate 
     }
 
     categories {
@@ -246,11 +263,14 @@ erDiagram
     }
 
     card_benefits }o--|| card_products : "card_product_id"
+    card_benefits }o--|| card_threshold_tiers : "card_threshold_tier_id"
     card_benefits }o--|| categories : "category_id"
     card_installment_policies }o--|| categories : "category_id"
     card_installment_policies }o--|| payment_methods : "payment_method_id"
     card_products }o--|| payment_methods : "payment_method_id"
+    card_threshold_tiers }o--|| card_products : "card_product_id"
     transactions }o--|| card_products : "card_product_id"
+    card_threshold_exclusions }o--|| transactions : "transaction_id"
     installments }o--|| categories : "category_id"
     merchant_category_map }o--|| categories : "category_id"
     recurring_rules }o--|| categories : "category_id"
