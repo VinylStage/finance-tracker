@@ -5,6 +5,7 @@ const db = require('../db/init');
 const { numericBody, missingFields } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { BENEFIT_TYPES } = require('../constants');
+const { validateRule } = require('../services/benefitRules');
 
 // 카드 혜택 CRUD(#274).
 //
@@ -40,6 +41,13 @@ function validate(body) {
     return '혜택 비율은 0에서 100 사이로 입력해 주세요.';
   }
 
+  // 유형별 혜택 규칙(#564). 안 보내면 요율형으로 간주하므로 통과다.
+  //
+  // 모르는 유형을 여기서 막는다. `flat_montly` 같은 오타가 저장되면 계산이
+  // 조용히 0 원이 되고, 사용자는 혜택이 왜 안 잡히는지 알 수 없다.
+  const ruleError = validateRule(body.rule);
+  if (ruleError) return ruleError;
+
   for (const [key, label] of [['monthly_cap', '월 한도'], ['min_amount', '건당 최소 결제액']]) {
     const v = body[key];
     if (v === undefined || v === null || v === '') continue;
@@ -68,6 +76,16 @@ function normalize(body) {
     // 안 적으면 조건 없음이다. NULL 로 두면 비교할 때마다 NULL 처리를 해야 한다.
     min_amount: blankToNull(body.min_amount) ?? 0,
     memo: body.memo || null,
+    // 유형별 혜택 규칙(#564). 안 보내면 NULL 이고, 읽는 쪽이 `rate` 컬럼을 보고
+    // 요율형으로 간주한다 — 이미 들어가 있는 혜택이 이 변경으로 달라지지 않는다.
+    //
+    // `PUT` 은 `{...existing, ...body}` 를 넘긴다. 규칙을 안 보낸 부분 수정에서
+    // 여기가 무조건 NULL 을 내면 **적어 둔 규칙이 조용히 지워진다.** 그래서
+    // 세 갈래로 나눈다 — 새 규칙을 보냈으면 그것, 명시적 null 이면 지우기,
+    // 아무것도 안 보냈으면 기존 값 유지.
+    rule_json: body.rule !== undefined
+      ? (body.rule === null ? null : JSON.stringify(body.rule))
+      : (body.rule_json ?? null),
   };
 }
 
@@ -98,10 +116,10 @@ router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', '
     const b = normalize(req.body);
     const info = db.prepare(`
       INSERT INTO card_benefits
-        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, rule_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
-           b.rate, b.monthly_cap, b.min_amount, b.memo);
+           b.rate, b.monthly_cap, b.min_amount, b.memo, b.rule_json);
     res.status(201).json({ id: info.lastInsertRowid, ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
@@ -123,10 +141,10 @@ router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap',
     db.prepare(`
       UPDATE card_benefits
       SET card_product_id=?, category_id=?, merchant_pattern=?, benefit_type=?,
-          rate=?, monthly_cap=?, min_amount=?, memo=?
+          rate=?, monthly_cap=?, min_amount=?, memo=?, rule_json=?
       WHERE id=?
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
-           b.rate, b.monthly_cap, b.min_amount, b.memo, req.params.id);
+           b.rate, b.monthly_cap, b.min_amount, b.memo, b.rule_json, req.params.id);
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
