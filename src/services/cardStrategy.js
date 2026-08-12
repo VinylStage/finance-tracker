@@ -5,6 +5,7 @@
 'use strict';
 
 const { BENEFIT_TYPES } = require('../constants.js');
+const { benefitForTransaction } = require('./benefitRules.js');
 
 function estimateBenefit({
   benefits,
@@ -79,22 +80,32 @@ function estimateBenefit({
   // 3. 하나만 고르기
   let best = null;
   let bestScore = -1;
+  let bestBenefit = -1;
 
-  // **요율이 먼저다.** 구체성은 요율이 같을 때만 본다 — 가맹점 지정 0.5% 가
+  // **예상 금액이 먼저다.** 구체성은 금액이 같을 때만 본다 — 가맹점 지정 0.5% 가
   // 카테고리 10% 를 이기면 사용자가 그만큼 손해를 본다.
+  //
+  // 비교 축이 요율이 아니라 금액인 이유(#564). 혜택 유형이 요율만 있는 게 아니다.
+  // 정액과 요율을 한 목록에서 고르려면 **같은 단위**여야 하는데, 정액 3,000원과
+  // 요율 0.7% 는 거래금액을 알아야 비교된다. 그래서 각 후보를 원 단위로 환산해
+  // 비교한다. 요율만 있던 시절과 결과가 달라지지 않는다 — 같은 요율 안에서는
+  // 금액 순서가 요율 순서와 같다.
   const specificity = (m) => (m === 'merchant' ? 3 : m === 'category' ? 2 : 1);
 
   for (const c of candidates) {
     if (c.skipped) continue;
 
-    const rate = Number(c.rate) || 0;
+    // 유형별 해석기가 원 단위로 환산한다(#564). 요율형이면 예전과 같은
+    // `amount × rate / 100` 이고, 정액구간형이면 이 결제 몫이 없어 0 이다.
+    const { benefit: est } = benefitForTransaction(c, { amount, categoryId, merchant });
     const spec = specificity(c.matched);
 
     if (best === null
-        || rate > Number(best.rate)
-        || (rate === Number(best.rate) && spec > bestScore)) {
+        || est > bestBenefit
+        || (est === bestBenefit && spec > bestScore)) {
       best = c;
       bestScore = spec;
+      bestBenefit = est;
     }
   }
 
@@ -104,7 +115,9 @@ function estimateBenefit({
   let skipped = [];
 
   if (best) {
-    const calculatedBenefit = Math.floor(amount * best.rate / 100);
+    // 고를 때 이미 계산한 값을 다시 쓴다. 여기서 한 번 더 계산하면 두 곳이
+    // 갈라질 수 있다 — 고른 근거와 보여주는 값이 달라진다.
+    const calculatedBenefit = bestBenefit;
     const remainingCap = Math.max(0, (best.monthly_cap || Infinity) - benefitUsedThisMonth);
     benefit = Math.min(calculatedBenefit, remainingCap);
 
