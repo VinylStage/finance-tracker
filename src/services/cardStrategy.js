@@ -11,6 +11,7 @@ function estimateBenefit({
   amount,
   categoryId,
   merchant,
+  paymentStyle,
   thresholdMet,
   benefitUsedThisMonth,
 }) {
@@ -21,6 +22,18 @@ function estimateBenefit({
     // 같이 적었다면 "그 가맹점에서 그 카테고리로 쓸 때" 라는 뜻이다. 하나만
     // 맞아도 준다고 보면 실제보다 많이 추정하게 되고, 추정이 사용자에게
     // 손해를 끼치는 방향으로 틀린다.
+    // 카드사 상당수가 할부를 혜택 대상에서 뺀다(#563). 혜택이 결제방식을
+    // 지정했으면 그것과 다른 결제는 아예 후보가 아니다 — 요율 비교에도 넣지
+    // 않는다. 넣으면 "할부인데 일시불 혜택이 제일 크다" 가 골라진다.
+    //
+    // 지정이 없으면(NULL) 예전과 같이 결제방식을 가리지 않는다. 이미 들어가
+    // 있는 혜택이 이 변경으로 달라지면 안 된다.
+    const styleRule = b.payment_style || null;
+    if (styleRule && styleRule !== paymentStyle) {
+      candidates.push({ ...b, skipped: true, reason: 'payment-style-mismatch' });
+      continue;
+    }
+
     const hasMerchantRule = Boolean(b.merchant_pattern);
     const hasCategoryRule = b.category_id !== null && b.category_id !== undefined;
     const merchantOk = !hasMerchantRule

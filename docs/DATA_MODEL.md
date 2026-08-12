@@ -21,7 +21,7 @@
 | audit_log | 모든 쓰기의 전후 값 | id, ts, actor, action_id, action_label, table_name, row_id, op, before_json, after_json, undone_at |
 | _audit_context | 트리거가 읽을 현재 요청 컨텍스트(단일 행) | id, actor, action_id, action_label |
 | card_products | 카드 상품. payment_methods 아래에 붙는다 | id, payment_method_id, issuer, product_name, card_type, annual_fee, prev_month_threshold, billing_cycle_day, statement_close_day, memo |
-| card_benefits | 카드별 할인·적립 조건 | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo |
+| card_benefits | 카드별 할인·적립 조건 (#563: `payment_style` 이 있으면 그 결제방식에만 적용, 비우면 무관) | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style |
 | card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
 | installment_duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | transaction_id, dismissed_at |
 | merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |

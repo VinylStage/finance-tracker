@@ -132,6 +132,9 @@ function compareCards({ transactions, cards } = {}) {
         amount,
         categoryId: tx.category_id,
         merchant: tx.merchant,
+        // 카드사 상당수가 할부를 혜택 대상에서 뺀다(#563). 혜택에 제약이
+        // 없으면 예전과 같이 결제방식을 가리지 않는다.
+        paymentStyle: tx.payment_style,
         thresholdMet: card.thresholdMet !== false,
         benefitUsedThisMonth: used.get(card.id) || 0,
       });

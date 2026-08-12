@@ -29,7 +29,7 @@ const { estimateBenefit } = require('../services/cardStrategy');
 // 안 쓰는 값까지 노출된다.
 const TX_IN_RANGE = `
   SELECT t.id, t.date, t.amount, t.category_id, t.merchant, t.origin,
-         t.card_product_id, t.payment_method_id,
+         t.card_product_id, t.payment_method_id, t.payment_style,
          pm.type AS payment_method_type, c.major_type
   FROM transactions t
   LEFT JOIN payment_methods pm ON pm.id = t.payment_method_id
@@ -92,7 +92,7 @@ function loadCards() {
 
   const benefits = db.prepare(`
     SELECT id, card_product_id, category_id, merchant_pattern,
-           benefit_type, rate, monthly_cap, min_amount
+           benefit_type, rate, monthly_cap, min_amount, payment_style
     FROM card_benefits
   `).all();
 
@@ -172,7 +172,7 @@ router.get('/thresholds', (req, res) => {
   }
 });
 
-// GET /api/card-strategy/estimate?amount=&category_id=&merchant=&asOf=
+// GET /api/card-strategy/estimate?amount=&category_id=&merchant=&payment_style=&asOf=
 //
 // 지금 결제하면 어느 카드가 나은가. 거래 입력 화면이 부른다.
 router.get('/estimate', (req, res) => {
@@ -186,6 +186,10 @@ router.get('/estimate', (req, res) => {
     const categoryId = req.query.category_id === undefined || req.query.category_id === ''
       ? null : Number(req.query.category_id);
     const merchant = typeof req.query.merchant === 'string' ? req.query.merchant : null;
+    // 결제방식을 안 주면 결제방식 제약이 붙은 혜택은 후보에서 빠진다(#563).
+    // 입력 화면이 아직 안 보내는 동안 할부 전용 혜택이 일시불에 붙는 것보다,
+    // 안 붙는 쪽이 안전하다.
+    const paymentStyle = typeof req.query.payment_style === 'string' ? req.query.payment_style : null;
 
     const cards = withThresholds(loadCards(), asOf);
 
@@ -195,6 +199,7 @@ router.get('/estimate', (req, res) => {
         amount,
         categoryId,
         merchant,
+        paymentStyle,
         thresholdMet: card.thresholdMet,
         // 이번 달 이미 받은 혜택은 아직 기록하지 않는다. 한도 소진을 알려면
         // 거래마다 어느 혜택이 걸렸는지를 저장해야 하는데, 그건 추정값을
