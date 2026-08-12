@@ -121,3 +121,23 @@ describe('되돌리기 안내', () => {
     expect(screen.getByText('되돌리려면 백업에서 복원해야 해요. 실행취소는 아직 없어요.')).toBeTruthy();
   });
 });
+
+describe('실행 결과 문구', () => {
+  it('지운 것이 없으면 만든 건수만 알린다', async () => {
+    const user = await openPreview();
+    post.mockResolvedValue({ created: 6, deleted: 0 });
+
+    await user.click(screen.getByText('실행'));
+
+    expect(await screen.findByText('청구 내역 6건을 만들었어요.')).toBeTruthy();
+  });
+
+  it('지운 것이 있으면 그것도 함께 알린다', async () => {
+    const user = await openPreview();
+    post.mockResolvedValue({ created: 6, deleted: 3 });
+
+    await user.click(screen.getByText('실행'));
+
+    expect(await screen.findByText('청구 내역 6건을 만들었어요. (이전 3건은 지웠어요)')).toBeTruthy();
+  });
+});
