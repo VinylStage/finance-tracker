@@ -1773,7 +1773,7 @@
 - **비고**: 행을 지우는 것이라 "되돌렸다" 가 별도 상태로 남지 않는다 — 그 이력은
   감사 로그가 들고 있다. 없는 것을 지워도 200 이고 `restored` 가 0 이다.
 
-### GET /api/card-strategy/estimate
+### GET /api/card-strategy/estimate · `payment_style`
 지금 결제하면 어느 카드가 나은가. 거래 입력 화면이 부른다.
 
 - **요청 파라미터**: `amount` (required, 숫자), `category_id` (optional), `merchant` (optional), `asOf` (optional)

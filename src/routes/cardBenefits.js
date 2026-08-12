@@ -4,7 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { numericBody, missingFields } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
-const { BENEFIT_TYPES } = require('../constants');
+const { BENEFIT_TYPES, PAYMENT_STYLES } = require('../constants');
 
 // 카드 혜택 CRUD(#274).
 //
@@ -54,6 +54,24 @@ function validate(body) {
     const cat = db.prepare('SELECT id FROM categories WHERE id=?').get(body.category_id);
     if (!cat) return '선택한 카테고리를 찾을 수 없습니다.';
   }
+  // 실적 구간 연결(#563). 안 적으면 구간을 가리지 않는다.
+  if (body.card_threshold_tier_id !== undefined && body.card_threshold_tier_id !== null
+      && body.card_threshold_tier_id !== '') {
+    const tier = db.prepare('SELECT card_product_id FROM card_threshold_tiers WHERE id=?')
+      .get(body.card_threshold_tier_id);
+    if (!tier) return '선택한 실적 구간을 찾을 수 없습니다.';
+    // 남의 카드 구간에 혜택을 걸면 그 혜택은 영영 안 걸린다 — 조용히 죽는다.
+    if (Number(tier.card_product_id) !== Number(body.card_product_id)) {
+      return '실적 구간이 이 카드의 것이 아닙니다.';
+    }
+  }
+
+  // 결제방식 제약(#563). 안 적으면 결제방식을 가리지 않는다 — 그게 기본이다.
+  if (body.payment_style !== undefined && body.payment_style !== null && body.payment_style !== '') {
+    if (!PAYMENT_STYLES.includes(body.payment_style)) {
+      return `결제방식은 ${PAYMENT_STYLES.join(' 또는 ')} 중에서 골라 주세요.`;
+    }
+  }
   return null;
 }
 
@@ -68,6 +86,10 @@ function normalize(body) {
     // 안 적으면 조건 없음이다. NULL 로 두면 비교할 때마다 NULL 처리를 해야 한다.
     min_amount: blankToNull(body.min_amount) ?? 0,
     memo: body.memo || null,
+    // 비우면 결제방식 무관이다. 넣은 혜택에만 제약이 걸린다(#563).
+    payment_style: body.payment_style || null,
+    // 비우면 구간 무관이다(#563).
+    card_threshold_tier_id: blankToNull(body.card_threshold_tier_id),
   };
 }
 
@@ -90,7 +112,7 @@ router.get('/', (req, res) => {
   }
 });
 
-router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount']), (req, res) => {
+router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'card_threshold_tier_id']), (req, res) => {
   try {
     const err = validate(req.body);
     if (err) return res.status(400).json({ error: err });
@@ -98,17 +120,18 @@ router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', '
     const b = normalize(req.body);
     const info = db.prepare(`
       INSERT INTO card_benefits
-        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style, card_threshold_tier_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
-           b.rate, b.monthly_cap, b.min_amount, b.memo);
+           b.rate, b.monthly_cap, b.min_amount, b.memo, b.payment_style,
+           b.card_threshold_tier_id);
     res.status(201).json({ id: info.lastInsertRowid, ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
   }
 });
 
-router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount']), (req, res) => {
+router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'card_threshold_tier_id']), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM card_benefits WHERE id=?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: '찾는 혜택이 없습니다. 이미 삭제됐을 수 있어요.' });
@@ -123,10 +146,12 @@ router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap',
     db.prepare(`
       UPDATE card_benefits
       SET card_product_id=?, category_id=?, merchant_pattern=?, benefit_type=?,
-          rate=?, monthly_cap=?, min_amount=?, memo=?
+          rate=?, monthly_cap=?, min_amount=?, memo=?, payment_style=?,
+          card_threshold_tier_id=?
       WHERE id=?
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
-           b.rate, b.monthly_cap, b.min_amount, b.memo, req.params.id);
+           b.rate, b.monthly_cap, b.min_amount, b.memo, b.payment_style,
+           b.card_threshold_tier_id, req.params.id);
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');

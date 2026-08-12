@@ -68,13 +68,13 @@ CSS 에서 사라진다.
 
 `AuditLog` · `CardStrategy` · `Comparison` · `Dashboard` · `Debts` · `Guide` · `Installments` · `Revolving` · `Savings` · `Settings` · `Simulator` · `Transactions`
 
-### 프론트엔드 컴포넌트 (44개)
+### 프론트엔드 컴포넌트 (45개)
 
-`AnchorNav` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardInventorySection` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CardTierSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `RetentionNotice` · `SavingsGoalBar` · `SpendHeatmap` · `ThresholdExclusionSection` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
+`AnchorNav` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardInventorySection` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CardTierSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DataIntegritySection` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `RetentionNotice` · `SavingsGoalBar` · `SpendHeatmap` · `ThresholdExclusionSection` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
-### 마이그레이션 (27개)
+### 마이그레이션 (28개)
 
-최신: `027-drop-installment-status`
+최신: `028-benefit-payment-style`
 
 
 <!-- inventory:end -->
