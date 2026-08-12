@@ -7,6 +7,16 @@ import { useConfirm } from './ConfirmProvider';
 // 서버 `src/constants.js` 의 BENEFIT_TYPES 와 같아야 한다. 어긋나면 저장할 때만 400 이 난다.
 const BENEFIT_TYPES = ['할인', '적립'];
 
+// 혜택에 걸 수 있는 결제방식(#563). 서버 `PAYMENT_STYLES` 의 **부분집합**이다.
+//
+// 서버 목록에는 `해당없음` 도 있지만 여기서는 뺀다. 그 값은 카드를 안 쓴 거래에
+// 붙는 것이라(실 데이터 50건 전부 비카드), 혜택을 거기 걸면 **어떤 카드 결제에도
+// 안 걸리는 혜택**이 된다. 고를 수 있게 두면 사용자가 그걸 만들고 왜 혜택이
+// 안 잡히는지 못 찾는다.
+//
+// `리볼빙` 은 실 데이터가 아직 0건이지만 앱이 다루는 결제방식이라 남긴다.
+const BENEFIT_PAYMENT_STYLES = ['일시불', '할부', '리볼빙'];
+
 // 이 혜택이 무엇에 걸리는지. 카테고리와 가맹점 둘 다 선택이라 넷으로 갈린다.
 // 목록 한 줄의 머리말. **유형마다 말이 다르다**(#564).
 //
@@ -60,6 +70,8 @@ const EMPTY_FORM = {
   kind: 'rate',
   // 정액구간형일 때만 쓴다. 화면에서 행을 늘리고 줄인다.
   tiers: [],
+  // 결제방식 제약(#563). 비우면 결제방식을 가리지 않는다 — 그게 기본이다.
+  payment_style: '',
   benefit_type: '할인', rate: '', category_id: '', merchant_pattern: '',
   monthly_cap: '', min_amount: '', memo: '',
 };
@@ -135,6 +147,14 @@ export default function CardBenefitSection({ categories = [] }) {
       if (form[k] === '') continue;
       body[k] = k === 'merchant_pattern' || k === 'memo' ? form[k] : Number(form[k]);
     }
+
+    // 결제방식 제약(#563). **빈 값도 보낸다.**
+    //
+    // 위 반복문처럼 빈 값을 건너뛰면 «가리지 않음» 으로 되돌리는 수정이 서버에
+    // 닿지 않는다. `PUT` 이 `{...existing, ...body}` 라서 안 보낸 필드는 옛 값이
+    // 남고, 사용자는 제약을 지웠는데 그대로인 화면을 본다.
+    body.payment_style = form.payment_style || null;
+
     return body;
   };
 
@@ -225,6 +245,7 @@ export default function CardBenefitSection({ categories = [] }) {
       monthly_cap: String(b.monthly_cap ?? ''),
       min_amount: String(b.min_amount ?? ''),
       memo: b.memo || '',
+      payment_style: b.payment_style || '',
     });
     setEditingId(b.id);
     setShowForm(true);
@@ -404,6 +425,27 @@ export default function CardBenefitSection({ categories = [] }) {
                 onChange={(e) => setField('merchant_pattern', e.target.value)}
                 className={inp}
               />
+            </div>
+
+            <div>
+              <label className="block text-xs text-caption mb-1" htmlFor="benefit-payment-style">
+                이 결제방식일 때만 (선택)
+              </label>
+              <select
+                id="benefit-payment-style"
+                value={form.payment_style}
+                onChange={(e) => setField('payment_style', e.target.value)}
+                className={inp}
+              >
+                <option value="">결제방식을 가리지 않음</option>
+                {BENEFIT_PAYMENT_STYLES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-caption">
+                카드사 상당수가 할부를 혜택에서 뺍니다. 그런 혜택이면 «일시불» 을 골라
+                두세요. 비워 두면 결제방식을 가리지 않습니다.
+              </p>
             </div>
 
             <div>
