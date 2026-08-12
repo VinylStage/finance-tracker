@@ -96,3 +96,23 @@ describe('지나친 목록에 가맹점이 없을 때', () => {
     expect(await screen.findByText('(가맹점 없음)')).toBeTruthy();
   });
 });
+
+describe('한쪽 응답에만 목록 칸이 없을 때', () => {
+  it('후보 칸이 없어도 지나친 목록은 그대로 나온다', async () => {
+    get.mockImplementation((path) => {
+      if (path === '/api/installments/duplicates/dismissed') {
+        return Promise.resolve({
+          data: [{ transaction_id: 9, date: '2026-06-02', merchant: '예시가맹점 을', amount: 15000 }],
+        });
+      }
+      // 후보 쪽은 목록 칸이 아예 없다
+      return Promise.resolve({});
+    });
+
+    render(<ConfirmProvider><DuplicateCandidates /></ConfirmProvider>);
+
+    // 폴백이 없으면 여기서 화면이 통째로 안 그려진다
+    expect(await screen.findByRole('button', { name: /중복 아니라고 한 것/ })).toBeTruthy();
+    expect(screen.getByText('중복 확인')).toBeTruthy();
+  });
+});
