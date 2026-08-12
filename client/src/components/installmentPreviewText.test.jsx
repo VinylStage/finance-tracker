@@ -68,6 +68,12 @@ describe('적용 정책 표기', () => {
     await openPreview({ policy_applied: { policy_type: '유이자', annual_rate: 12.9 } });
     expect(screen.getByText('유이자 연 12.9%')).toBeTruthy();
   });
+
+  it('무이자면 연이율을 적지 않는다', async () => {
+    await openPreview({ policy_applied: { policy_type: '무이자', annual_rate: 0 } });
+    expect(screen.getByText('무이자')).toBeTruthy();
+    expect(screen.queryByText(/연 0%/)).toBe(null);
+  });
 });
 
 const months = (n) =>
