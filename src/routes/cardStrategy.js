@@ -8,6 +8,7 @@ const { localYMD } = require('../utils/date');
 const { computeThreshold, INCOME_MAJOR_TYPE } = require('../services/cardThreshold');
 const { compareCards, NON_ELIGIBLE_ORIGINS } = require('../services/cardComparison');
 const { estimateBenefit } = require('../services/cardStrategy');
+const { benefitForMonth } = require('../services/benefitRules');
 
 // 카드 전략 조회(#276).
 //
@@ -90,10 +91,13 @@ function loadCards() {
     ORDER BY issuer, product_name
   `).all();
 
+  // 유형별 규칙(#564)을 함께 읽는다. 이 칸이 빠지면 ruleOf 가 규칙을 못 보고
+  // 요율형으로 되돌아가는데, 정액구간형은 rate 가 0 이라 조용히 «혜택 0원» 이 된다 —
+  // 오류가 아니라 그럴듯한 값이 나와서 안 드러난다(#579).
   const benefits = db.prepare(`
     SELECT id, card_product_id, category_id, merchant_pattern,
            benefit_type, rate, monthly_cap, min_amount, payment_style,
-           card_threshold_tier_id
+           card_threshold_tier_id, rule_json
     FROM card_benefits
   `).all();
 
@@ -486,6 +490,16 @@ router.get('/detail', (req, res) => {
         };
       });
 
+      // 값이 0 인 줄은 목록에 넣지 않는다. 넣으면 «0원짜리 혜택» 이 화면에 뜬다.
+      const monthlyLines = th.met === false ? [] : (card.benefits || [])
+        .map((b) => {
+          const r = benefitForMonth(b, { prevMonthSpend: th.spend ?? 0 });
+          return r.benefit > 0
+            ? { benefitId: b.id, benefitType: b.benefit_type, benefit: r.benefit, explain: r.explain }
+            : null;
+        })
+        .filter(Boolean);
+
       return {
         cardProductId: card.id,
         issuer: card.issuer,
@@ -506,6 +520,17 @@ router.get('/detail', (req, res) => {
         benefits,
         // 등록은 됐는데 이번 달에는 하나도 안 걸리는 카드가 있다. 그 사실을
         // 화면이 바로 말할 수 있게 세어 준다.
+        // 이번 달에 월 단위로만 붙는 몫(#579).
+        //
+        // 정액구간형은 어느 거래에 붙일지 정할 근거가 없어 benefitForTransaction 이
+        // 0 을 낸다 — 의도한 동작이다(#564). 문제는 **거두는 쪽이 없어서 월 합계에도
+        // 안 잡혔다**는 것이었다. 넣은 사람 눈에는 저장은 됐는데 아무 데도 안 쓰이는
+        // 상태였다.
+        //
+        // 거래별 합계와 **더하지 않고 따로** 준다 — 두 곳에서 세면 과대추정이 된다.
+        // 실적 미달이면 0 이다(요율형이 실적 미달에서 죽는 것과 같은 규칙).
+        monthlyLines,
+        monthlyTotal: monthlyLines.reduce((sum, m) => sum + m.benefit, 0),
         activeBenefitCount: benefits.filter((b) => b.activeNow).length,
       };
     });
