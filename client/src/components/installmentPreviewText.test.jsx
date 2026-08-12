@@ -69,3 +69,55 @@ describe('적용 정책 표기', () => {
     expect(screen.getByText('유이자 연 12.9%')).toBeTruthy();
   });
 });
+
+const months = (n) =>
+  Array.from({ length: n }, (_, i) => ({
+    billing_month: `2026-${String(i + 1).padStart(2, '0')}`,
+    before: 100000,
+    after: 90000,
+  }));
+
+describe('지난 청구월 표기', () => {
+  it('다섯 개까지는 전부 줄로 보여준다', async () => {
+    await openPreview({ past_affected: months(5) });
+    expect(screen.getByText('이미 지난 청구월 5개가 바뀝니다')).toBeTruthy();
+    expect(screen.getByText(/2026-05/)).toBeTruthy();
+    expect(screen.queryByText(/외 .*개/)).toBe(null);
+  });
+
+  it('여섯 개부터는 나머지를 개수로 적는다', async () => {
+    await openPreview({ past_affected: months(8) });
+    expect(screen.getByText('이미 지난 청구월 8개가 바뀝니다')).toBeTruthy();
+    // 여섯째부터는 줄로 안 나온다
+    expect(screen.queryByText(/2026-06/)).toBe(null);
+    expect(screen.getByText('외 3개')).toBeTruthy();
+  });
+
+  it('칸이 아예 없어도 상자를 만들지 않는다', async () => {
+    const p = plan();
+    delete p.past_affected;
+    post.mockResolvedValue({ data: p });
+    const user = userEvent.setup();
+    render(
+      <ConfirmProvider>
+        <InstallmentRegenerate installment={INSTALLMENT} hasDerived={false} />
+      </ConfirmProvider>
+    );
+    await user.click(screen.getByText('청구 내역 만들기'));
+    await screen.findByText('이렇게 바뀝니다');
+
+    expect(screen.queryByText(/이미 지난 청구월/)).toBe(null);
+  });
+});
+
+describe('되돌리기 안내', () => {
+  it('실행취소가 되면 그렇다고 적는다', async () => {
+    await openPreview({ reversible: 'undo' });
+    expect(screen.getByText('실행취소로 한 번에 되돌릴 수 있어요.')).toBeTruthy();
+  });
+
+  it('모르는 값이면 백업 안내로 되돌아간다', async () => {
+    await openPreview({ reversible: 'something-new' });
+    expect(screen.getByText('되돌리려면 백업에서 복원해야 해요. 실행취소는 아직 없어요.')).toBeTruthy();
+  });
+});
