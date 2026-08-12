@@ -134,5 +134,19 @@ app.listen(PORT, HOST, () => {
 // 종료돼 NODE_V8_COVERAGE가 커버리지를 디스크에 못 쓴다(src/routes/** 커버리지가
 // 항상 0%로 보이던 원인). process.exit()을 명시적으로 호출해 정상 종료
 // 경로를 타게 한다 — 프로덕션에서도 즉시 종료라는 동작 자체는 동일하다.
-process.on('SIGTERM', () => process.exit(0));
-process.on('SIGINT', () => process.exit(0));
+//
+// 다만 `process.exit(0)` 은 **왜 죽었는지를 지운다.** 부모가 보는 것은
+// `code=0 signal=null` 뿐이라, 밖에서 SIGTERM 을 맞은 것과 스스로 정상 종료한
+// 것이 구분되지 않는다(#379). 실제로 CI 실패 하나를 «서버가 자발적으로 나갔다»
+// 로 읽을 뻔했다.
+//
+// 그래서 나가기 직전에 원인을 stderr 로 남긴다. 테스트 하네스가 자식의 stdout·
+// stderr 를 모아 실패 메시지에 싣고 있으므로, 이 한 줄이 그대로 조사 근거가 된다.
+// 종료 경로 자체는 안 바꾼다 — 바꾸면 위 커버리지 문제가 되돌아온다.
+function exitOnSignal(signal) {
+  console.error(`[server] ${signal} 을 받아 종료합니다. 이 프로세스는 스스로 끝난 것이 아닙니다.`);
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => exitOnSignal('SIGTERM'));
+process.on('SIGINT', () => exitOnSignal('SIGINT'));

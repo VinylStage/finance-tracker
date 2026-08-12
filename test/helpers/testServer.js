@@ -45,6 +45,9 @@ async function startTestServer({ port, env = {} }) {
 
   let output = '';
   let exited = null; // { code, signal }
+  // 이 하네스가 kill 을 보냈는지. 기동 대기 중에는 아직 아무도 안 보냈으므로,
+  // 그 사이 죽었다면 **밖에서 온 것**이다(#379). 그 사실을 실패 메시지에 싣는다.
+  let killSent = false;
 
   const proc = spawn('node', ['src/server.js'], {
     cwd: path.join(__dirname, '..', '..'),
@@ -67,8 +70,15 @@ async function startTestServer({ port, env = {} }) {
     // 상한까지 기다릴 뿐이다.
     if (exited) {
       cleanup(dbPath);
+      // `code=0 signal=null` 만 보고 «스스로 정상 종료» 로 읽으면 안 된다.
+      // 서버가 SIGTERM 핸들러에서 process.exit(0) 을 부르기 때문에 시그널이
+      // 지워진다(#379). 서버 출력의 «SIGTERM 을 받아 종료합니다» 한 줄이 그것을
+      // 가른다. 아래 문장은 그 줄을 찾아 읽으라고 알려 주는 안내다.
       throw new Error(
         `서버가 준비 전에 종료됨 (code=${exited.code} signal=${exited.signal}). 포트 ${port}.\n` +
+        `이 하네스는 kill 을 보낸 적이 ${killSent ? '있다' : '없다'} — ` +
+        `${killSent ? '' : '죽었다면 밖에서 온 것이다. '}` +
+        `서버가 시그널을 받았는지는 아래 출력에서 «받아 종료합니다» 줄로 확인한다.\n` +
         `서버 출력:\n${output || '(출력 없음)'}`
       );
     }
@@ -81,7 +91,11 @@ async function startTestServer({ port, env = {} }) {
           dbPath,
           base,
           output: () => output,
-          stop: () => { try { proc.kill(); } catch { /* 이미 죽었을 수 있다 */ } cleanup(dbPath); },
+          stop: () => {
+            killSent = true;
+            try { proc.kill(); } catch { /* 이미 죽었을 수 있다 */ }
+            cleanup(dbPath);
+          },
         };
       }
     } catch { /* 아직 기동 전 */ }
