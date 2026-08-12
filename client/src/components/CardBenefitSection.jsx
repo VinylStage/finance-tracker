@@ -8,6 +8,34 @@ import { useConfirm } from './ConfirmProvider';
 const BENEFIT_TYPES = ['할인', '적립'];
 
 // 이 혜택이 무엇에 걸리는지. 카테고리와 가맹점 둘 다 선택이라 넷으로 갈린다.
+// 목록 한 줄의 머리말. **유형마다 말이 다르다**(#564).
+//
+// 요율형만 있던 시절에는 `{rate}% {benefit_type}` 하나로 충분했다. 정액구간형은
+// 요율이 없으므로 그대로 두면 «0% 적립» 으로 보인다 — 사용자는 혜택이 없는
+// 것으로 읽는다.
+function headline(b) {
+  let rule = null;
+  try {
+    rule = b.rule_json ? JSON.parse(b.rule_json) : null;
+  } catch { /* 깨진 규칙은 요율형으로 본다 */ }
+
+  if (rule && rule.kind === 'flat_monthly') {
+    const tiers = Array.isArray(rule.tiers) ? rule.tiers : [];
+    if (tiers.length === 0) return `매달 정액 ${b.benefit_type}`;
+    const sorted = [...tiers].sort((a, c) => Number(a.min_spend) - Number(c.min_spend));
+    const lo = sorted[0];
+    const hi = sorted[sorted.length - 1];
+    // 금액 표기는 `lib/format.js` 하나로 모은다 — 로케일을 여기서 직접 쓰면
+    // 포맷이 갈라진다(테스트가 그 목록을 고정하고 있다).
+    //
+    // 구간이 하나면 범위로 적지 않는다. "3,000원~3,000원" 은 읽기 나쁘다.
+    return sorted.length === 1
+      ? `매달 ${formatWon(lo.amount)} ${b.benefit_type}`
+      : `매달 ${formatWon(lo.amount)}~${formatWon(hi.amount)} ${b.benefit_type}`;
+  }
+  return `${b.rate}% ${b.benefit_type}`;
+}
+
 function targetLabel(b) {
   if (b.category_name && b.merchant_pattern) return `${b.category_name} · 가맹점 '${b.merchant_pattern}'`;
   if (b.category_name) return b.category_name;
@@ -27,6 +55,11 @@ function conditionLabel(b) {
 const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
 
 const EMPTY_FORM = {
+  // 혜택 유형(#564). 카드마다 구조가 달라도 **공유 스키마 하나**로 다룬다 —
+  // 카드별 특수 코드를 두지 않고, 유형이 늘면 여기 선택지가 하나 는다.
+  kind: 'rate',
+  // 정액구간형일 때만 쓴다. 화면에서 행을 늘리고 줄인다.
+  tiers: [],
   benefit_type: '할인', rate: '', category_id: '', merchant_pattern: '',
   monthly_cap: '', min_amount: '', memo: '',
 };
@@ -50,6 +83,20 @@ export default function CardBenefitSection({ categories = [] }) {
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  // 구간 행 편집(#564). #526 의 요율 구간 편집과 같은 모양이라 사용자가 두 번
+  // 배우지 않아도 된다.
+  const setTier = (i, key, value) =>
+    setForm((prev) => ({
+      ...prev,
+      tiers: prev.tiers.map((t, idx) => (idx === i ? { ...t, [key]: value } : t)),
+    }));
+
+  const addTier = () =>
+    setForm((prev) => ({ ...prev, tiers: [...prev.tiers, { min_spend: '', amount: '', label: '' }] }));
+
+  const removeTier = (i) =>
+    setForm((prev) => ({ ...prev, tiers: prev.tiers.filter((_, idx) => idx !== i) }));
+
   // 빈 칸과 0 은 다르다.
   //
   //   rate 0      "이 대상에는 혜택 없음" 을 명시한 값이다. 안 적은 것과 다르다
@@ -61,8 +108,29 @@ export default function CardBenefitSection({ categories = [] }) {
     const body = {
       card_product_id: Number(selectedCardId),
       benefit_type: form.benefit_type,
-      rate: Number(form.rate),
+      // 요율형이 아니어도 `rate` 는 보낸다. 서버 컬럼이 NOT NULL 이고, 규칙을
+      // 지웠을 때 요율형으로 되돌아갈 자리이기도 하다.
+      rate: form.kind === 'rate' ? Number(form.rate) : 0,
     };
+
+    // 유형별 규칙(#564). 요율형은 규칙 없이 `rate` 컬럼만으로 동작하므로 안 보낸다 —
+    // 이미 들어가 있는 혜택과 같은 모양을 유지한다.
+    if (form.kind === 'flat_monthly') {
+      body.rule = {
+        kind: 'flat_monthly',
+        tiers: form.tiers
+          .filter((t) => String(t.min_spend).trim() !== '')
+          .map((t) => ({
+            min_spend: Number(t.min_spend),
+            amount: Number(t.amount || 0),
+            label: (t.label || '').trim() || null,
+          })),
+      };
+    } else {
+      // 요율형으로 되돌릴 때 저장된 규칙을 지운다. 안 보내면 기존 규칙이 남아
+      // 화면은 요율인데 계산은 정액으로 도는 상태가 된다.
+      body.rule = null;
+    }
     for (const k of ['category_id', 'merchant_pattern', 'monthly_cap', 'min_amount', 'memo']) {
       if (form[k] === '') continue;
       body[k] = k === 'merchant_pattern' || k === 'memo' ? form[k] : Number(form[k]);
@@ -133,7 +201,23 @@ export default function CardBenefitSection({ categories = [] }) {
   };
 
   const startEdit = (b) => {
+    // 저장된 규칙을 폼으로 되돌린다(#564). 깨진 JSON 은 없는 것으로 보고 요율형으로
+    // 연다 — 여기서 던지면 수정 버튼이 통째로 죽는다.
+    let rule = null;
+    try {
+      rule = b.rule_json ? JSON.parse(b.rule_json) : null;
+    } catch { /* 무시하고 요율형으로 연다 */ }
+    const kind = rule && typeof rule.kind === 'string' ? rule.kind : 'rate';
+
     setForm({
+      kind,
+      tiers: kind === 'flat_monthly' && Array.isArray(rule.tiers)
+        ? rule.tiers.map((t) => ({
+            min_spend: String(t.min_spend ?? ''),
+            amount: String(t.amount ?? ''),
+            label: t.label || '',
+          }))
+        : [],
       benefit_type: b.benefit_type,
       rate: String(b.rate ?? ''),
       category_id: String(b.category_id ?? ''),
@@ -147,9 +231,28 @@ export default function CardBenefitSection({ categories = [] }) {
   };
 
   const save = async () => {
-    if (form.rate === '') {
+    if (form.kind === 'rate' && form.rate === '') {
       await alert('혜택 비율을 입력해 주세요. 0도 넣을 수 있어요.');
       return;
+    }
+
+    if (form.kind === 'flat_monthly') {
+      const rows = form.tiers.filter((t) => String(t.min_spend).trim() !== '');
+      if (rows.length === 0) {
+        await alert('구간을 하나 이상 넣어 주세요.');
+        return;
+      }
+      // 하한이 겹치면 어느 정액을 쓸지 정할 수 없다. 서버도 막지만, 눌러 보고
+      // 거부당하는 것보다 그 자리에서 알려 주는 편이 낫다(#526 과 같은 기준).
+      const seen = new Set();
+      for (const t of rows) {
+        const v = String(t.min_spend).trim();
+        if (seen.has(v)) {
+          await alert(`구간 하한 ${v}이 두 번 있습니다. 하한은 구간마다 달라야 합니다.`);
+          return;
+        }
+        seen.add(v);
+      }
     }
 
     setSaving(true);
@@ -252,15 +355,30 @@ export default function CardBenefitSection({ categories = [] }) {
             </div>
 
             <div>
-              <label className="block text-xs text-caption mb-1" htmlFor="benefit-rate">비율 (%)</label>
-              <input
-                type="number"
-                id="benefit-rate"
-                value={form.rate}
-                onChange={(e) => setField('rate', e.target.value)}
+              <label className="block text-xs text-caption mb-1" htmlFor="benefit-kind">계산 방식</label>
+              <select
+                id="benefit-kind"
+                value={form.kind}
+                onChange={(e) => setField('kind', e.target.value)}
                 className={inp}
-              />
+              >
+                <option value="rate">결제액의 몇 %</option>
+                <option value="flat_monthly">전월 실적에 따라 매달 정액</option>
+              </select>
             </div>
+
+            {form.kind === 'rate' && (
+              <div>
+                <label className="block text-xs text-caption mb-1" htmlFor="benefit-rate">비율 (%)</label>
+                <input
+                  type="number"
+                  id="benefit-rate"
+                  value={form.rate}
+                  onChange={(e) => setField('rate', e.target.value)}
+                  className={inp}
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-xs text-caption mb-1" htmlFor="benefit-category">어느 카테고리에 (선택)</label>
@@ -326,6 +444,81 @@ export default function CardBenefitSection({ categories = [] }) {
             </div>
           </div>
 
+          {form.kind === 'flat_monthly' && (
+            <div className="space-y-2 border-t border-line pt-3">
+              <p className="text-xs text-caption leading-relaxed">
+                지난달에 얼마를 썼는지에 따라 이번 달에 붙는 금액을 구간으로 넣으세요.
+                결제액과 무관하게 <strong className="text-body">한 달에 한 번</strong> 붙습니다 —
+                개별 결제에는 0원으로 표시되고, 이번 달 정액은 따로 알려 드려요.
+              </p>
+
+              {form.tiers.length === 0 && (
+                <p className="text-xs text-caption">등록된 구간이 없어요. 구간을 더해 보세요.</p>
+              )}
+
+              <ul className="space-y-2">
+                {form.tiers.map((t, i) => (
+                  <li key={i} className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="block text-[11px] text-caption mb-1" htmlFor={`flat-min-${i}`}>
+                        전월 실적 하한
+                      </label>
+                      <input
+                        id={`flat-min-${i}`}
+                        type="number"
+                        min="0"
+                        className={`${inp} w-32`}
+                        value={t.min_spend}
+                        onChange={(e) => setTier(i, 'min_spend', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-caption mb-1" htmlFor={`flat-amount-${i}`}>
+                        이번 달 정액
+                      </label>
+                      <input
+                        id={`flat-amount-${i}`}
+                        type="number"
+                        min="0"
+                        className={`${inp} w-32`}
+                        value={t.amount}
+                        onChange={(e) => setTier(i, 'amount', e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-32">
+                      <label className="block text-[11px] text-caption mb-1" htmlFor={`flat-label-${i}`}>
+                        이름 (선택)
+                      </label>
+                      <input
+                        id={`flat-label-${i}`}
+                        type="text"
+                        className={`${inp} w-full`}
+                        value={t.label}
+                        onChange={(e) => setTier(i, 'label', e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeTier(i)}
+                      aria-label={`${i + 1}번째 구간 지우기`}
+                      className="text-xs text-caption hover:text-loss-text px-2 py-1.5"
+                    >
+                      지우기
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                onClick={addTier}
+                className="text-xs text-brand-text border border-line rounded-control px-3 py-1.5 hover:bg-surface-page"
+              >
+                + 구간 추가
+              </button>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -356,7 +549,7 @@ export default function CardBenefitSection({ categories = [] }) {
         <ul className="space-y-2">
           {benefits.map(b => (
             <li key={b.id} className="text-xs text-body flex flex-wrap items-baseline gap-x-2">
-              <strong className="text-body">{b.rate}% {b.benefit_type}</strong>
+              <strong className="text-body">{headline(b)}</strong>
               <span className="text-caption">{targetLabel(b)}</span>
               {conditionLabel(b) && (
                 <span className="text-caption">{conditionLabel(b)}</span>
