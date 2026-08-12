@@ -92,3 +92,50 @@ describe('다 못 보여줄 때 알린다', () => {
     expect(screen.queryByText(/까지 반영됩니다/)).toBe(null);
   });
 });
+
+describe('달력 보기가 말하는 것', () => {
+  it('거래가 없는 달이면 그렇다고 말한다', async () => {
+    mockGet({ items: [] });
+    const user = userEvent.setup();
+    renderPage();
+    await openCalendar(user);
+
+    expect(screen.getByText('이 달에는 거래가 없어요.')).toBeTruthy();
+  });
+
+  it('날짜를 안 고르면 누르라고 안내한다', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await openCalendar(user);
+
+    expect(screen.getByText('날짜를 누르면 그날 거래가 나와요.')).toBeTruthy();
+  });
+
+  it('날짜를 고르면 그날 거래만 보여주고 건수를 적는다', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await openCalendar(user);
+
+    await user.click(screen.getByRole('button', { name: dayCell(3) }));
+
+    expect(await screen.findByText('예시가맹점 갑')).toBeTruthy();
+    expect(screen.getByText('예시가맹점 을')).toBeTruthy();
+    // 다른 날 거래는 안 보인다
+    expect(screen.queryByText('예시가맹점 병')).toBe(null);
+    expect(screen.getByText('2건')).toBeTruthy();
+  });
+
+  it('같은 날짜를 다시 누르면 선택이 풀린다', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await openCalendar(user);
+
+    const day = screen.getByRole('button', { name: dayCell(3) });
+    await user.click(day);
+    expect(await screen.findByText('예시가맹점 갑')).toBeTruthy();
+
+    await user.click(day);
+    expect(screen.getByText('날짜를 누르면 그날 거래가 나와요.')).toBeTruthy();
+    expect(screen.queryByText('예시가맹점 갑')).toBe(null);
+  });
+});
