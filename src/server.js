@@ -87,7 +87,13 @@ try {
 }
 
 // Health check
-app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+// `pid` 를 함께 준다(#583). 테스트 하네스가 «지금 응답하는 이 서버가 내가 띄운
+// 그 프로세스인가» 를 가릴 수 있어야 한다 — 포트가 물린 상태에서는 내 자식이 죽고
+// **옆 서버가 200 을 주기 때문에**, 응답만 보고는 구분이 안 된다. 실제로 그 상태에서
+// 헬퍼가 남의 서버에 붙었다.
+//
+// 프로세스 id 는 민감한 값이 아니고 이 앱은 개인 기기에서만 돈다.
+app.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString(), pid: process.pid }));
 
 // FND-10(감사): 아래 SPA 폴백이 /api/* 를 예외 처리하지 않아, 오타 난 API
 // 경로가 404 JSON이 아니라 200 + index.html을 반환했다. client/src/lib/api.js는
