@@ -6,6 +6,11 @@ on:
       - opened
       - edited
       - synchronize
+  # 머지 큐에서도 이 이름으로 보고해야 한다(#546 B안).
+  #
+  # 큐는 필수 검사가 **머지 그룹에서** 통과하기를 기다린다. 이 워크플로가 `pull_request`
+  # 에서만 돌면 큐에 들어간 항목은 이 검사를 영영 못 받아 상한까지 기다린다.
+  merge_group:
 
 permissions:
   pull-requests: write
@@ -14,7 +19,17 @@ jobs:
   validate-title:
     runs-on: ubuntu-latest
     steps:
+      # 머지 그룹에는 PR 제목이 없다. 검사할 대상 자체가 없으므로 건너뛴다.
+      #
+      # 건너뛰는 것이 느슨해지는 게 아니다 — 제목은 PR 단계에서 이미 검사됐고,
+      # 큐에 들어간 뒤로는 바뀌지 않는다. 여기서는 «이름을 가진 검사가 통과했다» 는
+      # 신호만 큐에 주면 된다.
+      - name: 머지 그룹에는 검사할 제목이 없다
+        if: github.event_name == 'merge_group'
+        run: echo "머지 그룹이라 PR 제목 검사를 건너뛴다. 제목은 PR 단계에서 검사됐다."
+
       - name: Validate PR title follows Conventional Commits
+        if: github.event_name != 'merge_group'
         uses: actions/github-script@v9
         with:
           script: |
