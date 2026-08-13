@@ -1,3 +1,9 @@
+// @vitest-environment jsdom
+//
+// `src/lib` 는 기본이 node 환경이다(#619). 이 파일은 브라우저 API 를 만지므로
+// 스스로 jsdom 을 요청한다. 목록으로 빼지 않고 여기 적는 이유는, 목록은 파일이
+// 늘거나 성격이 바뀔 때 같이 안 고쳐지기 때문이다.
+
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { putRecurringDraft, takeRecurringDraft } from './recurringDraft';
 
