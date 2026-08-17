@@ -1,0 +1,83 @@
+name: Autoupdate PR branches
+
+# base 가 움직이면 열린 PR 의 브랜치를 자동으로 따라오게 한다(#620).
+#
+# ─────────────────────────────────────────────────────────────────────────
+# 무엇을 대신하는가
+#
+# develop·main 이 `required_status_checks.strict = true` 다(#546 A안). 그래서 PR 은
+# base 가 최신일 때만 머지된다. 앞의 PR 이 머지될 때마다 뒤의 PR 은 전부 낡아지고,
+# 사람이 «Update branch» 를 하나씩 눌러야 한다. 오늘 12건을 머지하면서 그 클릭이
+# 실제로 부담이 됐다.
+#
+# 머지 큐가 이 자리를 대신하지만 **이 저장소에서는 못 쓴다.** 머지 큐는 조직 소유
+# 저장소 전용이고 여기는 개인 계정 소유다(#546 에서 실측 — 룰셋 API 가 422 로
+# 거부한다). 그래서 클릭만 자동화한다. strict 는 그대로 둔다.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# 왜 GITHUB_TOKEN 이 아니라 PAT 인가
+#
+# 기본 `GITHUB_TOKEN` 으로 만든 push 는 **워크플로를 다시 트리거하지 않는다.**
+# 무한 루프를 막으려는 GitHub 의 설계다.
+#
+# 그런데 이 액션이 하는 일이 정확히 «PR 브랜치에 push» 다. 기본 토큰을 쓰면 브랜치는
+# 갱신되는데 그 갱신분에 대한 CI 가 안 돈다. `strict` 는 «최신 base 위에서 검사가
+# 통과했나» 를 보므로, 검사가 안 돌면 PR 은 여전히 머지되지 않는다 — 자동화가
+# 절반만 되고 사람은 결국 다시 눌러야 한다.
+#
+# 그래서 PAT 를 쓴다. PAT 로 만든 push 는 사람이 push 한 것과 같이 취급돼 CI 가 돈다.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# 시크릿
+#
+# `AUTOUPDATE_PAT` — 저장소 시크릿. 필요한 권한은 이 저장소에 대한
+# **Contents: write** 와 **Pull requests: read** 다. Fine-grained PAT 로 이 저장소만
+# 지정하는 것을 권한다. classic PAT 를 쓰면 `repo` 스코프가 계정의 모든 저장소에
+# 열리므로 여기 하나 때문에 범위가 과해진다.
+#
+# 시크릿이 없으면 이 워크플로는 조용히 실패한다. 그건 의도한 동작이다 — 없는 채로
+# 도는 것보다 낫고, PR 머지를 막지도 않는다(이 검사는 필수가 아니다).
+
+on:
+  # base 가 움직였을 때만 의미가 있다. 모든 push 에 도는 것은 낭비고, 특히
+  # PR 브랜치 push 마다 도는 것은 자기가 만든 push 에 다시 반응하는 모양이 된다.
+  push:
+    branches: [develop, main]
+  # 큐가 밀렸을 때 손으로 한 번 돌린다.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# 같은 base 에 대해 한 번에 하나만 돈다. 연속 머지에서 여러 실행이 겹치면 같은 PR 을
+# 서로 다른 base 로 밀어 충돌을 만든다.
+concurrency:
+  group: autoupdate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  autoupdate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker://chinthakagodawita/autoupdate-action:v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.AUTOUPDATE_PAT }}
+
+          # 열린 PR 전부가 아니라 **보호 브랜치를 대상으로 한 PR** 만 따라오게 한다.
+          # 이 저장소에서 그것이 곧 develop·main 대상 PR 이다.
+          PR_FILTER: protected
+
+          # 초안은 건드리지 않는다. 아직 사람이 손보는 중이라 base 를 밀면 방해가 된다.
+          PR_READY_STATE: ready_for_review
+
+          # 충돌은 조용히 넘긴다. **실패로 만들지 않는다.**
+          #
+          # 충돌은 사람이 풀어야 하는 것이고, 여기서 빨간 표시를 내면 «자동화가
+          # 깨졌다» 로 읽힌다. 실제로는 자동화가 할 수 있는 일이 없는 정상 상태다.
+          # 충돌한 PR 은 그대로 남고 사람이 열어 보면 GitHub 이 충돌을 알려 준다.
+          MERGE_CONFLICT_ACTION: ignore
+
+          # 머지 커밋 메시지. 기본값은 영어 문장이라 이 저장소의 로그와 섞이면
+          # 어디서 온 커밋인지 바로 안 보인다.
+          MERGE_MSG: "chore: base 브랜치 변경을 따라간다 (autoupdate)"
