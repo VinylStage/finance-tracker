@@ -12,7 +12,7 @@ const os = require('node:os');
 // DB 를 여는 것은 그 사고와 같은 범주다. 서버를 띄우는 테스트를 새로 쓸 때
 // 이 줄을 먼저 확인한다.
 
-const PORT = 34627;
+const PORT = 20627;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;

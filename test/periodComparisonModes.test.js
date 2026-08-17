@@ -12,7 +12,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 그린다 — 2월에 없는 30일에 값이 찍히거나, 주가 하루씩 밀리거나, 5년 창이
 // 겹친다. 그래서 화면만 봐서는 못 잡는다.
 
-const PORT = 34994;
+const PORT = 20994;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
