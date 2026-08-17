@@ -25,12 +25,53 @@ export default defineConfig({
   // 커버리지 대상에서 진입점(main.jsx)과 라우팅 껍데기는 뺀다. 렌더 트리를
   // 통째로 띄우는 것 말고는 의미 있는 단언을 붙일 수 없고, 그건 통합 테스트의 몫이다.
   test: {
-    environment: 'jsdom',
     globals: true,
-    // 루트의 node --test 가 test/ 디렉터리를 훑기 때문에 src/test/ 아래에 두면
-    // 이 파일을 테스트로 착각해 실행하고 실패한다. client 루트에 둔다.
-    setupFiles: ['./vitest.setup.js'],
-    include: ['src/**/*.test.{js,jsx}'],
+    // 환경을 두 갈래로 나눈다(#619).
+    //
+    // 파일마다 jsdom 을 새로 만드는 비용이 컸다. 실측(106파일): `environment` 만
+    // 36초, 파일당 약 350ms 다. 코어가 적은 CI 러너에서는 이 합이 벽시계에 그대로
+    // 실려 클라이언트 테스트가 90초를 먹었다 — CI 전체 150초의 60% 다.
+    //
+    // `src/lib` 의 순수 로직은 DOM 이 필요 없다. 그런데 **공용 셋업이 필요하게
+    // 만들고 있었다** — `vitest.setup.js` 가 `@testing-library/react` 를 import 해서,
+    // node 환경으로 돌리면 테스트에 들어가기도 전에
+    // `ReferenceError: HTMLElement is not defined` 로 죽는다.
+    //
+    // 그래서 셋업이 안 걸리는 갈래를 따로 둔다. 테스트 내용은 하나도 안 바뀐다.
+    projects: [
+      {
+        // DOM 이 필요 없는 순수 로직.
+        //
+        // `src/lib` 에도 브라우저 API 를 만지는 파일이 다섯 있는데, 그 파일들은
+        // 자기 첫 줄에 `@vitest-environment jsdom` 을 달아 **스스로** 갈래를 바꾼다.
+        // 여기에 목록으로 빼지 않는 이유는, 목록은 파일이 늘거나 성격이 바뀔 때
+        // 같이 안 고쳐지기 때문이다.
+        //
+        // 그 다섯도 셋업은 필요 없다 — 셋업이 주는 것은 `ResizeObserver` 스텁뿐이고
+        // 다섯 중 아무도 안 쓴다(실측).
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          include: ['src/lib/**/*.test.{js,jsx}'],
+        },
+      },
+      {
+        // 화면을 그리는 것 전부. 예전과 같은 환경이다.
+        extends: true,
+        test: {
+          name: 'jsdom',
+          environment: 'jsdom',
+          // 루트의 node --test 가 test/ 디렉터리를 훑기 때문에 src/test/ 아래에 두면
+          // 이 파일을 테스트로 착각해 실행하고 실패한다. client 루트에 둔다.
+          setupFiles: ['./vitest.setup.js'],
+          include: ['src/**/*.test.{js,jsx}'],
+          // 위 갈래가 가져간 것을 뺀다. 두 갈래가 같은 파일을 돌리면 테스트 수가
+          // 두 배로 세어져 «늘었다» 로 보인다.
+          exclude: ['src/lib/**/*.test.{js,jsx}'],
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
