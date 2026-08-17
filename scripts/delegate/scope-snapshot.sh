@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/sh
 # 위임 라운드가 «범위 밖 파일» 을 고쳤는지 판정한다 (#580).
 #
 # ─────────────────────────────────────────────────────────────────────────
@@ -16,6 +16,17 @@
 #
 # 그래서 스냅샷 한 줄을 **«내용 해시 + 경로»** 로 만든다. 같은 경로의 내용 변화가
 # after 에만 있는 줄로 나타난다.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# 왜 zsh 가 아니라 sh 인가
+#
+# 하네스 나머지는 zsh 다. 이 파일만 POSIX sh 인 이유는 **CI 러너에 zsh 가 없기
+# 때문**이다. zsh 로 썼을 때 CI 의 서버 job 이 `spawn status: null`(ENOENT)로 6개를
+# 통째로 떨어뜨렸다. 가드를 CI 에서 검증하지 못하면 회귀를 아무도 못 잡는다.
+#
+# 그래서 프로세스 치환(`<(...)`)·`print`·`(( ))` 을 쓰지 않는다. 정렬 순서는 로케일에
+# 따라 달라지므로 `LC_ALL=C` 로 고정한다 — before 와 after 가 다른 순서로 정렬되면
+# `comm` 이 엉뚱한 결과를 낸다.
 #
 # ─────────────────────────────────────────────────────────────────────────
 # 무엇을 재는가
@@ -47,8 +58,20 @@
 # compare 는 범위 밖 편집 경로를 한 줄씩 stdout 에 내고 **1** 을 낸다. 위반이 없으면
 # 아무것도 안 내고 0 이다.
 set -u
+LC_ALL=C
+export LC_ALL
 
 mode=${1:?"mode: snapshot | compare"}
+
+# sha1. macOS 는 shasum, 리눅스 러너는 sha1sum 이 표준이다. 둘 다 «해시 공백 경로» 를
+# 내므로 앞 필드만 쓴다.
+hash_of() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 1 -- "$1" | cut -d' ' -f1
+  else
+    sha1sum -- "$1" | cut -d' ' -f1
+  fi
+}
 
 # 잴 파일 목록. 인자는 읽기 전용 경로들이다.
 #
@@ -59,7 +82,9 @@ scope_paths() {
   {
     # 상태 3글자를 떼고, rename 은 화살표 뒤(새 이름)를 쓴다.
     git status --porcelain=v1 --untracked-files=all | sed -e 's/^...//' -e 's/^.* -> //'
-    (( $# )) && print -l -- "$@"
+    if [ "$#" -gt 0 ]; then
+      printf '%s\n' "$@"
+    fi
   } | sed -e 's/^"//' -e 's/"$//' | grep -v '^$' | sort -u
 }
 
@@ -67,8 +92,8 @@ scope_paths() {
 # 것도 변화이므로 같은 자리에서 잡혀야 한다.
 scope_hashes() {
   scope_paths "$@" | while IFS= read -r f; do
-    if [[ -f $f ]]; then
-      printf '%s  %s\n' "$(shasum -a 1 -- "$f" | cut -d' ' -f1)" "$f"
+    if [ -f "$f" ]; then
+      printf '%s  %s\n' "$(hash_of "$f")" "$f"
     else
       printf 'ABSENT  %s\n' "$f"
     fi
@@ -90,18 +115,18 @@ case $mode in
     scope_hashes "$@" > "$after"
 
     # after 에만 있는 줄 = 새로 뜬 파일 + **내용이 달라진 파일**. 대상은 빼고 본다.
-    stray=$(comm -13 <(sort "$before") <(sort "$after") \
-            | sed 's/^[^ ]*  //' | sort -u | grep -v "^${target}\$" || true)
+    # 두 파일은 scope_hashes 가 이미 정렬해 두었으므로 comm 에 그대로 넣는다.
+    stray=$(comm -13 "$before" "$after" | sed 's/^[^ ]*  //' | sort -u | grep -v "^${target}\$" || true)
 
-    if [[ -n $stray ]]; then
-      print -r -- "$stray"
+    if [ -n "$stray" ]; then
+      printf '%s\n' "$stray"
       exit 1
     fi
     exit 0
     ;;
 
   *)
-    print "모르는 mode: $mode (snapshot | compare)"
+    printf '모르는 mode: %s (snapshot | compare)\n' "$mode"
     exit 2
     ;;
 esac

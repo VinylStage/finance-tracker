@@ -42,8 +42,12 @@ function makeRepo() {
   return dir;
 }
 
+// `sh` 로 부른다. 하네스 나머지는 zsh 지만 이 스크립트만 POSIX sh 인 이유가 여기
+// 있다 — **CI 러너에 zsh 가 없다.** zsh 로 불렀을 때 CI 에서 `status: null`(ENOENT)로
+// 6개가 통째로 떨어졌고, 가드가 CI 에서 검증되지 않으면 회귀를 아무도 못 잡는다.
 function run(dir, args) {
-  const r = spawnSync('zsh', [SCRIPT, ...args], { cwd: dir, encoding: 'utf-8' });
+  const r = spawnSync('sh', [SCRIPT, ...args], { cwd: dir, encoding: 'utf-8' });
+  assert.notEqual(r.status, null, `스크립트를 실행하지 못했다: ${r.error && r.error.message}`);
   return { code: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 
