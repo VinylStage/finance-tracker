@@ -9,6 +9,15 @@
 #
 #   DELEGATE_TARGET_KIND=server run-new-batch.sh 라벨 /abs/spec.md test/x.test.js src/y.js
 #
+# 테스트만이 아니라 **구현까지** 위임하려면 DELEGATE_EXTRA_PATHS 에 같이 만들
+# 파일을 적는다. 안 적으면 scope_check 가 «배치 밖 편집» 으로 보고 지운다 —
+# 실제로 그것 때문에 구현 위임이 구조적으로 막혀 있었다.
+#
+#   DELEGATE_EXTRA_PATHS='client/src/lib/x.js' run-new-batch.sh 라벨 spec.md client/src/lib/x.test.jsx
+#
+# 검수는 여전히 target(테스트 파일) 하나로 한다. 그래도 구현이 틀리면 테스트가
+# 못 도니 같이 잡힌다 — 검수를 두 개로 늘릴 이유가 없다.
+#
 # 러너를 둘로 복제하지 않는 이유는 가드 때문이다. 아래 가드는 전부 실제 사고에서
 # 하나씩 붙은 것이고, 파일을 나누면 다음 사고 때 한쪽만 고쳐진다. 실제로 다른
 # 것은 `verify()` 안 세 줄뿐이라 거기서만 갈래를 탄다.
@@ -28,6 +37,8 @@ M=${DELEGATE_METRICS:-$SC}
 # 위임 비율을 잘못 냈다. 비워 둔 채로 돌지 못하게 필수로 막는다.
 ISSUE=${DELEGATE_ISSUE:?DELEGATE_ISSUE 가 필요하다 (예: DELEGATE_ISSUE=526)}
 MIN_TESTS=${MIN_TESTS:-5}
+# 이 배치가 target 말고 더 만들어도 되는 파일들(공백으로 구분). 구현 위임용이다.
+extra=(${=DELEGATE_EXTRA_PATHS:-})
 # 검수 방식을 고른다. client 는 vitest, server 는 node --test 다.
 KIND=${DELEGATE_TARGET_KIND:-client}
 if [[ $KIND != client && $KIND != server ]]; then
@@ -67,12 +78,33 @@ acquire_lock() {
 }
 
 scope_check() {   # 배치 밖 파일이 바뀌었나
-  # 판정은 scope-snapshot.sh 가 한다. 여기서 하는 일은 되돌리기다.
+  # 판정은 scope-snapshot.sh 가 한다(#580). 내용 해시라 «경로는 그대로인데 안이
+  # 지워진» 경우까지 잡는다. 여기서 하는 일은 **거르기와 되돌리기**다.
   local stray
-  stray=$($SCOPE compare "$SC/before-$label.txt" "$SC/after-$label.txt" "$target" "${reads[@]}")
+  # `compare` 는 대상 하나만 빼 준다. 구현까지 한 배치로 위임하면 파일이 둘 이상이라
+  # 나머지는 여기서 뺀다 — 스크립트 계약을 늘리지 않는 쪽이 그쪽 테스트를 안 건드린다.
+  # stray 가 있으면 exit 1 이므로 `|| true` 로 받아 걸러낸 뒤에 판정한다.
+  stray=$($SCOPE compare "$SC/before-$label.txt" "$SC/after-$label.txt" "$target" "${reads[@]}" || true)
+  if [[ -n "$stray" && ${#extra} -gt 0 ]]; then
+    stray=$(print -r -- "$stray" | grep -vxF -- "${(F)extra}" || true)
+  fi
   if [[ -n "$stray" ]]; then
     print "  ✖ 배치 밖 편집: $stray"
-    print -r -- "$stray" | while read f; do git checkout -- "$f" 2>/dev/null || rm -f "$f"; done
+    # 되돌리는 순서가 중요하다. aider 는 만든 파일을 **스테이지해 둔다**.
+    # 그 상태에서 `git checkout -- f` 는 인덱스에서 되살려 놓는 꼴이라 파일이
+    # 안 지워진다 — 실제로 stray 가 그대로 남아 다음 실행을 오염시켰다.
+    # 인덱스에서 먼저 빼고, 추적 중이던 파일만 되돌린다.
+    print -r -- "$stray" | while read f; do
+      # 판정은 **HEAD 기준**이다. `git ls-files` 는 인덱스를 보므로 aider 가
+      # 스테이지해 둔 새 파일도 «추적 중» 이라고 답한다 — 그러면 아래 checkout
+      # 갈래로 가서 HEAD 에 없는 경로라 실패하고, 파일이 그대로 남는다(실측).
+      if git cat-file -e "HEAD:$f" 2>/dev/null; then
+        git checkout HEAD -- "$f" 2>/dev/null
+      else
+        git rm -q --cached --force -- "$f" 2>/dev/null
+        rm -f "$f"
+      fi
+    done
     return 1
   fi
   return 0
@@ -102,6 +134,13 @@ verify() {   # 통과하면 0, 실패 사유를 $SC/fail-$label.txt 로
   if [[ ! -f "$REPO/$target" ]]; then
     print "파일이 만들어지지 않았다: $target" >> "$SC/fail-$label.txt"; return 1
   fi
+  # 같이 만들기로 한 파일도 확인한다. 테스트만 쓰고 구현을 빼면 아래 실행에서
+  # «못 찾음» 으로 잡히긴 하지만, 사유가 «파일이 없다» 로 나와야 모델이 고친다.
+  for e in "${extra[@]}"; do
+    if [[ ! -f "$REPO/$e" ]]; then
+      print "같이 만들기로 한 파일이 없다: $e" >> "$SC/fail-$label.txt"; return 1
+    fi
+  done
   # 껍데기 방지 — 테스트 개수를 센다. 삭제형/빈껍데기 실패는 실행결과로 안 잡힌다.
   # 서버는 node:test 라 `test(` 도 쓴다. 둘 다 세지 않으면 멀쩡한 산출물이
   # "0 개" 로 반려된다.
@@ -151,11 +190,15 @@ verify() {   # 통과하면 0, 실패 사유를 $SC/fail-$label.txt 로
 
 record_numstat() {
   local out="$M/numstat-$label-$1.tsv"
-  git diff --numstat -- "$target" > "$out" 2>/dev/null
+  git diff --numstat -- "$target" "${extra[@]}" > "$out" 2>/dev/null
   # 새 파일은 diff --numstat 에 안 잡힌다. 추적되지 않은 파일은 줄수로 센다
-  if [[ ! -s "$out" && -f "$REPO/$target" ]]; then
-    printf "%s\t0\t%s\n" "$(wc -l < "$REPO/$target" | tr -d ' ')" "$target" > "$out"
-  fi
+  # 새 파일은 diff --numstat 에 안 잡힌다. 추적되지 않은 파일은 줄수로 센다.
+  # **구현 파일도 같이 센다** — 안 세면 위임한 줄이 통계에서 빠져 비율이 낮게 나온다.
+  for f in "$target" "${extra[@]}"; do
+    [[ -f "$REPO/$f" ]] || continue
+    grep -qF -- "	$f" "$out" 2>/dev/null && continue
+    printf "%s\t0\t%s\n" "$(wc -l < "$REPO/$f" | tr -d ' ')" "$f" >> "$out"
+  done
   local add=$(awk '{a+=$1} END{print a+0}' "$out")
   printf "  numstat(%s) +%s → %s\n" "$1" "$add" "$out"
   printf "%s\t%s\t%s\n" "$label" "$1" "$add" >> "$M/numstat-summary.tsv"
@@ -190,8 +233,25 @@ round=1
 while (( round <= 3 )); do
   # zsh print 는 `---` 을 옵션으로 읽는다. -r -- 로 끊어 준다
   print -r -- "--- $label 수정 $round 회차 ---"
-  { print "직전 결과가 아래 이유로 실패했다. 그 부분만 고친다. 파일 전체를 다시 쓴다."
-    print ""; cat "$SC/fail-$label.txt" } > "$SC/fix-$label-$round.md"
+  # 수정 라운드에는 원 명세가 안 실린다. 그래서 «어느 파일을 만드는가» 를 여기서
+  # 다시 못 박는다 — 안 그러면 모델이 확장자를 바꾼 파일을 새로 만들어 범위
+  # 위반으로 배치가 통째로 날아간다(실측 2회, 매번 같은 자리).
+  # 「산문을 쓰지 말라」 를 맨 앞에 둔다. whole 형식은 **코드 블록 바로 앞 줄을
+  # 파일 이름으로 읽는다.** 모델이 «Actually, looking at the error message again»
+  # 같은 서두를 붙이면 그게 파일명이 되어 그 이름의 파일이 생기고, 배치가 범위
+  # 위반으로 통째로 날아간다(실측 2회, 둘 다 수정 라운드에서만).
+  { print "아래 파일들을 고친다. **설명하지 않는다.**"
+    print "답에는 파일 경로 한 줄과 그 아래 코드 블록만 있어야 한다."
+    print "«Actually» · «Looking at» 같은 서두를 쓰지 않는다 — 그 줄이 파일 이름으로 읽힌다."
+    print ""
+    print "직전 결과가 아래 이유로 실패했다. 그 부분만 고친다. 파일 전체를 다시 쓴다."
+    print ""
+    print "고칠 파일은 이것뿐이다. 새 파일을 만들지 않는다:"
+    for f in "$target" "${extra[@]}"; do print "  $f"; done
+    print ""; print "## 실패 사유"; print ""
+    cat "$SC/fail-$label.txt"
+    print ""; print "## 원래 명세 (그대로 지킨다)"; print ""
+    cat "$spec" } > "$SC/fix-$label-$round.md"
   snapshot_before
   run_aider "$SC/fix-$label-$round.md" "$M/aider-$label-fix$round.log"
   if ! scope_check; then print "=== 범위 위반 ==="; exit 2; fi
