@@ -161,11 +161,18 @@ function compareCards({ transactions, cards } = {}) {
     // 이 거래 시점에서 각 혜택 줄이 이미 받은 몫. 계산기가 고른 줄에 대해서만 묻는다.
     const itemUsedFor = (benefitId) => {
       const acc = itemAcc.get(benefitId);
-      const out = { month: acc && acc.ym === ym ? acc.month : 0 };
+      const same = acc && acc.ym === ym;
+      const sameDay = acc && acc.ymd === ymd;
+      const out = { month: same ? acc.month : 0 };
+      // 횟수 한도(#638)가 볼 값. 금액과 같은 창을 쓰지만 세는 것이 다르다.
+      const count = { month: same ? acc.monthCount : 0 };
       // 날짜를 모르면 `day` 를 아예 안 싣는다. 그러면 계산기가 «적용 못 한 창» 으로
       // 보고해 화면이 그 사실을 말할 수 있다.
-      if (ymd !== null) out.day = acc && acc.ymd === ymd ? acc.day : 0;
-      return out;
+      if (ymd !== null) {
+        out.day = sameDay ? acc.day : 0;
+        count.day = sameDay ? acc.dayCount : 0;
+      }
+      return { used: out, count };
     };
 
     // 카드마다 이 거래를 계산한다. 한도 누적은 **가정 계산에도** 반영한다 —
@@ -214,11 +221,15 @@ function compareCards({ transactions, cards } = {}) {
       // 거래는 어떤 줄의 한도도 소진하지 않는다.
       if (actual.applied && actual.benefit > 0) {
         const id = actual.applied.id;
-        const acc = itemAcc.get(id) || { ym: null, month: 0, ymd: null, day: 0 };
-        if (acc.ym !== ym) { acc.ym = ym; acc.month = 0; }
-        if (acc.ymd !== ymd) { acc.ymd = ymd; acc.day = 0; }
+        const acc = itemAcc.get(id)
+          || { ym: null, month: 0, monthCount: 0, ymd: null, day: 0, dayCount: 0 };
+        if (acc.ym !== ym) { acc.ym = ym; acc.month = 0; acc.monthCount = 0; }
+        if (acc.ymd !== ymd) { acc.ymd = ymd; acc.day = 0; acc.dayCount = 0; }
         acc.month += actual.benefit;
         acc.day += actual.benefit;
+        // 「월 1회」 를 세는 값(#638). 금액이 아니라 **붙은 횟수**다.
+        acc.monthCount += 1;
+        acc.dayCount += 1;
         itemAcc.set(id, acc);
       }
     }
