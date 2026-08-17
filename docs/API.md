@@ -1606,6 +1606,34 @@
   사용자가 규칙으로 이미 의사를 밝혔는데 "156건을 만들까요" 를 되묻는 것은 규칙의
   취지를 없앤다. 대신 몇 건이 생겼는지 화면이 반드시 알려야 한다.
 
+### GET /api/recurring-rules/:id/reactivation-preview
+꺼둔 규칙을 **다시 켜면 무엇이 생기는지** 미리 센다(#489). **DB 를 바꾸지 않는다.**
+
+- **응답 스키마**:
+  ```json
+  { "ruleId": "number", "merchant": "string", "amount": "number",
+    "from": "string", "to": "string", "today": "string",
+    "dates": ["string"], "count": "number", "totalAmount": "number",
+    "alreadyActive": "boolean" }
+  ```
+- **비고**: 판정 규칙이 따라잡기와 **같아야** 한다 — 여기서 보여준 것과 실제로 생기는
+  것이 다르면 프리뷰가 거짓이 된다. 그래서 같은 구간 계산과 같은 «이미 처리한 달»
+  판정을 쓰고, 이미 만들어진 발생일도 뺀다.
+- 규칙이 없으면 404.
+
+### POST /api/recurring-rules/:id/reactivate
+규칙을 다시 켠다(#489). **거래를 만들지 않는다** — 다음 따라잡기가 무엇을 볼지만 정한다.
+
+- **요청 본문**: `{ "mode": "all" | "from-now" | "from-date", "startsOn": "YYYY-MM-DD" }`
+  - `all` — 꺼져 있던 구간을 그대로 채운다. `last_run_on` 을 건드리지 않는다
+  - `from-now` — 그 구간을 버린다. `last_run_on` 을 오늘로 밀어 따라잡기가 안 보게 한다
+  - `from-date` — 적용 시작일을 옮겨 그 날부터 재개한다. `starts_on` 과 `last_run_on` 을
+    함께 옮기므로 **규칙의 정의가 바뀐다.** 그 앞의 발생일은 영구히 대상에서 빠진다
+    (`startsOn` 필수, `YYYY-MM-DD`)
+- **응답 스키마**: `{ "ok": true, "data": { "ok": true, "mode": "string", "ruleId": "number", "today": "string" } }`
+- **비고**: 모르는 `mode` 나 형식이 어긋난 `startsOn` 은 400. 「프리뷰 → 확인 → 실행」
+  에서 실행 쪽이고, 프리뷰는 위 엔드포인트다.
+
 ### GET /api/recurring-rules/due
 이번 달(기본값) 아직 처리하지 않은 규칙 목록. 대시보드의 "이번 달 반복 거래 확인" 이
 쓴다.
