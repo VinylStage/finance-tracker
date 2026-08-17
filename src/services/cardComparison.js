@@ -214,7 +214,11 @@ function compareCards({ transactions, cards } = {}) {
     // 실제로 쓴 카드만 한도를 소진한다. 가정은 소진시키지 않는다 —
     // 가정끼리 서로의 한도를 깎으면 계산이 뒤엉킨다.
     if (actual) {
-      used.set(actual.cardId, (used.get(actual.cardId) || 0) + actual.benefit);
+      // 카드 월 통합 한도의 누적. **통합 한도 밖인 줄은 안 넣는다**(#648) —
+      // 넣으면 그 줄이 다른 항목의 한도를 깎아, 한도 밖이라는 말이 반쪽만 지켜진다.
+      if (!(actual.applied && actual.applied.unifiedCapExempt)) {
+        used.set(actual.cardId, (used.get(actual.cardId) || 0) + actual.benefit);
+      }
 
       // 어느 줄이 얼마를 썼는지 항목 단위로도 적는다(#637). 이게 다음 거래의
       // 일·월 한도를 정한다. **고른 줄이 있을 때만** 적는다 — 아무것도 안 걸린

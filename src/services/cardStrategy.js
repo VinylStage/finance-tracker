@@ -262,7 +262,15 @@ function estimateBenefit({
 
   const result = {
     benefit,
-    applied: best ? { id: best.id, benefit_type: best.benefit_type, rate: best.rate, matched: best.matched } : null,
+    applied: best ? {
+      id: best.id,
+      benefit_type: best.benefit_type,
+      rate: best.rate,
+      matched: best.matched,
+      // 이 줄이 통합 한도 밖인가(#648). 호출부가 누적에서 빼야 한다 — 한도 밖인
+      // 혜택이 한도를 깎으면 «밖에 있다» 가 반쪽만 지켜진다.
+      unifiedCapExempt: Boolean(best.unified_cap_exempt),
+    } : null,
     skipped,
     capped,
     cappedBy,
