@@ -13,7 +13,7 @@ const { startTestServer } = require('./helpers/testServer');
 //   1. RFC 4180 대로 감싸는가 — 안 감싸면 내보낸 파일이 **조용히 짧아진다**
 //   2. 전체 백업이 표를 빠뜨리지 않는가 — 빠진 표는 복원 때 사라진다
 
-const PORT = 34992;
+const PORT = 20992;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

@@ -9,7 +9,7 @@ const os = require('node:os');
 // #306 의 저장 경로. 한 카드사에 상품 여러 개가 들어가는지(1:1 제약 없음),
 // 카드를 지워도 거래가 남고 미상(NULL)으로 돌아가는지가 핵심이다.
 
-const PORT = 34617; // 다른 테스트와 겹치지 않는 포트
+const PORT = 20617; // 다른 테스트와 겹치지 않는 포트
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;

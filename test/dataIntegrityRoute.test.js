@@ -4,7 +4,7 @@ const { startTestServer } = require('./helpers/testServer');
 
 // 데이터 무결성 점검 기능 테스트
 
-const PORT = 34604; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20604; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

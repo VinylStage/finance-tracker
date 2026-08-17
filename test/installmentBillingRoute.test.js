@@ -10,7 +10,7 @@ const { startTestServer } = require('./helpers/testServer');
 //   2. 여기서 보여준 값과 나중에 실제로 생성되는 거래가 어긋나지 않는다
 //      — 같은 정책 조회 기준(구매 시점)과 같은 계산 엔진을 써야 성립한다
 
-const PORT = 34612;
+const PORT = 20612;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

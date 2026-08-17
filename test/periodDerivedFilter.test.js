@@ -11,7 +11,7 @@ const { derivedFilter } = require('../src/services/transactionOrigin');
 // URL 만 바꾸고 서버로는 가지 않아서, 눌러도 숫자가 안 움직였다. 눌러도 아무
 // 일이 없는 컨트롤은 없는 것보다 나쁘다 — 사용자는 데이터가 틀렸다고 읽는다.
 
-const PORT = 34641;
+const PORT = 20641;
 let server;
 const ids = {};
 
