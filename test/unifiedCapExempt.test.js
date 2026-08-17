@@ -173,3 +173,30 @@ test('계산까지 닿는다', async () => {
   assert.strictEqual(free.actual.benefit, 20500); // 41000의 50%, 안 잘림
   assert.strictEqual(capped.actual.benefit, 5000); // 통합 한도에 잘림
 });
+
+// 위 6번은 **실제로 그 카드로 결제한** 경로만 본다. 「이 카드로 바꿨다면」 을 계산하는
+// 가정 경로는 #641 이 따로 만든 두 번째 누적(`hypoUsed`)을 쓰므로 같은 단언이 안 걸린다.
+// 한쪽만 면제를 지키면 같은 혜택이 시나리오에 따라 다르게 취급된다.
+test('통합 한도 밖인 줄은 **가정 계산에서도** 남의 한도를 안 깎는다', async () => {
+  // 결제는 전부 다른 카드로 한다. 그래야 ids.card 쪽이 순수한 «가정» 이 된다.
+  const other = (await post('/api/payment-methods', { name: '실제결제카드', type: '신용' })).body.id;
+  await post('/api/card-products', {
+    payment_method_id: other, issuer: '예시카드사',
+    product_name: '실제 결제 카드', card_type: '신용',
+  });
+
+  const cat = (await json('/api/categories')).body.find((c) => c.major_type !== '수입').id;
+  for (const merchant of ['면제가맹점', '보통가맹점']) {
+    await post('/api/transactions', {
+      date: '2026-05-10', merchant, amount: 41000,
+      payment_method_id: other, type: '지출', category_id: cat,
+    });
+  }
+
+  const cmp = await json('/api/card-strategy/comparison?from=2026-05-01&to=2026-05-31');
+  const capped = cmp.body.details.find((d) => d.merchant === '보통가맹점');
+  assert.ok(capped);
+
+  // 면제 줄(20,500)이 통합 한도 5,000 을 먼저 먹었다면 이 값이 0 이 된다.
+  assert.strictEqual(capped.best.benefit, 5000);
+});

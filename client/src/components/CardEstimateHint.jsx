@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
-import { estimateReason } from '../lib/cardStrategyView';
+import { estimateReason, unappliedCapNote } from '../lib/cardStrategyView';
 import { formatWon } from '../lib/format';
 
 // 입력 중에 매 글자마다 부르지 않는다. 금액은 한 자씩 늘어나므로 디바운스가
@@ -90,6 +90,12 @@ export default function CardEstimateHint({ amount, categoryId, merchant }) {
         <p className="text-[11px] text-caption">
           이번 달 이미 받은 혜택은 계산에 안 들어가서, 실제로는 이보다 적을 수 있어요.
         </p>
+      )}
+
+      {/* 한도가 걸려 있는데 아직 계산에 못 넣은 것(#578 · #631). 위 안내와 사유가
+          달라서 따로 선다 — 저건 «누적을 안 쓴다», 이건 «이 창을 못 잰다» 다. */}
+      {unappliedCapNote(best) && (
+        <p className="text-[11px] text-caption">{unappliedCapNote(best)}</p>
       )}
     </div>
   );
