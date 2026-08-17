@@ -9,7 +9,7 @@ const os = require('node:os');
 // #269 잔여 — 중복 탐지의 HTTP 경로. 핵심은 "자동으로 지우지 않는다" 와
 // "프리뷰를 건너뛸 수 없다" 두 가지다.
 
-const PORT = 34608;
+const PORT = 20608;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;

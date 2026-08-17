@@ -16,7 +16,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 그래서 상태 코드만 보지 않는다. **403 뒤에 행 수가 그대로인지**까지 본다 —
 // 403 을 돌려주면서 이미 지운 뒤라면 가드가 아니라 알림일 뿐이다.
 
-const PORT = 34996;
+const PORT = 20996;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

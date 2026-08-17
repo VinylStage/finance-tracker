@@ -11,7 +11,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 각각 **다른 카드를 가리키는** 자료를 깔고 본다 — 한 카드에 다 몰아 넣으면
 // 카드를 잘못 짚어도 숫자가 맞아 통과한다.
 
-const PORT = 34997;
+const PORT = 20997;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

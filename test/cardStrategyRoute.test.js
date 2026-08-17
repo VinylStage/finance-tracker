@@ -10,7 +10,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 수입과 파생 거래가 실제로 안 섞이는지, 카드가 없을 때 500 이 아니라 빈
 // 결과가 나오는지.
 
-const PORT = 34633;
+const PORT = 20633;
 let server;
 let ids = {};
 
