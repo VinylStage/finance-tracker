@@ -82,4 +82,16 @@ describe('HeatmapCardPicker', () => {
     const values = Array.from(sel.options).map((o) => o.value);
     expect(values).toEqual(['', 'none']);
   });
+
+  it('응답에 목록 칸이 없어도 전체와 미지정은 남는다', async () => {
+    get.mockResolvedValue({});
+    render(<HeatmapCardPicker value="" onChange={() => {}} />);
+    await waitFor(() => expect(get).toHaveBeenCalled());
+
+    const select = screen.getByLabelText('어느 카드');
+    await waitFor(() => {
+      const values = [...select.querySelectorAll('option')].map((o) => o.value);
+      expect(values).toEqual(['', 'none']);
+    });
+  });
 });
