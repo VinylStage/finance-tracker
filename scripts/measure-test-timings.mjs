@@ -12,7 +12,12 @@
 // projects 모드에서는 CLI 파일 필터가 project include 와 안 맞아 «No test files found»
 // 로 죽는다. 그래서 분배는 설정에 두고 측정만 여기서 한다.
 //
-// 사용: node scripts/test-timings.mjs [상위N=10]
+// 사용: node scripts/measure-test-timings.mjs [상위N=10]
+//
+// **파일명이 `measure-` 로 시작하는 이유** — `node --test` 의 기본 탐색 패턴에
+// `**/test-*.?(c|m)js` 가 있다. `test-timings.mjs` 로 두면 서버 테스트 러너가 이 파일을
+// **테스트로 착각해 실행하고**, 그 안에서 다시 vitest 를 돌리다 CI 에서 죽는다
+// (server job 에는 client 의존성이 없다). 실제로 한 번 겪었다.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';

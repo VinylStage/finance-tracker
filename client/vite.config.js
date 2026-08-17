@@ -57,10 +57,15 @@ export default defineConfig({
         },
       },
       {
-        // ── 오래 걸리는 화면 테스트 세 개(#630)
+        // ── 오래 걸리는 화면 테스트 여덟 개(#630)
         //
-        // 이 셋이 전체 57.6초 중 **19.8초(34%)** 다. 셋 다 디바운스(400ms)를 실제로
-        // 기다리는 테스트를 갖고 있어서 느리다.
+        // 상위 셋이 전체 57.6초 중 19.8초(34%)이고, 여덟 개면 30.6초(53%)다. 앞 셋은
+        // 디바운스(400ms)를 실제로 기다리는 테스트를 갖고 있어서 느리다.
+        //
+        // **여덟 개인 이유는 CI 실측이다.** 셋만 뺐을 때 CI 가 `heavy 31초 / rest-1 59초 /
+        // rest-2 71초` 로 오히려 heavy 가 가장 가벼웠다 — 로컬(12코어)에서는 병렬이 많이
+        // 먹어 비중이 달라 보였다. job 오버헤드(setup+npm ci+build ≈ 12초)를 감안해
+        // 실제 테스트 시간이 세 job 에서 비슷해지도록 넓혔다.
         //
         // **왜 갈래를 따로 만드나** — CI 가 샤드로 나눠 도는데(#640), `--shard` 는 파일을
         // 경로순으로 정렬해 **개수를 균등하게** 나눈다. 시간이 아니라 개수라서 이 셋이
@@ -87,6 +92,11 @@ export default defineConfig({
             'src/components/InstallmentBillingHint.test.jsx',
             'src/components/CardRemapSection.test.jsx',
             'src/components/CardEstimateHint.test.jsx',
+            'src/pages/SettingsRecurringRule.test.jsx',
+            'src/pages/SettingsCategory.test.jsx',
+            'src/pages/DashboardTrends.test.jsx',
+            'src/pages/InstallmentsForm.test.jsx',
+            'src/pages/TransactionsActions.test.jsx',
           ],
         },
       },
@@ -107,6 +117,11 @@ export default defineConfig({
             'src/components/InstallmentBillingHint.test.jsx',
             'src/components/CardRemapSection.test.jsx',
             'src/components/CardEstimateHint.test.jsx',
+            'src/pages/SettingsRecurringRule.test.jsx',
+            'src/pages/SettingsCategory.test.jsx',
+            'src/pages/DashboardTrends.test.jsx',
+            'src/pages/InstallmentsForm.test.jsx',
+            'src/pages/TransactionsActions.test.jsx',
           ],
         },
       },

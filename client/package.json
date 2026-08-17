@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:timings": "node ../scripts/test-timings.mjs"
+    "test:timings": "node ../scripts/measure-test-timings.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",
