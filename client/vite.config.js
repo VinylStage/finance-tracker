@@ -57,7 +57,41 @@ export default defineConfig({
         },
       },
       {
-        // 화면을 그리는 것 전부. 예전과 같은 환경이다.
+        // ── 오래 걸리는 화면 테스트 세 개(#630)
+        //
+        // 이 셋이 전체 57.6초 중 **19.8초(34%)** 다. 셋 다 디바운스(400ms)를 실제로
+        // 기다리는 테스트를 갖고 있어서 느리다.
+        //
+        // **왜 갈래를 따로 만드나** — CI 가 샤드로 나눠 도는데(#640), `--shard` 는 파일을
+        // 경로순으로 정렬해 **개수를 균등하게** 나눈다. 시간이 아니라 개수라서 이 셋이
+        // 한쪽에 몰리면 그 샤드만 오래 끈다. 3샤드 실측이 `[30.2, 3.1, 24.3]` 초였다 —
+        // 한 샤드는 3초에 끝나고 러너가 노는 동안 CI 는 30초를 기다린다.
+        //
+        // 파일 목록을 CLI 로 넘겨 시간 기준으로 나누는 방법을 먼저 시도했으나,
+        // **vitest 4 의 projects 모드에서는 CLI 파일 필터가 project include 와 안 맞아
+        // «No test files found» 로 죽는다**(project 를 지정해도 같다). 그래서 갈래를
+        // 설정에 두는 쪽으로 바꿨다.
+        //
+        // fake timer 로 대기를 없애는 것도 시도했는데 **더 나빠졌다** — `waitFor` 가
+        // 가짜 시계에서 폴링을 못 해 6.1초짜리가 50초가 되고 10건이 깨졌다.
+        //
+        // 목록이 낡아도 **파일이 빠지지는 않는다.** 아래 갈래가 «그 셋을 뺀 나머지 전부»
+        // 라서, 여기서 지워도 저쪽이 주워 간다. 갱신은 `npm run test:timings` 로 시간을
+        // 다시 재고 상위 셋을 보면 된다.
+        extends: true,
+        test: {
+          name: 'jsdom-heavy',
+          environment: 'jsdom',
+          setupFiles: ['./vitest.setup.js'],
+          include: [
+            'src/components/InstallmentBillingHint.test.jsx',
+            'src/components/CardRemapSection.test.jsx',
+            'src/components/CardEstimateHint.test.jsx',
+          ],
+        },
+      },
+      {
+        // 화면을 그리는 것 중 위 셋을 뺀 나머지. 예전과 같은 환경이다.
         extends: true,
         test: {
           name: 'jsdom',
@@ -66,9 +100,14 @@ export default defineConfig({
           // 이 파일을 테스트로 착각해 실행하고 실패한다. client 루트에 둔다.
           setupFiles: ['./vitest.setup.js'],
           include: ['src/**/*.test.{js,jsx}'],
-          // 위 갈래가 가져간 것을 뺀다. 두 갈래가 같은 파일을 돌리면 테스트 수가
+          // 위 갈래들이 가져간 것을 뺀다. 두 갈래가 같은 파일을 돌리면 테스트 수가
           // 두 배로 세어져 «늘었다» 로 보인다.
-          exclude: ['src/lib/**/*.test.{js,jsx}'],
+          exclude: [
+            'src/lib/**/*.test.{js,jsx}',
+            'src/components/InstallmentBillingHint.test.jsx',
+            'src/components/CardRemapSection.test.jsx',
+            'src/components/CardEstimateHint.test.jsx',
+          ],
         },
       },
     ],

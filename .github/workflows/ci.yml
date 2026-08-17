@@ -79,30 +79,41 @@ jobs:
         working-directory: client
 
   # ───────────────────────────────────────────────────────────────────────
-  # 클라이언트를 샤드 둘로 쪼갠 이유(#630)
+  # 클라이언트를 셋으로 쪼갠 이유(#630)
   #
-  # job 분리(#619) 뒤에 남은 장대가 이 job 하나였다. 112초 중 **96초가 vitest 자체**라
+  # job 분리(#619) 뒤 남은 장대가 이 job 하나였다. 112초 중 **96초가 vitest 자체**라
   # 오버헤드(setup+npm ci+build 16초)에서는 짤 것이 없었다.
   #
-  # **커버리지 게이트를 잃지 않는다.** 샤드는 자기가 실행한 파일만 놓고 커버리지를
-  # 계산하므로 단독으로는 분모가 쪼그라들지만(실측 73.25 / 67.03), `--reporter=blob`
-  # 으로 기록해 `--mergeReports` 로 합치면 전체 실행과 **소수점까지 같아진다**
-  # (93.92 / 90.89 / 91.03 / 95.51). 그래서 규칙이 하나 생긴다 —
+  # 처음엔 `--shard=N/2` 로 나눴는데(#640) **샤드가 54초 / 68초로 갈렸다.** `--shard` 는
+  # 파일을 경로순으로 정렬해 **개수를 균등하게** 나눈다 — 시간이 아니라 개수다. 파일마다
+  # 걸리는 시간이 다르므로 개수가 같아도 시간은 안 같고, **벽시계는 무거운 쪽이 정한다.**
   #
-  #   샤드 job    게이트를 돌리지 않는다. blob 만 뜬다
-  #   병합 job    게이트를 여기서 한 번 돈다
+  # 실측(124파일 / 57.6초)에서 상위 세 파일이 19.8초로 **전체의 34%** 였다. 3샤드를
+  # 개수로 나누면 `[30.2, 3.1, 24.3]` 초가 된다 — 한 샤드는 3초에 끝나고 러너가 노는
+  # 동안 CI 는 30초를 기다린다.
   #
-  # 샤드가 각자 게이트를 돌면 **거짓 실패**가 난다(75.87% 가 90% 미달로 잡힌다).
-  # 그래서 샤드 job 은 임계값을 0 으로 눌러 끈다.
+  # 그래서 그 셋을 `jsdom-heavy` 갈래로 빼고(`client/vite.config.js`) 나머지를 둘로
+  # 나눈다. 목록이 낡아도 파일은 안 빠진다 — `jsdom` 갈래가 «그 셋을 뺀 나머지 전부»
+  # 라서다. 갱신은 `npm run test:timings`.
+  #
+  # 커버리지는 그대로 지킨다 — 샤드 job 은 게이트를 돌리지 않고 blob 만 뜨고,
+  # 병합 job 이 한 번 돈다. 샤드가 각자 돌면 거짓 실패가 난다(부분 커버리지).
   client:
-    name: Test client (vitest) ${{ matrix.shard }}/2
+    name: Test client (${{ matrix.label }})
     runs-on: ubuntu-latest
     strategy:
-      # 한 샤드가 깨져도 나머지를 끝까지 돌린다. 어느 샤드가 깨졌는지만 보고
-      # 끝내면 다른 샤드의 실패를 다음 실행에서 또 발견한다.
+      # 한 갈래가 깨져도 나머지를 끝까지 돌린다. 어느 쪽이 깨졌는지만 보고 끝내면
+      # 다른 갈래의 실패를 다음 실행에서 또 발견한다.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        include:
+          # 순수 로직(node)은 1초라 무거운 셋에 붙여도 부담이 없다.
+          - label: heavy
+            args: --project=node --project=jsdom-heavy
+          - label: rest-1
+            args: --project=jsdom --shard=1/2
+          - label: rest-2
+            args: --project=jsdom --shard=2/2
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -114,24 +125,22 @@ jobs:
         working-directory: client
       - run: npm run build
         working-directory: client
-      # 임계값을 0 으로 눌러 게이트를 끈다. 샤드 커버리지로 판정하면 안 된다.
-      - name: Test client shard ${{ matrix.shard }}/2
+      # 임계값을 0 으로 눌러 게이트를 끈다. 부분 커버리지로 판정하면 안 된다.
+      - name: Test client (${{ matrix.label }})
         run: >-
-          npx vitest run --shard=${{ matrix.shard }}/2 --coverage --reporter=blob
+          npx vitest run ${{ matrix.args }} --coverage --reporter=blob
           --coverage.thresholds.lines=0 --coverage.thresholds.branches=0
           --coverage.thresholds.functions=0 --coverage.thresholds.statements=0
         working-directory: client
       - uses: actions/upload-artifact@v4
         with:
-          name: vitest-blob-${{ matrix.shard }}
+          name: vitest-blob-${{ matrix.label }}
           path: client/.vitest-reports/*
           retention-days: 1
           if-no-files-found: error
           # `.vitest-reports` 는 **점으로 시작하는 디렉터리**다. upload-artifact v4 는
           # 숨김 파일을 기본으로 제외해서, blob 이 제대로 쓰였는데도
-          # «No files were found» 로 죽는다(첫 실행에서 실제로 겪었다 —
-          # 로그에 `blob report written to …/client/.vitest-reports/blob-1-2.json` 이
-          # 찍힌 뒤 업로드가 빈손으로 끝났다).
+          # «No files were found» 로 죽는다(#640 첫 실행에서 실제로 겪었다).
           include-hidden-files: true
 
   # 샤드 결과를 합쳐 **커버리지 게이트를 여기서 한 번** 돈다.
