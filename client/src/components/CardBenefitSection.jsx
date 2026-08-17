@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import EmptyState from './EmptyState';
 import { formatWon } from '../lib/format';
+import { conditionText } from '../lib/benefitConditionText';
 import { useConfirm } from './ConfirmProvider';
 
 // 서버 `src/constants.js` 의 BENEFIT_TYPES 와 같아야 한다. 어긋나면 저장할 때만 400 이 난다.
@@ -51,15 +52,6 @@ function targetLabel(b) {
   if (b.category_name) return b.category_name;
   if (b.merchant_pattern) return `가맹점 '${b.merchant_pattern}'`;
   return '모든 결제';
-}
-
-// 조건을 사람이 읽는 말로. 없는 조건은 아예 말하지 않는다 — "한도 없음" 을
-// 적으면 한도가 설정된 것처럼 읽힌다.
-function conditionLabel(b) {
-  const parts = [];
-  if (b.min_amount > 0) parts.push(`${formatWon(b.min_amount)} 이상 결제`);
-  if (b.monthly_cap !== null && b.monthly_cap !== undefined) parts.push(`월 ${formatWon(b.monthly_cap)}까지`);
-  return parts.join(' · ');
 }
 
 const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
@@ -593,8 +585,8 @@ export default function CardBenefitSection({ categories = [] }) {
             <li key={b.id} className="text-xs text-body flex flex-wrap items-baseline gap-x-2">
               <strong className="text-body">{headline(b)}</strong>
               <span className="text-caption">{targetLabel(b)}</span>
-              {conditionLabel(b) && (
-                <span className="text-caption">{conditionLabel(b)}</span>
+              {conditionText(b) && (
+                <span className="text-caption">{conditionText(b)}</span>
               )}
               {b.memo && (
                 <span className="text-caption">{b.memo}</span>
