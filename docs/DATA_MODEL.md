@@ -27,6 +27,28 @@
 | merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |
 | recurrence_suggestion_dismissals | 반복 거래 제안에서 사용자가 거절한 가맹점 (#499). 세션이 아니라 DB 에 남긴다 — "이번엔 안 본다" 가 아니라 "이건 반복이 아니다" 라는 지속적 판단이라 기기를 바꿔도 유지돼야 한다 | id, merchant, dismissed_at |
 | card_threshold_tiers | 카드별 전월실적 구간과 그 구간의 요율 (#526). 구간 수가 카드마다 달라 컬럼이 아니라 행으로 둔다. `monthly_cap` 은 그 구간의 **카드 월 통합 한도**(#578) — 항목별 한도는 `card_benefits.rule_json` 의 `caps[]` 에 있고 이쪽은 카드 단위 정본이다. NULL 이면 통합 한도를 걸지 않는다 | id, card_product_id, min_spend, rate, label, monthly_cap, created_at |
+
+### 혜택 한도는 두 층이다 — 어느 값이 어느 층인지 (#578)
+
+| 층 | 저장 위치 | 없을 때 |
+|---|---|---|
+| 항목별 한도 (건당·일·월) | `card_benefits.rule_json` 의 `caps[{window, amount}]` | 옛 `card_benefits.monthly_cap` 컬럼을 **월 항목 한도로** 읽는다 |
+| 카드 월 통합 한도 | `card_threshold_tiers.monthly_cap` (활성 구간) | 옛 `card_benefits.monthly_cap` 컬럼을 **통합 한도로** 읽는다 |
+
+자르는 순서는 **항목 → 통합** 이다. 두 자르기가 모두 `min` 이라 순서가 금액을 바꾸지는
+않지만(48개 조합으로 확인), **어느 층에 잘렸다고 화면에 말하는지**가 순서로 정해진다.
+
+**옛 컬럼이 두 층에서 동시에 읽히는 것은 의도다.** 한쪽으로만 읽으면 구멍이 난다 —
+구간에 통합 한도가 생기는 순간 컬럼이 통합 자리에서 밀려나고, 그 줄이 자기 한도를
+`caps` 로 옮기지 않았다면 **그 줄의 한도가 계산에서 사라져 과대추정이 된다.**
+나라사랑카드의 Easy 줄 6개가 그 모양이다(실적 무관 줄이라 구간을 안 가리키면서 각자
+개별 한도를 컬럼에 갖고 있다). 요율 20% / 한도 3,000 인 줄이면 5만원 결제에서 3,000 이
+10,000 으로 부푼다 — M8 이 더미데이터 검증에서 찾았다.
+
+겹쳐 읽어 같은 값으로 두 번 자르는 카드가 생기지만 `min` 이라 결과가 달라지지 않는다.
+
+**새 카드를 넣을 때**: 항목 한도는 `caps` 에 적는다. 컬럼은 옛 데이터를 위한 폴백이고
+새로 채우지 않는다.
 | card_threshold_exclusions | 사용자가 카드 실적 집계에서 뺀 거래 (#526). 행이 있으면 제외, 지우면 재포함 | id, transaction_id, reason, excluded_at |
 | schema_migrations | 적용된 마이그레이션 파일 이름 | id, name, applied_at |
 
