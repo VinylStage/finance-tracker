@@ -115,14 +115,58 @@ function compareCards({ transactions, cards } = {}) {
 
   // 월 한도는 카드마다 누적된다. 거래를 순서대로 훑으며 각 카드가 이미 받은
   // 혜택을 들고 간다 — 안 그러면 한도가 있는 혜택이 매 거래마다 새로 열린다.
-  const used = new Map(cardList.map((c) => [c.id, 0]));
+  //
+  // **달이 바뀌면 비운다(#637).** 예전에는 안 비웠다. 이 함수의 기본 구간이 3개월
+  // 이라, 월 한도 1만원인 혜택이 «3개월에 1만원» 처럼 걸렸다 — 둘째 달·셋째 달의
+  // 혜택이 통째로 사라진다. 「이미 받은 혜택」 이 어느 창의 누적인지 정하지 않은
+  // 채로 들고 다닌 것이 원인이다.
+  let used = new Map(cardList.map((c) => [c.id, 0]));
   const gained = new Map(cardList.map((c) => [c.id, 0]));
+
+  // 항목별·창별 누적(#637). 키는 혜택 줄 id 다 (`card_benefits.id` 는 카드마다
+  // 유일하므로 카드 id 를 섞을 필요가 없다).
+  //
+  // 이게 있어야 하는 이유 둘.
+  //
+  //   1. `day` 창이 계산에 **걸린다.** 예전에는 일 누적을 아무도 몰라서 선언만
+  //      받고 넘겼다(#631). 이 카드의 «군마트 일 2만원» · «쿠팡 일 1천원» 이
+  //      전부 안 걸리고 있었다.
+  //   2. `month` 창을 **항목 단위**로 자른다. 예전에는 카드 단위 누적을 넘겨서
+  //      같은 카드의 다른 항목이 쓴 몫까지 뺐다 — 과하게 잘렸다.
+  //
+  // 저장 표를 새로 만들지 않는다. 이 훑기가 이미 날짜 순서로 돌기 때문에 훑는
+  // 동안만 들고 있으면 된다. 표를 만들면 계산할 때마다 쓰고 지워야 하고, 그
+  // 표가 계산 결과와 어긋나는 순간을 아무도 못 잡는다.
+  const itemAcc = new Map();
+  let curYm = null;
 
   let totalGap = 0;
   const details = [];
 
   for (const tx of analyzable) {
     const amount = Number(tx.amount) || 0;
+    // 날짜를 못 읽으면 일 누적을 **안다고 하지 않는다.** 0 으로 채우면 한도가
+    // 안 걸린 것을 걸린 것처럼 보이게 한다 — 신호 부재를 통과로 읽는 셈이다.
+    const ymd = /^\d{4}-\d{2}-\d{2}$/.test(String(tx.date || '')) ? String(tx.date) : null;
+    const ym = ymd ? ymd.slice(0, 7) : null;
+
+    // 달이 바뀌면 월 누적을 전부 비운다. 카드 단위도, 항목 단위도 같이 비운다 —
+    // 한쪽만 비우면 두 층의 자르기가 서로 다른 달을 보게 된다.
+    if (ym !== null && ym !== curYm) {
+      curYm = ym;
+      used = new Map(cardList.map((c) => [c.id, 0]));
+      for (const acc of itemAcc.values()) { acc.ym = null; acc.month = 0; }
+    }
+
+    // 이 거래 시점에서 각 혜택 줄이 이미 받은 몫. 계산기가 고른 줄에 대해서만 묻는다.
+    const itemUsedFor = (benefitId) => {
+      const acc = itemAcc.get(benefitId);
+      const out = { month: acc && acc.ym === ym ? acc.month : 0 };
+      // 날짜를 모르면 `day` 를 아예 안 싣는다. 그러면 계산기가 «적용 못 한 창» 으로
+      // 보고해 화면이 그 사실을 말할 수 있다.
+      if (ymd !== null) out.day = acc && acc.ymd === ymd ? acc.day : 0;
+      return out;
+    };
 
     // 카드마다 이 거래를 계산한다. 한도 누적은 **가정 계산에도** 반영한다 —
     // 안 그러면 한도가 작은 카드가 실제보다 좋아 보인다.
@@ -147,6 +191,8 @@ function compareCards({ transactions, cards } = {}) {
         // 안 넘기면 그런 혜택이 통째로 빠진다 — 여기서 빠뜨리면 계산기는
         // 「날짜를 모른다」 로 읽고 조용히 뺀다.
         date: tx.date,
+        // 항목별·창별 누적(#637). 계산기가 고른 줄에 대해서만 불린다.
+        itemUsedFor,
       });
       return { cardId: card.id, productName: card.product_name, ...r };
     });
@@ -160,7 +206,22 @@ function compareCards({ transactions, cards } = {}) {
 
     // 실제로 쓴 카드만 한도를 소진한다. 가정은 소진시키지 않는다 —
     // 가정끼리 서로의 한도를 깎으면 계산이 뒤엉킨다.
-    if (actual) used.set(actual.cardId, (used.get(actual.cardId) || 0) + actual.benefit);
+    if (actual) {
+      used.set(actual.cardId, (used.get(actual.cardId) || 0) + actual.benefit);
+
+      // 어느 줄이 얼마를 썼는지 항목 단위로도 적는다(#637). 이게 다음 거래의
+      // 일·월 한도를 정한다. **고른 줄이 있을 때만** 적는다 — 아무것도 안 걸린
+      // 거래는 어떤 줄의 한도도 소진하지 않는다.
+      if (actual.applied && actual.benefit > 0) {
+        const id = actual.applied.id;
+        const acc = itemAcc.get(id) || { ym: null, month: 0, ymd: null, day: 0 };
+        if (acc.ym !== ym) { acc.ym = ym; acc.month = 0; }
+        if (acc.ymd !== ymd) { acc.ymd = ymd; acc.day = 0; }
+        acc.month += actual.benefit;
+        acc.day += actual.benefit;
+        itemAcc.set(id, acc);
+      }
+    }
 
     const actualBenefit = actual ? actual.benefit : 0;
     const gap = Math.max(0, best.benefit - actualBenefit);

@@ -29,6 +29,13 @@ function estimateBenefit({
   // 거래일 `YYYY-MM-DD`(#638). 특정 날짜에만 붙는 혜택을 가리는 데만 쓴다.
   // 없으면 그런 혜택을 뺀 채 계산하고 `undatedSkipped` 로 알린다.
   date,
+  // 혜택 줄 id 를 받아 그 줄이 이 창에서 이미 받은 몫을 내는 함수(#637).
+  // `{ month, day }` 를 낸다. 아는 창만 실으면 된다 — 안 실은 창은 예전처럼
+  // 「적용 못 함」 으로 보고된다.
+  //
+  // 거래를 날짜 순으로 훑는 호출부만 넘길 수 있다. 안 넘기면 예전 그대로
+  // 카드 단위 누적(`benefitUsedThisMonth`)으로 자른다.
+  itemUsedFor,
 }) {
   // 1. 후보 고르기
   let candidates = [];
@@ -193,8 +200,15 @@ function estimateBenefit({
       itemCaps.push({ window: 'month', amount: toInt(best.monthly_cap) });
     }
 
+    // 항목별 누적을 아는 호출부가 있으면 그것이 정본이다(#637). 카드 단위
+    // 누적은 같은 카드의 다른 항목이 쓴 몫까지 빼므로 과하게 자른다.
+    // 안 넘어오면 예전 그대로다 — 거래 하나만 보는 호출부는 누적을 모른다.
+    const itemUsage = typeof itemUsedFor === 'function' ? (itemUsedFor(best.id) || {}) : null;
     const itemCut = applyItemCaps(calculatedBenefit, itemCaps, {
-      month: benefitUsedThisMonth,
+      month: itemUsage && itemUsage.month !== undefined ? itemUsage.month : benefitUsedThisMonth,
+      // `day` 는 아는 호출부만 싣는다. 안 실리면 `applyItemCaps` 가 자르지 않고
+      // 「적용 못 한 창」 으로 보고한다 — 모르는 것을 0 으로 채우지 않는다.
+      ...(itemUsage && itemUsage.day !== undefined ? { day: itemUsage.day } : {}),
     });
 
     // 2층: 카드 월 통합 한도 — 실적 구간의 값이 정본이고, 없으면 옛
