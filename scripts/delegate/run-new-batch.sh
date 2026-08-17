@@ -45,7 +45,13 @@ ollama_ready() {
 # 스냅샷은 **run_aider 직전마다** 다시 뜬다. 실행 시작 시점에 한 번만 뜨면,
 # 그 뒤 다른 실행이 만든 파일이 전부 "이 실행이 만든 stray" 로 보인다.
 # 실제로 좀비가 된 같은 라벨 실행이 남의 산출물 두 개를 지웠다.
-snapshot_before() { git status --porcelain=v1 > "$SC/before-$label.txt"; }
+#
+# 판정 로직은 `scope-snapshot.sh` 한 곳에만 둔다(#580). 여기 인라인으로 두면
+# 테스트가 그 로직을 부를 방법이 없어서, 예전 검사가 새는 것을 두 번 잃고서야
+# 알았다. 이 파일은 **부르고 되돌리는 일**만 한다.
+SCOPE=${0:A:h}/scope-snapshot.sh
+
+snapshot_before() { $SCOPE snapshot "$SC/before-$label.txt" "${reads[@]}"; }
 
 # 같은 라벨이 이미 돌고 있으면 시작하지 않는다. 스냅샷 파일이 라벨 키라서
 # 두 실행이 서로의 before/after 를 덮어쓴다.
@@ -61,9 +67,9 @@ acquire_lock() {
 }
 
 scope_check() {   # 배치 밖 파일이 바뀌었나
-  git status --porcelain=v1 > "$SC/after-$label.txt"
-  local stray=$(comm -13 <(sort "$SC/before-$label.txt") <(sort "$SC/after-$label.txt") \
-                | awk '{print $2}' | grep -v "^${target}$")
+  # 판정은 scope-snapshot.sh 가 한다. 여기서 하는 일은 되돌리기다.
+  local stray
+  stray=$($SCOPE compare "$SC/before-$label.txt" "$SC/after-$label.txt" "$target" "${reads[@]}")
   if [[ -n "$stray" ]]; then
     print "  ✖ 배치 밖 편집: $stray"
     print -r -- "$stray" | while read f; do git checkout -- "$f" 2>/dev/null || rm -f "$f"; done
@@ -163,6 +169,16 @@ record_numstat() {
 
 ollama_ready || exit 1
 acquire_lock || exit 3
+
+# 더러운 트리에서 시작하는 것을 알린다(#580). 이제 내용 해시로 재므로 이미 수정된
+# 파일이 더 망가지면 잡히기는 한다. 다만 **다른 세션이 같은 파일을 그 사이 고치면
+# 이 라운드의 오염으로 오판**하고 되돌려 버린다. 그래서 여전히 커밋해 비우는 것이 맞다.
+dirty=$(git status --porcelain=v1 --untracked-files=all | grep -v "^?? .*$target\$" | wc -l | tr -d ' ')
+if (( dirty > 0 )); then
+  print "  ⚠ 작업 트리에 $dirty 건이 떠 있다. 위임 전에 커밋해 비우는 것을 권한다"
+  print "     (내용 해시로 재므로 오염은 잡히지만, 다른 세션의 편집을 이 라운드 것으로 오판할 수 있다)"
+fi
+
 print "=== $label 위임 시작 ==="
 snapshot_before
 run_aider "$spec" "$M/aider-$label.log"
