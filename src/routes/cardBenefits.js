@@ -142,6 +142,9 @@ function normalize(body) {
     // 실적 조건이 붙지 않는 혜택인가(#636). 안 보내면 0 — «조건이 붙는다» 가
     // 기본이다. 카드 약관이 «실적 조건 없는 서비스» 라고 따로 밝힌 것만 1 이다.
     threshold_exempt: body.threshold_exempt ? 1 : 0,
+    // 카드 월 통합 한도 밖인가(#648). 안 보내면 0 — «든다» 가 기본이다.
+    // 약관이 그 상한과 별개라고 따로 밝힌 것만 1 이다.
+    unified_cap_exempt: body.unified_cap_exempt ? 1 : 0,
   };
 }
 
@@ -194,11 +197,11 @@ router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', '
     const b = normalize(req.body);
     const info = db.prepare(`
       INSERT INTO card_benefits
-        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, max_amount, memo, payment_style, card_threshold_tier_id, rule_json, threshold_exempt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, max_amount, memo, payment_style, card_threshold_tier_id, rule_json, threshold_exempt, unified_cap_exempt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
            b.rate, b.monthly_cap, b.min_amount, b.max_amount, b.memo, b.payment_style,
-           b.card_threshold_tier_id, b.rule_json, b.threshold_exempt);
+           b.card_threshold_tier_id, b.rule_json, b.threshold_exempt, b.unified_cap_exempt);
     res.status(201).json({ id: info.lastInsertRowid, ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
@@ -221,11 +224,11 @@ router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap',
       UPDATE card_benefits
       SET card_product_id=?, category_id=?, merchant_pattern=?, benefit_type=?,
           rate=?, monthly_cap=?, min_amount=?, max_amount=?, memo=?, payment_style=?,
-          card_threshold_tier_id=?, rule_json=?, threshold_exempt=?
+          card_threshold_tier_id=?, rule_json=?, threshold_exempt=?, unified_cap_exempt=?
       WHERE id=?
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
            b.rate, b.monthly_cap, b.min_amount, b.max_amount, b.memo, b.payment_style,
-           b.card_threshold_tier_id, b.rule_json, b.threshold_exempt, req.params.id);
+           b.card_threshold_tier_id, b.rule_json, b.threshold_exempt, b.unified_cap_exempt, req.params.id);
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
