@@ -10,7 +10,7 @@ const os = require('node:os');
 // transactions.js가 이미 검증한 "범위 전체를 한 번에 조회 후 JS에서 기간별로
 // 합산" 패턴으로 통일한 뒤에도 집계 결과 자체는 그대로인지 확인한다.
 
-const PORT = 34584; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20584; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

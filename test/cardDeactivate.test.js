@@ -20,7 +20,7 @@ const { startTestServer } = require('./helpers/testServer');
 //   C. 비활성 카드는 새 거래에서 고를 수 없다
 //   D. 같은 카드를 다시 등록하려 하면 재활성화를 제안한다
 
-const PORT = 34714; // 다른 테스트와 겹치지 않는 포트
+const PORT = 20714; // 다른 테스트와 겹치지 않는 포트
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

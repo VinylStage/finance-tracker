@@ -14,7 +14,7 @@ const { startTestServer } = require('./helpers/testServer');
 //   2. 지나친 것을 따로 볼 수 있는가
 //   3. 되돌리면 후보로 다시 나오는가
 
-const PORT = 34988;
+const PORT = 20988;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

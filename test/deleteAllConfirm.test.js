@@ -14,7 +14,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 않는 것**이 이 파일의 핵심이다. 400 만 확인하고 데이터를 안 보면, 지우고 나서
 // 400 을 주는 구현도 통과한다.
 
-const PORT = 34702;
+const PORT = 20702;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let catId;

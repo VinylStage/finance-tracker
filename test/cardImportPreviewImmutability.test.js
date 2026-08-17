@@ -18,7 +18,7 @@ const Database = require('better-sqlite3');
 //
 // 카드 임포트는 이 앱에서 가장 큰 대량 경로다(#306 실측 카드 거래 447건).
 
-const PORT = 34624;
+const PORT = 20624;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;

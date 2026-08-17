@@ -3,7 +3,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const { startTestServer } = require('./helpers/testServer');
 
-const PORT = 34717;
+const PORT = 20717;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
