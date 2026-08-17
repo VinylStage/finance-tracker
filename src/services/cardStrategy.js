@@ -146,7 +146,25 @@ function estimateBenefit({
     // 항목별 누적을 알려면 «어느 거래에 어느 혜택이 붙었나» 가 남아 있어야 하는데
     // 이 저장소는 그것을 저장하지 않는다(#631). 과하게 자르는 쪽이 과대추정보다
     // 덜 해롭다 — 다른 카드에서 과대적립을 되돌린 것과 같은 기준이다.
-    const itemCut = applyItemCaps(calculatedBenefit, capsOf(best), {
+    // 옛 `card_benefits.monthly_cap` 컬럼도 **항목 한도로 읽는다.**
+    //
+    // 이게 없으면 구간에 통합 한도가 생기는 순간 그 컬럼이 아래 폴백 자리에서
+    // 밀려나 **그 줄의 한도가 계산에서 아예 사라진다.** 나라사랑카드의 Easy 줄
+    // 6개가 정확히 그 모양이다 — 실적과 무관한 줄이라 구간을 안 가리키면서 각자
+    // 개별 한도(3,000 · 5,000 · 50,000 · 100,000)를 이 컬럼에 갖고 있다. 요율
+    // 20% / 한도 3,000 인 줄이면 5만원 결제에서 3,000 이 10,000 으로 부푼다.
+    //
+    // 선언(`caps`)에 `month` 창이 있으면 그것이 정본이다. 컬럼은 선언이 없을 때만 쓴다.
+    //
+    // 아래 통합 폴백과 겹쳐 같은 값으로 두 번 자르는 카드가 생기는데, 두 자르기가
+    // 모두 `min` 이라 결과가 달라지지 않는다(#578 에서 48개 조합으로 확인).
+    const itemCaps = capsOf(best);
+    if (best.monthly_cap !== null && best.monthly_cap !== undefined
+        && !itemCaps.some((c) => c.window === 'month')) {
+      itemCaps.push({ window: 'month', amount: toInt(best.monthly_cap) });
+    }
+
+    const itemCut = applyItemCaps(calculatedBenefit, itemCaps, {
       month: benefitUsedThisMonth,
     });
 
