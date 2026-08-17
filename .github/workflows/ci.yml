@@ -9,7 +9,20 @@ permissions:
   contents: read
 
 jobs:
-  ci:
+  # ─────────────────────────────────────────────────────────────────────────
+  # job 을 셋으로 나눈 이유(#619)
+  #
+  # 예전에는 전부 한 job 에서 순차로 돌았다. 클라이언트 테스트 90초 + 서버 30초 +
+  # 나머지라 벽시계가 **합계**였고, CI 한 번에 150초가 걸렸다.
+  #
+  # 나누면 벽시계가 합계에서 **최댓값**이 된다. `npm ci` 를 job 마다 다시 하므로
+  # 총 러너 시간은 늘지만, 줄어드는 것은 **사람이 기다리는 시간**이고 그게 목적이다.
+  #
+  # 필수 검사 이름(`ci`)은 맨 아래 게이트 job 이 그대로 들고 있다 — 이름이 사라지면
+  # 브랜치 보호가 깨진다.
+
+  checks:
+    name: Checks (docs · lint · ports · audit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -64,9 +77,52 @@ jobs:
       - name: Audit dependencies (client)
         run: npm audit --audit-level=high
         working-directory: client
+
+  client:
+    name: Test client (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      # 이 job 은 서버 의존성을 안 쓴다. 빌드와 vitest 만 돈다.
+      - run: npm ci
+        working-directory: client
       - run: npm run build
         working-directory: client
       - name: Test client (vitest)
         run: npm run test:coverage
         working-directory: client
+
+  server:
+    name: Test server (node --test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      # 이 job 은 클라이언트 의존성을 안 쓴다.
+      - run: npm ci
       - run: npm run test:coverage --if-present
+
+  # 브랜치 보호가 요구하는 이름은 `ci` 하나다. 위 셋을 여기서 모은다.
+  #
+  # `if: always()` 와 명시적 판정을 쓴다. 그냥 `needs` 만 두면 앞 job 이 실패했을 때
+  # 이 job 이 **건너뛰어지는데**, 건너뛴 필수 검사를 GitHub 이 통과로 세는 설정이
+  # 있다. 그러면 빨간 CI 를 머지할 수 있게 된다 — 막으려던 것과 정반대다.
+  ci:
+    name: ci
+    needs: [checks, client, server]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 앞 job 이 하나라도 실패하면 막는다
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "checks=${{ needs.checks.result }} client=${{ needs.client.result }} server=${{ needs.server.result }}"
+          exit 1
+      - run: echo "checks · client · server 전부 통과"
