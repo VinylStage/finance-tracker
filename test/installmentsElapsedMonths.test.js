@@ -8,7 +8,7 @@ const { startTestServer } = require('./helpers/testServer');
 // test/date.test.js의 localYearMonth 유닛테스트가 확인하고, 여기서는 리팩터링
 // 후에도 실제 HTTP+DB 경로에서 경과월 산술이 여전히 정확한지 확인한다.
 
-const PORT = 34587; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20587; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

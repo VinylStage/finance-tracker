@@ -9,7 +9,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 15초를 폴링했는데, 서버가 준비 전에 죽어도 그걸 모르고 상한을 채웠다 —
 // CI 에서 실제로 15,033ms 를 기다린 끝에 실패했다. 헬퍼는 종료를 즉시 잡는다.
 
-const PORT = 34602; // 다른 테스트 파일과 충돌 안 나게 임의 포트 사용
+const PORT = 20602; // 다른 테스트 파일과 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

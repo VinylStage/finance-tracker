@@ -10,7 +10,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 쪽이 없다" 를 또 만들지 않으려면, 감지 결과가 실제로 API 를 타고 나오는지와
 // 거절이 실제로 기억되는지를 봐야 한다.
 
-const PORT = 35002;
+const PORT = 21002;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

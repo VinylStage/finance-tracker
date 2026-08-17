@@ -19,7 +19,7 @@ let pmId;
 let onlineCatId;
 let otherCatId;
 
-const PORT = 34613;
+const PORT = 20613;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;
