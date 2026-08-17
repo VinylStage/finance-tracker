@@ -155,6 +155,114 @@ function runCatchup(db, options = {}) {
   return runAs('system', apply);
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 꺼둔 규칙을 다시 켤 때 무엇이 생기는지 먼저 보여준다(#489)
+//
+// `SELECT_ACTIVE` 주석이 «다시 켤 때 공백을 어떻게 할지는 시스템이 정하지 않고
+// 사용자에게 묻는다(#279 확정)» 고 적어 뒀는데, **묻는 경로가 없었다.** 규칙을 다시
+// 켜면 다음 기동의 따라잡기가 꺼져 있던 구간을 규칙대로 채운다. 사용자는 그 사이
+// 거래가 생기는 것을 고른 적이 없고, 되돌린 순간에는 아무 일도 없으므로 다음 기동
+// 때까지 눈치채지도 못한다.
+//
+// 그래서 «프리뷰 → 확인 → 실행» 을 붙인다(CLAUDE.md 의 대량 변경 규칙).
+// 이 함수는 **DB 를 바꾸지 않는다.**
+//
+// 판정 규칙은 `runCatchup` 과 같아야 한다 — 여기서 보여준 것과 실제로 생기는 것이
+// 다르면 프리뷰가 거짓이 된다. 그래서 같은 `windowFor` · `occurrencesBetween` ·
+// 같은 «이미 처리한 달» 판정을 쓴다.
+const SELECT_ONE_RULE = `
+  SELECT id, category_id, merchant, amount, payment_method_id, payment_style, memo,
+         day_of_month, freq, interval, starts_on, ends_on, month_of_year, last_run_on, is_active
+  FROM recurring_rules WHERE id = ?
+`;
+
+const SELECT_OCC_DATES = `
+  SELECT occurred_on FROM recurring_occurrences WHERE rule_id = ?
+`;
+
+/**
+ * 규칙을 다시 켰을 때 따라잡기가 만들 발생일을 미리 센다. DB 를 바꾸지 않는다.
+ *
+ * @returns {null|{ruleId, merchant, amount, from, to, today, dates: string[], count, totalAmount, alreadyActive}}
+ */
+function reactivationPreview(db, ruleId, options = {}) {
+  const today = options.today || localToday();
+  const rule = db.prepare(SELECT_ONE_RULE).get(ruleId);
+  if (!rule) return null;
+
+  const { from, to } = windowFor(rule, today);
+
+  // 구간이 성립하지 않으면 생길 것이 없다. 빈 목록을 내되 이유가 드러나게 from/to 는 싣는다.
+  const dates = (!from || !to || from > to) ? [] : occurrencesBetween(rule, from, to);
+
+  // 화면에서 이미 처리한 달과, 이미 만들어진 발생일을 뺀다. 이 둘을 안 빼면
+  // 프리뷰가 실제보다 많이 세어 «이만큼 생깁니다» 가 거짓이 된다.
+  const handled = new Set(db.prepare(SELECT_HANDLED_MONTHS).all(ruleId).map((r) => r.year_month));
+  const existing = new Set(db.prepare(SELECT_OCC_DATES).all(ruleId).map((r) => r.occurred_on));
+
+  const pending = dates.filter((d) => !handled.has(d.slice(0, 7)) && !existing.has(d));
+
+  return {
+    ruleId: rule.id,
+    merchant: rule.merchant,
+    amount: rule.amount,
+    from,
+    to,
+    today,
+    dates: pending,
+    count: pending.length,
+    totalAmount: pending.length * rule.amount,
+    // 이미 켜져 있는 규칙에도 답을 낸다 — 화면이 «켜는 중» 이 아니라 «지금 켜면» 을
+    // 물을 수도 있고, 켜져 있는데 프리뷰가 비면 그것도 사실이다.
+    alreadyActive: rule.is_active === 1,
+  };
+}
+
+// 다시 켜는 방식. 사용자가 고른다(#489).
+//
+//   all       공백을 그대로 채운다. last_run_on 을 건드리지 않는다
+//   from-now  공백을 버린다. last_run_on 을 오늘로 밀어 따라잡기가 지나간 구간을 안 본다
+//   from-date 적용 시작일을 바꿔 그 날부터 재개한다. starts_on 과 last_run_on 을 함께 옮긴다
+const REACTIVATE_MODES = ['all', 'from-now', 'from-date'];
+
+/**
+ * 규칙을 다시 켠다. **거래를 만들지 않는다** — 다음 따라잡기가 무엇을 볼지만 정한다.
+ *
+ * `from-date` 는 `starts_on` 을 옮기므로 규칙의 정의가 바뀐다. 그 앞의 발생일은
+ * 따라잡기 대상에서 영구히 빠진다.
+ */
+function reactivateRule(db, ruleId, { mode, startsOn, today: todayOpt } = {}) {
+  const today = todayOpt || localToday();
+  if (!REACTIVATE_MODES.includes(mode)) {
+    return { ok: false, error: `모르는 재개 방식입니다: ${mode}` };
+  }
+  const rule = db.prepare(SELECT_ONE_RULE).get(ruleId);
+  if (!rule) return { ok: false, error: '규칙을 찾을 수 없습니다.' };
+
+  if (mode === 'from-date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startsOn || ''))) {
+      return { ok: false, error: '재개할 날짜를 YYYY-MM-DD 로 보내 주세요.' };
+    }
+  }
+
+  const apply = db.transaction(() => {
+    if (mode === 'all') {
+      db.prepare('UPDATE recurring_rules SET is_active = 1 WHERE id = ?').run(ruleId);
+    } else if (mode === 'from-now') {
+      // 오늘로 밀면 `windowFor` 의 from 이 오늘이 되어 지나간 구간이 대상에서 빠진다.
+      db.prepare('UPDATE recurring_rules SET is_active = 1, last_run_on = ? WHERE id = ?')
+        .run(today, ruleId);
+    } else {
+      // 적용 시작일을 옮긴다. last_run_on 도 같이 옮겨야 그 앞을 다시 안 본다.
+      db.prepare('UPDATE recurring_rules SET is_active = 1, starts_on = ?, last_run_on = ? WHERE id = ?')
+        .run(startsOn, startsOn, ruleId);
+    }
+    return { ok: true, mode, ruleId, today };
+  });
+
+  return apply();
+}
+
 // 기동 시 1회 실행한 결과를 화면이 나중에 가져간다. 라우트가 서버 파일의
 // 지역 변수를 들여다보지 않도록 여기에 둔다.
 let lastSummary = { created: 0, skipped: 0, rules: 0, details: [], error: null };
@@ -162,4 +270,4 @@ let lastSummary = { created: 0, skipped: 0, rules: 0, details: [], error: null }
 function setLastCatchupSummary(summary) { lastSummary = summary; }
 function getLastCatchupSummary() { return { ...lastSummary }; }
 
-module.exports = { runCatchup, windowFor, localToday, setLastCatchupSummary, getLastCatchupSummary };
+module.exports = { runCatchup, reactivationPreview, reactivateRule, REACTIVATE_MODES, windowFor, localToday, setLastCatchupSummary, getLastCatchupSummary };
