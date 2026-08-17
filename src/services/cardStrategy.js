@@ -203,13 +203,21 @@ function estimateBenefit({
     // 항목별 누적을 아는 호출부가 있으면 그것이 정본이다(#637). 카드 단위
     // 누적은 같은 카드의 다른 항목이 쓴 몫까지 빼므로 과하게 자른다.
     // 안 넘어오면 예전 그대로다 — 거래 하나만 보는 호출부는 누적을 모른다.
-    const itemUsage = typeof itemUsedFor === 'function' ? (itemUsedFor(best.id) || {}) : null;
-    const itemCut = applyItemCaps(calculatedBenefit, itemCaps, {
-      month: itemUsage && itemUsage.month !== undefined ? itemUsage.month : benefitUsedThisMonth,
-      // `day` 는 아는 호출부만 싣는다. 안 실리면 `applyItemCaps` 가 자르지 않고
-      // 「적용 못 한 창」 으로 보고한다 — 모르는 것을 0 으로 채우지 않는다.
-      ...(itemUsage && itemUsage.day !== undefined ? { day: itemUsage.day } : {}),
-    });
+    const acc = typeof itemUsedFor === 'function' ? (itemUsedFor(best.id) || {}) : null;
+    const itemUsage = acc && acc.used ? acc.used : null;
+    const itemCut = applyItemCaps(
+      calculatedBenefit,
+      itemCaps,
+      {
+        month: itemUsage && itemUsage.month !== undefined ? itemUsage.month : benefitUsedThisMonth,
+        // `day` 는 아는 호출부만 싣는다. 안 실리면 `applyItemCaps` 가 자르지 않고
+        // 「적용 못 한 창」 으로 보고한다 — 모르는 것을 0 으로 채우지 않는다.
+        ...(itemUsage && itemUsage.day !== undefined ? { day: itemUsage.day } : {}),
+      },
+      // 횟수 한도가 볼 누적(#638). 안 넘어오면 빈 객체라 「모르는 창」 이 되고,
+      // 횟수 한도가 붙은 줄은 자르지 않은 채 `unappliedCapWindows` 로 보고된다.
+      (acc && acc.count) || {},
+    );
 
     // 2층: 카드 월 통합 한도 — 실적 구간의 값이 정본이고, 없으면 옛
     // `card_benefits.monthly_cap` 컬럼으로 되돌아간다.

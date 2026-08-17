@@ -174,12 +174,29 @@ const CAP_WINDOWS = ['transaction', 'day', 'month'];
 // 옛 `card_benefits.monthly_cap` 컬럼은 여기 섞지 않는다. 그 칸에는 지금 **통합
 // 한도가 들어가 있는 카드가 있어서**(위 사고) 항목 한도로 읽으면 뜻이 뒤집힌다.
 // 컬럼은 호출부가 예전처럼 따로 적용한다.
+// 한도에는 금액과 **횟수**가 있다(#638). 둘 다 없는 줄은 한도가 아니라 잡음이라 버린다.
+//
+//   { "window": "month", "amount": 5000 }             그 달에 5,000원까지
+//   { "window": "month", "count": 1 }                 그 달에 **한 번만**
+//   { "window": "month", "amount": 5000, "count": 1 } 둘 다
+//
+// 횟수 한도는 「놀이공원 50% 월 1회」 처럼 금액이 아니라 **적용 횟수**로 끊는
+// 혜택을 담는다. 금액으로 흉내낼 수 없다 — 결제액이 얼마든 한 번이면 끝이다.
 function capsOf(benefit) {
   const rule = ruleOf(benefit);
   const list = Array.isArray(rule.caps) ? rule.caps : [];
-  return list
-    .filter((c) => c && CAP_WINDOWS.includes(c.window) && Number.isFinite(Number(c.amount)))
-    .map((c) => ({ window: c.window, amount: toInt(c.amount) }));
+  const out = [];
+  for (const c of list) {
+    if (!c || !CAP_WINDOWS.includes(c.window)) continue;
+    const hasAmount = Number.isFinite(Number(c.amount));
+    const hasCount = Number.isFinite(Number(c.count));
+    if (!hasAmount && !hasCount) continue;
+    const cap = { window: c.window };
+    if (hasAmount) cap.amount = toInt(c.amount);
+    if (hasCount) cap.count = toInt(c.count);
+    out.push(cap);
+  }
+  return out;
 }
 
 /**
@@ -189,14 +206,38 @@ function capsOf(benefit) {
  * @param {number} benefit 자르기 전 금액
  * @param {Array<{window: string, amount: number}>} caps
  * @param {object} used 창별로 이미 받은 금액. 아는 창만 넘긴다 (`{ month: 3000 }`)
+ * @param {object} times 창별로 이미 적용된 **횟수**(#638). 아는 창만 넘긴다
+ *   (`{ month: 1 }`). 횟수 한도가 붙은 창인데 이 값이 없으면 자르지 않고
+ *   `unapplied` 에 싣는다 — 금액 누적을 모를 때와 같은 처리다.
  * @returns {{benefit: number, cappedBy: string|null, unapplied: string[]}}
  */
-function applyItemCaps(benefit, caps, used = {}) {
+function applyItemCaps(benefit, caps, used = {}, times = {}) {
   let out = toInt(benefit);
   let cappedBy = null;
   const unapplied = [];
 
   for (const cap of caps) {
+    // 횟수 한도(#638). 「월 1회」 는 결제액과 무관하게 **두 번째부터 0** 이다.
+    // 금액 한도보다 먼저 본다 — 횟수를 다 썼으면 금액을 볼 것도 없다.
+    //
+    // 어느 결제에 붙느냐는 훑는 순서가 정한다. 날짜 순으로 도니 그 달의 **첫**
+    // 해당 결제에 붙는다. 카드사도 대개 그렇게 준다.
+    if (cap.count !== undefined) {
+      // 건당 창에 횟수를 붙이면 «이 결제에 한 번» 이라 늘 참이다. 누적이 필요 없다.
+      const applied = cap.window === 'transaction' ? 0 : times[cap.window];
+      if (applied === undefined || applied === null) {
+        unapplied.push(cap.window);
+        continue;   // 이 줄의 금액 한도도 같이 못 믿는다 — 누적을 모르는 창이다
+      }
+      if (toInt(applied) >= cap.count) {
+        out = 0;
+        cappedBy = cap.window;
+        continue;
+      }
+    }
+
+    if (cap.amount === undefined) continue;   // 횟수만 붙은 한도
+
     // 건당 한도는 누적이 필요 없다 — 이 결제 하나만 보면 된다.
     const spent = cap.window === 'transaction' ? 0 : used[cap.window];
     if (spent === undefined || spent === null) {
@@ -311,8 +352,21 @@ function validateRule(rule) {
         // 모르는 유형을 막는 것과 같은 이유다.
         return `모르는 한도 기간입니다: ${c.window} (${CAP_WINDOWS.join(' · ')} 중 하나)`;
       }
-      const amount = Number(c.amount);
-      if (!Number.isFinite(amount) || amount < 0) return '한도는 0 이상의 숫자여야 합니다.';
+      const hasAmount = c.amount !== undefined && c.amount !== null;
+      const hasCount = c.count !== undefined && c.count !== null;
+      // 둘 다 없으면 «한도가 있다» 고 적어 놓고 아무것도 안 끊는 줄이 된다.
+      // 저장은 되는데 뜻이 없어서, 적으려던 값을 빠뜨린 실수로 본다.
+      if (!hasAmount && !hasCount) return '한도에는 금액이나 횟수 중 하나는 있어야 합니다.';
+      if (hasAmount) {
+        const amount = Number(c.amount);
+        if (!Number.isFinite(amount) || amount < 0) return '한도는 0 이상의 숫자여야 합니다.';
+      }
+      if (hasCount) {
+        // 횟수 한도(#638). 0회는 «절대 안 준다» 라 혜택을 지우는 것과 같고,
+        // 소수는 뜻이 없다.
+        const count = Number(c.count);
+        if (!Number.isInteger(count) || count < 1) return '횟수 한도는 1 이상의 정수여야 합니다.';
+      }
       // 같은 창이 둘이면 어느 것이 맞는지 정할 수 없다. 더 작은 값으로 합치는 것도
       // 방법이지만, 그러면 입력 실수가 조용히 넘어간다.
       if (seenWindow.has(c.window)) return `한도 기간 ${c.window} 이 두 번 있습니다.`;
