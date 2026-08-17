@@ -158,9 +158,52 @@ export function estimateReason(card) {
   const parts = [`적립률 ${card.applied.rate}%`];
   if (card.applied.matched === 'merchant') parts.push('가맹점 지정 혜택');
   else if (card.applied.matched === 'category') parts.push('카테고리 혜택');
-  if (card.capped) parts.push('월 한도까지만 계산');
+  if (card.capped) parts.push(cappedText(card));
 
   return `${parts.join(' · ')} → ${formatWon(card.benefit)}`;
+}
+
+// 어느 한도에 잘렸는지(#578).
+//
+// 한도가 두 층이라 «월 한도까지만 계산» 한 마디로는 사용자가 무엇을 할지 정할 수
+// 없다. 항목 한도에 걸린 것이면 **다른 카테고리에 쓰면 더 받고**, 카드 통합 한도에
+// 걸린 것이면 **그 카드로는 이번 달 더 못 받는다.** 행동이 정반대다.
+//
+// 내부 값을 그대로 내보내지 않는다(#231). `item-month` 를 보여주면 사용자가 코드를
+// 읽어야 한다.
+const CAPPED_TEXTS = {
+  'item-transaction': '건당 한도까지만 계산',
+  'item-day': '하루 한도까지만 계산',
+  'item-month': '이 혜택의 월 한도까지만 계산',
+  'card-monthly': '카드 월 통합 한도까지만 계산',
+};
+
+export function cappedText(card) {
+  // 층을 모르는 경우가 실제로 있다 — 옛 `monthly_cap` 컬럼만 있는 혜택이 그렇다.
+  // 그때는 예전 문구를 그대로 쓴다. «한도 종류 불명» 같은 말을 만들지 않는다.
+  return CAPPED_TEXTS[card && card.cappedBy] || '월 한도까지만 계산';
+}
+
+/**
+ * 한도가 걸려 있는데 **아직 계산에 넣지 못한** 것을 알린다(#578 · #631).
+ *
+ * 조용히 비우면 사용자는 그 한도가 반영된 줄 안다. 추정이 실제보다 큰 쪽으로
+ * 틀리는 경우라 반드시 말한다 — 이 저장소가 «추정이 사용자에게 손해를 끼치는
+ * 방향으로 틀리면 안 된다» 로 잡아 온 기준이다.
+ *
+ * @returns {string|null}
+ */
+export function unappliedCapNote(card) {
+  const windows = (card && card.unappliedCapWindows) || [];
+  if (windows.length === 0) return null;
+
+  // 지금 실제로 못 채우는 것은 하루 한도뿐이다(#631 이 붙으면 사라진다). 목록에
+  // 다른 값이 들어와도 같은 뜻이라 하나로 말한다 — 창 이름을 나열하면 내부 용어가
+  // 화면에 샌다.
+  if (windows.includes('day')) {
+    return '하루 한도가 있는 혜택이에요. 오늘 이미 받은 만큼은 계산에 안 들어가서 실제로는 이보다 적을 수 있어요.';
+  }
+  return '일부 한도는 아직 계산에 넣지 못해서 실제로는 이보다 적을 수 있어요.';
 }
 
 /**
