@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import EmptyState from './EmptyState';
 import { formatWon } from '../lib/format';
 import { conditionText } from '../lib/benefitConditionText';
+import CardBenefitConditionFields from './CardBenefitConditionFields';
 import { useConfirm } from './ConfirmProvider';
 
 // 서버 `src/constants.js` 의 BENEFIT_TYPES 와 같아야 한다. 어긋나면 저장할 때만 400 이 난다.
@@ -66,6 +67,8 @@ const EMPTY_FORM = {
   payment_style: '',
   benefit_type: '할인', rate: '', category_id: '', merchant_pattern: '',
   monthly_cap: '', min_amount: '', memo: '',
+  // 건당 상한(#638) · 실적 무관(#636) · 통합 한도 밖(#648).
+  max_amount: '', threshold_exempt: false, unified_cap_exempt: false,
 };
 
 export default function CardBenefitSection({ categories = [] }) {
@@ -146,6 +149,12 @@ export default function CardBenefitSection({ categories = [] }) {
     // 닿지 않는다. `PUT` 이 `{...existing, ...body}` 라서 안 보낸 필드는 옛 값이
     // 남고, 사용자는 제약을 지웠는데 그대로인 화면을 본다.
     body.payment_style = form.payment_style || null;
+    // 건당 상한(#638)도 **빈 값을 보낸다.** 위 반복문에 넣으면 상한을 지우는
+    // 수정이 서버에 안 닿는다 — `PUT` 이 안 보낸 필드에 옛 값을 남기기 때문이다.
+    body.max_amount = form.max_amount === '' ? null : Number(form.max_amount);
+    // 체크박스는 빈 칸 처리(위 루프)를 타지 않는다. 안 켜면 false 를 그대로 보낸다.
+    body.threshold_exempt = Boolean(form.threshold_exempt);
+    body.unified_cap_exempt = Boolean(form.unified_cap_exempt);
 
     return body;
   };
@@ -236,6 +245,9 @@ export default function CardBenefitSection({ categories = [] }) {
       merchant_pattern: b.merchant_pattern || '',
       monthly_cap: String(b.monthly_cap ?? ''),
       min_amount: String(b.min_amount ?? ''),
+      max_amount: String(b.max_amount ?? ''),
+      threshold_exempt: Boolean(b.threshold_exempt),
+      unified_cap_exempt: Boolean(b.unified_cap_exempt),
       memo: b.memo || '',
       payment_style: b.payment_style || '',
     });
@@ -461,6 +473,8 @@ export default function CardBenefitSection({ categories = [] }) {
                 className={inp}
               />
             </div>
+
+            <CardBenefitConditionFields form={form} setField={setField} inp={inp} />
 
             <div className="sm:col-span-2">
               <label className="block text-xs text-caption mb-1" htmlFor="benefit-memo">메모 (선택)</label>
