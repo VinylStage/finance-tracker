@@ -233,7 +233,12 @@ function estimateBenefit({
 
     let afterUnified = itemCut.benefit;
     let unifiedCapped = false;
-    if (unifiedCap !== null) {
+    // 통합 한도 밖에 있는 혜택은 2층을 건너뛴다(#648). 약관이 «이 서비스는 그
+    // 상한과 별개» 라고 밝힌 줄이다 — 나라사랑카드의 놀이공원 현장할인이 그렇다.
+    // 「구간을 가리키는가」 나 「실적 조건이 붙는가」 로 추론하지 않는다. 그 줄은
+    // 실적 조건이 붙으면서 통합 한도 밖이라 세 질문이 갈라진다.
+    const unifiedExempt = Boolean(best.unified_cap_exempt);
+    if (unifiedCap !== null && !unifiedExempt) {
       const remaining = Math.max(0, unifiedCap - benefitUsedThisMonth);
       if (afterUnified > remaining) {
         afterUnified = remaining;
@@ -257,7 +262,15 @@ function estimateBenefit({
 
   const result = {
     benefit,
-    applied: best ? { id: best.id, benefit_type: best.benefit_type, rate: best.rate, matched: best.matched } : null,
+    applied: best ? {
+      id: best.id,
+      benefit_type: best.benefit_type,
+      rate: best.rate,
+      matched: best.matched,
+      // 이 줄이 통합 한도 밖인가(#648). 호출부가 누적에서 빼야 한다 — 한도 밖인
+      // 혜택이 한도를 깎으면 «밖에 있다» 가 반쪽만 지켜진다.
+      unifiedCapExempt: Boolean(best.unified_cap_exempt),
+    } : null,
     skipped,
     capped,
     cappedBy,

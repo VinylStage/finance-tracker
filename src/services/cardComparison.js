@@ -288,10 +288,15 @@ function compareCards({ transactions, cards } = {}) {
     // **가정은 카드마다 자기 시나리오에서만 오른다.** 「이 카드로 계속 썼다면」 이므로
     // 그 카드가 이 거래에서 받을 값을 그 카드의 누적에만 더한다 — A 가정이 B 의 누적을
     // 건드리지 않으므로 예전 주석이 걱정한 «가정끼리 뒤엉킴» 은 생기지 않는다.
-    for (const p of perCard) addUsed(hypoUsed, p.cardId, ym, p.benefit);
+    //
+    // **통합 한도 밖인 줄은 카드 단위 누적에 안 넣는다**(#648). 넣으면 그 줄이 다른
+    // 항목의 한도를 깎아, 「한도 밖」 이라는 말이 반쪽만 지켜진다. 가정·실제 두 벌에
+    // 똑같이 건다 — 한쪽만 걸면 같은 혜택이 시나리오에 따라 다르게 취급된다.
+    const inUnified = (r) => !(r && r.applied && r.applied.unifiedCapExempt);
+    for (const p of perCard) if (inUnified(p)) addUsed(hypoUsed, p.cardId, ym, p.benefit);
     // 실제는 실제로 그 카드로 결제한 건에서만 오른다.
-    if (actual) addUsed(actualUsed, actual.cardId, ym, actual.benefit);
-    // 항목 누적도 같은 두 벌로 올린다(#637).
+    if (actual && inUnified(actual)) addUsed(actualUsed, actual.cardId, ym, actual.benefit);
+    // 항목 누적은 면제와 무관하게 올린다 — 면제는 **통합 한도 한 층**에만 걸린다.
     for (const p of perCard) addItemUsed(hypoItem, p, ym, ymd);
     if (actual) addItemUsed(actualItem, actual, ym, ymd);
 
