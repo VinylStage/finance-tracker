@@ -80,7 +80,18 @@ scope_check() {   # 배치 밖 파일이 바뀌었나
                 | grep -vxF -- "${(F)allowed}")
   if [[ -n "$stray" ]]; then
     print "  ✖ 배치 밖 편집: $stray"
-    print -r -- "$stray" | while read f; do git checkout -- "$f" 2>/dev/null || rm -f "$f"; done
+    # 되돌리는 순서가 중요하다. aider 는 만든 파일을 **스테이지해 둔다**.
+    # 그 상태에서 `git checkout -- f` 는 인덱스에서 되살려 놓는 꼴이라 파일이
+    # 안 지워진다 — 실제로 stray 가 그대로 남아 다음 실행을 오염시켰다.
+    # 인덱스에서 먼저 빼고, 추적 중이던 파일만 되돌린다.
+    print -r -- "$stray" | while read f; do
+      if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+        git checkout HEAD -- "$f" 2>/dev/null
+      else
+        git rm -q --cached --force -- "$f" 2>/dev/null
+        rm -f "$f"
+      fi
+    done
     return 1
   fi
   return 0
