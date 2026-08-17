@@ -5,7 +5,10 @@ const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
-const { getLastCatchupSummary, setLastCatchupSummary, runCatchup, localToday } = require('../services/recurringCatchup');
+const {
+  getLastCatchupSummary, setLastCatchupSummary, runCatchup, localToday,
+  reactivationPreview, reactivateRule,
+} = require('../services/recurringCatchup');
 const { detectRecurringCandidates } = require('../services/recurrenceDetect');
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -129,6 +132,49 @@ function ruleColumns(body) {
 // 뒤에 두면 나중에 GET /:id 가 생겼을 때 조용히 가려진다.
 router.get('/catchup', (_req, res) => {
   res.json(getLastCatchupSummary());
+});
+
+// GET /api/recurring-rules/:id/reactivation-preview — 다시 켜면 무엇이 생기나(#489).
+//
+// **DB 를 바꾸지 않는다.** 꺼둔 규칙을 다시 켜면 다음 기동의 따라잡기가 꺼져 있던
+// 구간을 규칙대로 채우는데, 사용자는 그 사이 거래가 생기는 것을 고른 적이 없다.
+// 되돌린 순간에는 아무 일도 없어서 다음 기동 때까지 눈치채지도 못한다.
+//
+// 고정 세그먼트(`reactivation-preview`)가 뒤에 붙어 '/:id' 와 겹치지 않는다.
+router.get('/:id/reactivation-preview', (req, res) => {
+  try {
+    const id = asInt(req.params.id);
+    if (id === null) return res.status(400).json({ error: '규칙을 찾을 수 없습니다.' });
+
+    const preview = reactivationPreview(db, id);
+    if (!preview) return res.status(404).json({ error: '규칙을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.' });
+
+    res.json(preview);
+  } catch (e) {
+    serverError(res, e, 'recurringRules');
+  }
+});
+
+// POST /api/recurring-rules/:id/reactivate  { mode, startsOn? } — 다시 켠다(#489).
+//
+// **거래를 만들지 않는다.** 다음 따라잡기가 무엇을 볼지만 정한다.
+//
+//   all       공백을 그대로 채운다
+//   from-now  공백을 버리고 오늘부터
+//   from-date 적용 시작일을 옮겨 그 날부터 (규칙 정의가 바뀐다)
+router.post('/:id/reactivate', (req, res) => {
+  try {
+    const id = asInt(req.params.id);
+    if (id === null) return res.status(400).json({ error: '규칙을 찾을 수 없습니다.' });
+
+    const body = req.body || {};
+    const result = reactivateRule(db, id, { mode: body.mode, startsOn: body.startsOn });
+    if (!result.ok) return res.status(400).json({ error: result.error });
+
+    res.json({ ok: true, data: result });
+  } catch (e) {
+    serverError(res, e, 'recurringRules');
+  }
 });
 
 // GET /api/recurring-rules/suggestions — 반복으로 보이는 거래를 제안한다(#499).
