@@ -17,7 +17,7 @@ const { startTestServer } = require('./helpers/testServer');
 const { guardFormula, unguardFormula, FORMULA_LEAD } = require('../src/utils/csvFormulaGuard');
 const { parseCardCsv } = require('../src/services/csvImport');
 
-const PORT = 34701;
+const PORT = 20701;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

@@ -13,7 +13,7 @@ const { startTestServer } = require('./helpers/testServer');
 //   2. 카드사와 카드가 어긋난 짝은 저장되지 않는다
 //   3. 카드 아닌 결제수단(현금·이체)의 동작이 그대로다
 
-const PORT = 34712; // 다른 테스트와 겹치지 않는 포트
+const PORT = 20712; // 다른 테스트와 겹치지 않는 포트
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
