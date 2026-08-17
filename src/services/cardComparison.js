@@ -173,13 +173,22 @@ function compareCards({ transactions, cards } = {}) {
   const actualItem = itemStore();
 
   // 이 거래 시점에서 그 혜택 줄이 이미 받은 몫. 계산기가 **고른 줄에 대해서만** 묻는다.
+  // 창마다 «얼마» 와 «몇 번» 을 같이 든다. 횟수 한도(#638)는 금액과 같은 창을 쓰지만
+  // 세는 것이 달라서, 한쪽만 들면 「월 1회」 를 표현할 수 없다.
+  const ZERO = { amount: 0, count: 0 };
   const itemUsedFrom = (store, ym, ymd) => (benefitId) => {
-    const out = { month: store.month.get(`${benefitId}|${ym}`) || 0 };
+    const m = store.month.get(`${benefitId}|${ym}`) || ZERO;
+    const used = { month: m.amount };
+    const count = { month: m.count };
     // 날짜를 모르면 `day` 를 아예 안 싣는다. 0 으로 채우면 한도가 안 걸린 것을
     // 걸린 것처럼 보이게 한다 — 신호 부재를 통과로 읽는 셈이다. 안 실으면
     // 계산기가 «적용 못 한 창» 으로 보고해 화면이 그 사실을 말할 수 있다.
-    if (ymd !== null) out.day = store.day.get(`${benefitId}|${ymd}`) || 0;
-    return out;
+    if (ymd !== null) {
+      const d = store.day.get(`${benefitId}|${ymd}`) || ZERO;
+      used.day = d.amount;
+      count.day = d.count;
+    }
+    return { used, count };
   };
 
   // 고른 줄이 있고 실제로 붙었을 때만 적는다. 아무것도 안 걸린 거래는 어떤 줄의
@@ -187,12 +196,13 @@ function compareCards({ transactions, cards } = {}) {
   const addItemUsed = (store, result, ym, ymd) => {
     if (!result || !result.applied || !(result.benefit > 0)) return;
     const id = result.applied.id;
-    const mk = `${id}|${ym}`;
-    store.month.set(mk, (store.month.get(mk) || 0) + result.benefit);
-    if (ymd !== null) {
-      const dk = `${id}|${ymd}`;
-      store.day.set(dk, (store.day.get(dk) || 0) + result.benefit);
-    }
+    const bump = (map, key) => {
+      const cur = map.get(key) || ZERO;
+      // 금액과 함께 **붙은 횟수**를 센다(#638). 「월 1회」 는 결제액과 무관하다.
+      map.set(key, { amount: cur.amount + result.benefit, count: cur.count + 1 });
+    };
+    bump(store.month, `${id}|${ym}`);
+    if (ymd !== null) bump(store.day, `${id}|${ymd}`);
   };
 
   let totalGap = 0;
