@@ -97,7 +97,11 @@ function loadCards() {
   const benefits = db.prepare(`
     SELECT id, card_product_id, category_id, merchant_pattern,
            benefit_type, rate, monthly_cap, min_amount, payment_style,
-           card_threshold_tier_id, rule_json
+           card_threshold_tier_id, rule_json,
+           -- 실적 조건이 붙지 않는 혜택(#636). 이 칸이 빠지면 계산기가 전부
+           -- «조건 붙음» 으로 보고 실적 미달인 달에 죽인다 — 위 rule_json 과
+           -- 같은 종류의 조용한 누락이 된다.
+           threshold_exempt
     FROM card_benefits
   `).all();
 

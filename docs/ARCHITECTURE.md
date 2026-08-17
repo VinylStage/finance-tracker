@@ -72,9 +72,9 @@ CSS 에서 사라진다.
 
 `AnchorNav` · `BottomTabBar` · `CardBenefitSection` · `CardEstimateHint` · `CardInventorySection` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CardTierSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DataIntegritySection` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapCardPicker` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `RetentionNotice` · `SavingsGoalBar` · `SpendHeatmap` · `ThresholdExclusionSection` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
-### 마이그레이션 (30개)
+### 마이그레이션 (31개)
 
-최신: `030-tier-monthly-cap`
+최신: `031-benefit-threshold-exempt`
 
 
 <!-- inventory:end -->
