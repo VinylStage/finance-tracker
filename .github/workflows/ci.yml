@@ -92,8 +92,13 @@ jobs:
         working-directory: client
       - run: npm run build
         working-directory: client
-      - name: Test client (vitest)
-        run: npm run test:coverage
+      # `--pool=forks` 를 CI 에서 재려고 붙인다(#630).
+      #
+      # 로컬(12코어)에서는 threads 와 차이가 없었다(10초 vs 10~11초, 2회씩). CI 는 코어가
+      # 적어 다를 수 있고, 그것만 확인하려고 이 PR 은 **다른 것을 바꾸지 않는다** —
+      # 샤딩(#640)과 섞으면 어느 쪽 효과인지 못 가른다.
+      - name: Test client (vitest, pool=forks)
+        run: npm run test:coverage -- --pool=forks
         working-directory: client
 
   server:
