@@ -105,7 +105,10 @@ function loadCards() {
            -- 실적 조건이 붙지 않는 혜택(#636). 이 칸이 빠지면 계산기가 전부
            -- «조건 붙음» 으로 보고 실적 미달인 달에 죽인다 — 위 rule_json 과
            -- 같은 종류의 조용한 누락이 된다.
-           threshold_exempt
+           threshold_exempt,
+           -- 카드 월 통합 한도 밖에 있는 혜택(#648). 이 칸이 빠지면 그런 줄이
+           -- 통합 한도에 눌려 과소추정된다 — 위 두 칸과 같은 종류의 누락이다.
+           unified_cap_exempt
     FROM card_benefits
   `).all();
 
@@ -499,6 +502,7 @@ router.get('/detail', (req, res) => {
           monthlyCap: b.monthly_cap,
           minAmount: b.min_amount,
           maxAmount: b.max_amount ?? null,
+          unifiedCapExempt: Boolean(b.unified_cap_exempt),
           paymentStyle: b.payment_style || null,
           tierId: b.card_threshold_tier_id ?? null,
           tierLabel: tier ? (tier.label || null) : null,
