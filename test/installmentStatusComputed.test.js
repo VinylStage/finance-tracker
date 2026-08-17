@@ -18,7 +18,7 @@ const assert = require('node:assert');
 const Database = require('better-sqlite3');
 const { startTestServer } = require('./helpers/testServer');
 
-const PORT = 34700;
+const PORT = 20700;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

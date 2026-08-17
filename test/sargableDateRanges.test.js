@@ -9,7 +9,7 @@ const { startTestServer } = require('./helpers/testServer');
 // EXPLAIN QUERY PLAN 자체의 SCAN→SEARCH 전환은 이 스위트의 HTTP 기반 테스트
 // 방식으로는 검증할 수 없어 PR 설명에 별도로 수동 검증 결과를 남긴다.
 
-const PORT = 34582; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20582; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
