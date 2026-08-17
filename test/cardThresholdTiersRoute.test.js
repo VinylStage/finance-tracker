@@ -7,7 +7,7 @@ const { startTestServer } = require('./helpers/testServer');
 //
 // 구간이 없으면 단일 임계값으로 예전처럼 판정한다 — 그 하위호환도 함께 잠근다.
 
-const PORT = 35010;
+const PORT = 21010;
 let server;
 let cardId;
 

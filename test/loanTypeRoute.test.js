@@ -6,7 +6,7 @@ const { startTestServer } = require('./helpers/testServer');
 // #285 의 HTTP 경로. 서비스 단위 테스트(loan-type.test.js)가 계산과 규칙을 고정하면
 // 여기서는 "저장이 실제로 되는가" 와 "잘못된 조합이 막히는가" 를 본다.
 
-const PORT = 34607;
+const PORT = 20607;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

@@ -10,7 +10,7 @@ const os = require('node:os');
 // 최신 500건 범위 안에서만 맞았다. 검색·집계를 서버 파라미터로 전부 넘기는
 // 근본 해결(감사 A안) 후, 새 엔드포인트/파라미터가 정확한지 확인한다.
 
-const PORT = 34585; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20585; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;
