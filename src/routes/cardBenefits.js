@@ -125,6 +125,9 @@ function normalize(body) {
     // 유형별 혜택 규칙(#564). 안 보내면 NULL 이고, 읽는 쪽이 `rate` 컬럼을 보고
     // 요율형으로 간주한다 — 이미 들어가 있는 혜택이 이 변경으로 달라지지 않는다.
     rule_json,
+    // 실적 조건이 붙지 않는 혜택인가(#636). 안 보내면 0 — «조건이 붙는다» 가
+    // 기본이다. 카드 약관이 «실적 조건 없는 서비스» 라고 따로 밝힌 것만 1 이다.
+    threshold_exempt: body.threshold_exempt ? 1 : 0,
   };
 }
 
@@ -177,11 +180,11 @@ router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', '
     const b = normalize(req.body);
     const info = db.prepare(`
       INSERT INTO card_benefits
-        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style, card_threshold_tier_id, rule_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style, card_threshold_tier_id, rule_json, threshold_exempt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
            b.rate, b.monthly_cap, b.min_amount, b.memo, b.payment_style,
-           b.card_threshold_tier_id, b.rule_json);
+           b.card_threshold_tier_id, b.rule_json, b.threshold_exempt);
     res.status(201).json({ id: info.lastInsertRowid, ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
@@ -204,11 +207,11 @@ router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap',
       UPDATE card_benefits
       SET card_product_id=?, category_id=?, merchant_pattern=?, benefit_type=?,
           rate=?, monthly_cap=?, min_amount=?, memo=?, payment_style=?,
-          card_threshold_tier_id=?, rule_json=?
+          card_threshold_tier_id=?, rule_json=?, threshold_exempt=?
       WHERE id=?
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
            b.rate, b.monthly_cap, b.min_amount, b.memo, b.payment_style,
-           b.card_threshold_tier_id, b.rule_json, req.params.id);
+           b.card_threshold_tier_id, b.rule_json, b.threshold_exempt, req.params.id);
     res.json({ ok: true });
   } catch (e) {
     serverError(res, e, 'cardBenefits');
