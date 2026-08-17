@@ -30,3 +30,6 @@ __pycache__/
 
 # 이슈 단위 공수 기록. 로컬 작업 기록이라 공개 저장소에 올리지 않는다.
 .effort-log/
+
+# vitest 샤드 기록(#630). 로컬에서 --reporter=blob 을 돌리면 여기 쌓인다.
+client/.vitest-reports/
