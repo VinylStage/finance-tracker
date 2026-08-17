@@ -12,7 +12,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 미리보기(`/billing-estimate`)는 예전부터 `billingBasis` 로 이 사실을 말해 왔다.
 // 목록만 빠져 있어서, **저장하고 나면 그 경고가 사라지는** 상태였다.
 
-const PORT = 34999;
+const PORT = 20999;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

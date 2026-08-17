@@ -8,7 +8,7 @@ const { expandRange, validateRange } = require('../src/services/cardPolicy');
 // #271 의 저장 경로. 화면은 구간으로 받고 저장은 개월수별 행이므로, 펼치기가
 // 맞는지와 "중간에 막히면 앞부분만 들어가는" 반쪽 상태가 없는지가 핵심이다.
 
-const PORT = 34606; // 다른 테스트와 겹치지 않는 포트
+const PORT = 20606; // 다른 테스트와 겹치지 않는 포트
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

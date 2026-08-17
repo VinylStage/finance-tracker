@@ -6,7 +6,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 
-const PORT = 34626;
+const PORT = 20626;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;

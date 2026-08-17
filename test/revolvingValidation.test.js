@@ -13,7 +13,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 두 라우트가 각자 처리하는데 한쪽만 잠겨 있으면, 나중에 한쪽 문구만 고쳐도
 // 아무도 모른다.
 
-const PORT = 34993;
+const PORT = 20993;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
