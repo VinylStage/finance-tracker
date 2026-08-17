@@ -214,6 +214,62 @@ function applyItemCaps(benefit, caps, used = {}) {
   return { benefit: out, cappedBy, unapplied };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 특정 날짜에만 붙는 혜택(#638)
+//
+// 카드사가 흔히 쓴다 — 기념일·창립일에 요율을 올린다.
+//
+//   하나 나라사랑카드(체크)  편의점 30%  «국군의 날(10/01) · 현충일(06/06)»
+//
+// 이걸 못 적어서 그 줄은 **데이터에 아예 못 들어갔다.** 조건 없이 넣으면 1년 내내
+// 30% 로 계산돼 과대추정이고, 빼면 실제로 받는 혜택이 사라진다. 둘 다 틀리므로
+// 넣지 못했다.
+//
+//   { "kind": "rate", "rate": 0.3, "when": { "dates": ["10-01", "06-06"] } }
+//
+// `MM-DD` 는 **해마다 돌아온다**. 연도를 적지 않는 건 이 조건이 «올해 10월 1일» 이
+// 아니라 «국군의 날» 이기 때문이다. 연도가 붙는 한시 프로모션은 다른 질문이라
+// 나중에 `when.range` 로 따로 받는다 — 지금 없는 걸 미리 만들지 않는다.
+//
+// `when` 이 없으면 날짜를 가리지 않는다. 이미 들어 있는 줄은 그대로 동작한다.
+const WHEN_KEYS = ['dates'];
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];  // 2월은 윤년 기준
+
+// `MM-DD` 목록을 꺼낸다. 없으면 빈 배열 — 「날짜를 가리지 않는다」 는 뜻이다.
+function datesOf(benefit) {
+  const when = ruleOf(benefit).when;
+  if (!when || typeof when !== 'object') return [];
+  const list = Array.isArray(when.dates) ? when.dates : [];
+  return list.filter((d) => typeof d === 'string' && parseMonthDay(d) !== null);
+}
+
+// `MM-DD` 를 [월, 일] 로. 형식이나 값이 틀리면 null.
+function parseMonthDay(s) {
+  const m = /^(\d{2})-(\d{2})$/.exec(String(s));
+  if (!m) return null;
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > DAYS_IN_MONTH[month - 1]) return null;
+  return [month, day];
+}
+
+/**
+ * 이 결제일이 혜택의 날짜 조건에 드는가.
+ *
+ * @param {string[]} dates `datesOf` 의 결과. 비면 조건이 없다는 뜻이라 **항상 참**이다
+ * @param {string} date 거래일 `YYYY-MM-DD`
+ * @returns {boolean|null} 조건이 있는데 날짜를 모르면 `null` — 「모른다」 를
+ *   「맞다」 로도 「아니다」 로도 읽지 않는다. 참으로 읽으면 1년 내내 주는 게 되고,
+ *   거짓으로 읽으면 조용히 사라진다. 호출부가 그 사실을 결과에 실어야 한다.
+ */
+function matchesDates(dates, date) {
+  if (!dates || dates.length === 0) return true;
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const md = date.slice(5);
+  return dates.includes(md);
+}
+
 // 이 결제에 붙는 혜택. 모르는 유형은 0 을 낸다 — 던지면 카드 하나가 화면 전체를 죽인다.
 function benefitForTransaction(benefit, ctx) {
   const rule = ruleOf(benefit);
@@ -264,6 +320,28 @@ function validateRule(rule) {
     }
   }
 
+  // 날짜 조건(#638). 한도와 같이 유형과 무관하게 붙는다.
+  if (rule.when !== undefined && rule.when !== null) {
+    if (typeof rule.when !== 'object' || Array.isArray(rule.when)) {
+      return '혜택 조건 형식이 올바르지 않습니다.';
+    }
+    // 모르는 칸은 막는다. `date` 나 `days` 로 저장되면 조건이 **조용히 사라져**
+    // 1년 내내 주는 혜택이 된다 — 모르는 유형·모르는 한도 기간과 같은 이유다.
+    for (const k of Object.keys(rule.when)) {
+      if (!WHEN_KEYS.includes(k)) return `모르는 혜택 조건입니다: ${k} (${WHEN_KEYS.join(' · ')} 중 하나)`;
+    }
+    if (rule.when.dates !== undefined) {
+      if (!Array.isArray(rule.when.dates) || rule.when.dates.length === 0) {
+        // 빈 목록은 «어느 날도 아니다» 가 된다. 그렇게 쓰려는 사람은 없으므로
+        // 조건을 지우려던 실수로 본다.
+        return '날짜 조건은 날짜가 하나 이상 있는 목록이어야 합니다.';
+      }
+      for (const d of rule.when.dates) {
+        if (parseMonthDay(d) === null) return `날짜 형식이 올바르지 않습니다: ${d} (MM-DD)`;
+      }
+    }
+  }
+
   if (rule.kind === 'flat_monthly') {
     const tiers = Array.isArray(rule.tiers) ? rule.tiers : null;
     if (!tiers || tiers.length === 0) return '구간을 하나 이상 넣어 주세요.';
@@ -285,8 +363,11 @@ module.exports = {
   RATE_KIND,
   BENEFIT_KINDS: Object.keys(EVALUATORS),
   CAP_WINDOWS,
+  WHEN_KEYS,
   ruleOf,
   capsOf,
+  datesOf,
+  matchesDates,
   applyItemCaps,
   benefitForTransaction,
   benefitForMonth,

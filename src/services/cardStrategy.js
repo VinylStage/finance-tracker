@@ -5,7 +5,9 @@
 'use strict';
 
 const { BENEFIT_TYPES } = require('../constants.js');
-const { benefitForTransaction, capsOf, applyItemCaps } = require('./benefitRules.js');
+const {
+  benefitForTransaction, capsOf, applyItemCaps, datesOf, matchesDates,
+} = require('./benefitRules.js');
 
 function toInt(v) {
   const n = Number(v);
@@ -24,9 +26,16 @@ function estimateBenefit({
   // 이번 달에 적용되는 실적 구간의 카드 월 통합 한도(#578). 없으면 옛
   // `card_benefits.monthly_cap` 컬럼으로 되돌아간다.
   tierMonthlyCap,
+  // 거래일 `YYYY-MM-DD`(#638). 특정 날짜에만 붙는 혜택을 가리는 데만 쓴다.
+  // 없으면 그런 혜택을 뺀 채 계산하고 `undatedSkipped` 로 알린다.
+  date,
 }) {
   // 1. 후보 고르기
   let candidates = [];
+  // 날짜를 몰라서 뺀 혜택이 있었나(#638). 결과에 실어 화면이 «날짜를 알면 더
+  // 받을 수도 있다» 를 말할 수 있게 한다 — 조용히 빼면 사용자는 그 줄이 왜
+  // 안 잡히는지 알 수 없다.
+  let undatedSkipped = false;
   for (const b of benefits) {
     // 둘 다 설정돼 있으면 **둘 다** 맞아야 한다. 사용자가 카테고리와 가맹점을
     // 같이 적었다면 "그 가맹점에서 그 카테고리로 쓸 때" 라는 뜻이다. 하나만
@@ -76,16 +85,36 @@ function estimateBenefit({
       continue;
     }
 
-    // 2. 최소 결제액
-    if (b.min_amount !== null && amount < b.min_amount) {
+    // 2. 결제액 범위. 하한은 «이상», 상한은 «미만» 이다(#638) — 같은 값을 두 줄에
+    // 넣으면 빈틈도 겹침도 없다. 「군마트 10만원 미만 30% / 이상 20%」 처럼
+    // 금액으로 갈리는 두 줄이 실제 약관에 있다.
+    if (b.min_amount !== null && b.min_amount !== undefined && amount < b.min_amount) {
       candidates.push({ ...b, skipped: true, reason: 'below-min-amount' });
+      continue;
+    }
+    if (b.max_amount !== null && b.max_amount !== undefined && amount >= b.max_amount) {
+      candidates.push({ ...b, skipped: true, reason: 'above-max-amount' });
+      continue;
+    }
+
+    // 3. 날짜 조건(#638). 국군의 날·현충일처럼 특정 날에만 붙는 혜택.
+    const onDate = matchesDates(datesOf(b), date);
+    if (onDate === false) {
+      candidates.push({ ...b, skipped: true, reason: 'date-mismatch' });
+      continue;
+    }
+    if (onDate === null) {
+      // 날짜 조건이 붙었는데 거래일을 모른다. 준다고 보면 1년 내내 주는 게 되어
+      // 크게 과대추정된다. 빼되 **뺐다는 사실을 남긴다**.
+      undatedSkipped = true;
+      candidates.push({ ...b, skipped: true, reason: 'date-unknown' });
       continue;
     }
 
     candidates.push({ ...b, matched });
   }
 
-  // 3. 하나만 고르기
+  // 4. 하나만 고르기
   let best = null;
   let bestScore = -1;
   let bestBenefit = -1;
@@ -117,7 +146,7 @@ function estimateBenefit({
     }
   }
 
-  // 4. 혜택 계산
+  // 5. 혜택 계산
   let benefit = 0;
   let capped = false;
   // 어느 층에 잘렸나(#578). `item-transaction` · `item-day` · `item-month` ·
@@ -211,6 +240,9 @@ function estimateBenefit({
     capped,
     cappedBy,
     unappliedCapWindows,
+    // 날짜 조건이 붙은 혜택을 거래일을 몰라 뺐다(#638). `unappliedCapWindows` 와
+    // 같은 뜻의 신호다 — 「계산에 넣지 못한 것이 있다」.
+    undatedSkipped,
   };
 
   // 실적 미달이면 혜택은 0 이다. 다만 **고른 혜택은 그대로 둔다** — 화면이
