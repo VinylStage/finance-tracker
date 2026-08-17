@@ -220,7 +220,10 @@ while (( round <= 3 )); do
     print ""
     print "고칠 파일은 이것뿐이다. 새 파일을 만들지 않는다:"
     for f in "$target" "${extra[@]}"; do print "  $f"; done
-    print ""; cat "$SC/fail-$label.txt" } > "$SC/fix-$label-$round.md"
+    print ""; print "## 실패 사유"; print ""
+    cat "$SC/fail-$label.txt"
+    print ""; print "## 원래 명세 (그대로 지킨다)"; print ""
+    cat "$spec" } > "$SC/fix-$label-$round.md"
   snapshot_before
   run_aider "$SC/fix-$label-$round.md" "$M/aider-$label-fix$round.log"
   if ! scope_check; then print "=== 범위 위반 ==="; exit 2; fi
