@@ -45,6 +45,11 @@ async function startTestServer({ port, env = {} }) {
 
   let output = '';
   let exited = null; // { code, signal }
+  // 이 하네스가 kill 을 보냈는지. 기동 대기 중에는 아직 아무도 안 보냈으므로,
+  // 그 사이 죽었다면 **밖에서 온 것**이다(#379). 그 사실을 실패 메시지에 싣는다.
+  let killSent = false;
+  // 남의 서버가 그 포트를 물고 있을 때 그 pid. 루프 밖에서 던지려고 들고 나온다.
+  let foreignPid = null;
 
   const proc = spawn('node', ['src/server.js'], {
     cwd: path.join(__dirname, '..', '..'),
@@ -67,8 +72,15 @@ async function startTestServer({ port, env = {} }) {
     // 상한까지 기다릴 뿐이다.
     if (exited) {
       cleanup(dbPath);
+      // `code=0 signal=null` 만 보고 «스스로 정상 종료» 로 읽으면 안 된다.
+      // 서버가 SIGTERM 핸들러에서 process.exit(0) 을 부르기 때문에 시그널이
+      // 지워진다(#379). 서버 출력의 «SIGTERM 을 받아 종료합니다» 한 줄이 그것을
+      // 가른다. 아래 문장은 그 줄을 찾아 읽으라고 알려 주는 안내다.
       throw new Error(
         `서버가 준비 전에 종료됨 (code=${exited.code} signal=${exited.signal}). 포트 ${port}.\n` +
+        `이 하네스는 kill 을 보낸 적이 ${killSent ? '있다' : '없다'} — ` +
+        `${killSent ? '' : '죽었다면 밖에서 온 것이다. '}` +
+        `서버가 시그널을 받았는지는 아래 출력에서 «받아 종료합니다» 줄로 확인한다.\n` +
         `서버 출력:\n${output || '(출력 없음)'}`
       );
     }
@@ -76,12 +88,36 @@ async function startTestServer({ port, env = {} }) {
     try {
       const r = await fetch(`${base}/api/health`);
       if (r.ok) {
+        // **응답한 서버가 내 자식인지 확인한다**(#583).
+        //
+        // 포트가 이미 물려 있으면 내 자식은 EADDRINUSE 로 죽고, 그 포트에 이미
+        // 있던 **남의 서버**가 200 을 준다. 그걸 성공으로 읽으면 테스트가 남의
+        // DB 에 쓰게 된다 — «데이터가 쌓인 옛 서버에 붙는» 그 사고다.
+        //
+        // 실측에서 실제로 붙었고, 그때 내 자식의 `exitCode` 는 아직 `null` 이라
+        // 살아 있는 것처럼도 보였다. 종료를 기다려 가리는 방법은 경합이 남는다.
+        //
+        // `pid` 로 가른다. pid 를 안 주는 옛 서버면 `undefined` 라 이 검사가 걸리지
+        // 않으므로 예전과 같이 동작한다.
+        // 여기서 바로 던지지 않는다. 이 블록은 «아직 기동 전» 을 삼키는
+        // `catch` 안이라, 던지면 그 catch 가 먹고 루프가 계속 돈다 — 그러면 다음
+        // 회차에서 조기 종료로 잡혀 **엉뚱한 이유**가 보고된다(실제로 그랬다).
+        const body = await r.json().catch(() => ({}));
+        if (body.pid !== undefined && body.pid !== proc.pid) {
+          foreignPid = body.pid;
+          break;
+        }
+
         return {
           proc,
           dbPath,
           base,
           output: () => output,
-          stop: () => { try { proc.kill(); } catch { /* 이미 죽었을 수 있다 */ } cleanup(dbPath); },
+          stop: () => {
+            killSent = true;
+            try { proc.kill(); } catch { /* 이미 죽었을 수 있다 */ }
+            cleanup(dbPath);
+          },
         };
       }
     } catch { /* 아직 기동 전 */ }
@@ -89,8 +125,20 @@ async function startTestServer({ port, env = {} }) {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
+  killSent = true;
   try { proc.kill(); } catch { /* 이미 죽었을 수 있다 */ }
   cleanup(dbPath);
+
+  // 남의 서버에 붙을 뻔한 경우를 먼저 가른다. 이유가 «상한 초과» 로 뭉개지면
+  // 포트를 정리하면 되는 상황인지, 서버가 진짜 느린 상황인지 구분이 안 된다.
+  if (foreignPid !== null) {
+    throw new Error(
+      `포트 ${port} 에 이미 다른 서버가 있다 (응답 pid=${foreignPid}, 내 자식 pid=${proc.pid}).\n` +
+      `그 서버에 붙으면 남의 DB 에 쓰게 된다 — 포트를 바꾸거나 남은 프로세스를 정리한다.\n` +
+      `서버 출력:\n${output || '(출력 없음)'}`
+    );
+  }
+
   throw new Error(
     `서버가 ${READY_TIMEOUT_MS / 1000}초 안에 기동하지 않음. 포트 ${port}.\n` +
     `서버 출력:\n${output || '(출력 없음)'}`
