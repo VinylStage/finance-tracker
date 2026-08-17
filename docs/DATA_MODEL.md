@@ -21,12 +21,12 @@
 | audit_log | 모든 쓰기의 전후 값 | id, ts, actor, action_id, action_label, table_name, row_id, op, before_json, after_json, undone_at |
 | _audit_context | 트리거가 읽을 현재 요청 컨텍스트(단일 행) | id, actor, action_id, action_label |
 | card_products | 카드 상품. payment_methods 아래에 붙는다 | id, payment_method_id, issuer, product_name, card_type, annual_fee, prev_month_threshold, billing_cycle_day, statement_close_day, memo |
-| card_benefits | 카드별 할인·적립 조건 (#563: `payment_style` 이 있으면 그 결제방식에만 적용, 비우면 무관) | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style, rule_json |
+| card_benefits | 카드별 할인·적립 조건 (#563: `payment_style` 이 있으면 그 결제방식에만 적용, 비우면 무관). `rule_json` 은 혜택 선언(#564) — `kind` 로 계산식을 고르고, `caps[{window, amount}]` 로 **항목별 한도**를 담는다(#578, `window` 는 `transaction`·`day`·`month`). `monthly_cap` 컬럼은 그 선언이 없던 시절의 값이라 읽기에서 폴백으로만 쓴다 | id, card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style, rule_json |
 | card_policies | 카드사·기간별 무이자 할부 정책 | id, payment_method_id, from_month, to_month, free_from_sequence, category_id |
 | installment_duplicate_dismissals | 중복 후보로 뜬 것을 사용자가 아니라고 한 기록 | transaction_id, dismissed_at |
 | merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |
 | recurrence_suggestion_dismissals | 반복 거래 제안에서 사용자가 거절한 가맹점 (#499). 세션이 아니라 DB 에 남긴다 — "이번엔 안 본다" 가 아니라 "이건 반복이 아니다" 라는 지속적 판단이라 기기를 바꿔도 유지돼야 한다 | id, merchant, dismissed_at |
-| card_threshold_tiers | 카드별 전월실적 구간과 그 구간의 요율 (#526). 구간 수가 카드마다 달라 컬럼이 아니라 행으로 둔다 | id, card_product_id, min_spend, rate, label, created_at |
+| card_threshold_tiers | 카드별 전월실적 구간과 그 구간의 요율 (#526). 구간 수가 카드마다 달라 컬럼이 아니라 행으로 둔다. `monthly_cap` 은 그 구간의 **카드 월 통합 한도**(#578) — 항목별 한도는 `card_benefits.rule_json` 의 `caps[]` 에 있고 이쪽은 카드 단위 정본이다. NULL 이면 통합 한도를 걸지 않는다 | id, card_product_id, min_spend, rate, label, monthly_cap, created_at |
 | card_threshold_exclusions | 사용자가 카드 실적 집계에서 뺀 거래 (#526). 행이 있으면 제외, 지우면 재포함 | id, transaction_id, reason, excluded_at |
 | schema_migrations | 적용된 마이그레이션 파일 이름 | id, name, applied_at |
 
