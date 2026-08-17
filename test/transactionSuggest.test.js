@@ -16,7 +16,7 @@ const { startTestServer } = require('./helpers/testServer');
 //      "부분일치" 라고 제안한다
 //   3. 최근 가맹점이 정말 최근순인가
 
-const PORT = 34991;
+const PORT = 20991;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

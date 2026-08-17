@@ -10,7 +10,7 @@ const os = require('node:os');
 // 같은 범위 안에서는 중복이 거부되는지가 핵심이다. 부분 유니크 인덱스가
 // 실제 서버 경로에서도 작동하는지 확인한다.
 
-const PORT = 34611; // 다른 테스트와 겹치지 않는 포트
+const PORT = 20611; // 다른 테스트와 겹치지 않는 포트
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;
