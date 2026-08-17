@@ -48,11 +48,22 @@ function validate(body) {
   const ruleError = validateRule(body.rule);
   if (ruleError) return ruleError;
 
-  for (const [key, label] of [['monthly_cap', '월 한도'], ['min_amount', '건당 최소 결제액']]) {
+  for (const [key, label] of [['monthly_cap', '월 한도'], ['min_amount', '건당 최소 결제액'], ['max_amount', '건당 최대 결제액']]) {
     const v = body[key];
     if (v === undefined || v === null || v === '') continue;
     const n = Number(v);
     if (!Number.isFinite(n) || n < 0) return `${label}은 0 이상이어야 합니다.`;
+  }
+
+  // 상한이 하한보다 크지 않으면 **어느 결제도 이 혜택에 안 걸린다**(#638). 하한은
+  // «이상», 상한은 «미만» 이라 둘이 같아도 빈 구간이다. 저장은 되는데 혜택이
+  // 영영 안 잡히는 상태라, 모르는 유형·모르는 한도 기간과 같은 이유로 막는다.
+  const maxRaw = body.max_amount;
+  if (maxRaw !== undefined && maxRaw !== null && maxRaw !== '') {
+    const min = Number(body.min_amount) || 0;
+    if (Number(maxRaw) <= min) {
+      return `건당 최대 결제액은 최소 결제액(${min}원)보다 커야 합니다. 지금 값으로는 어떤 결제도 이 혜택에 걸리지 않습니다.`;
+    }
   }
 
   const card = db.prepare('SELECT id FROM card_products WHERE id=?').get(body.card_product_id);
@@ -117,6 +128,9 @@ function normalize(body) {
     monthly_cap: blankToNull(body.monthly_cap),
     // 안 적으면 조건 없음이다. NULL 로 두면 비교할 때마다 NULL 처리를 해야 한다.
     min_amount: blankToNull(body.min_amount) ?? 0,
+    // 안 적으면 상한 없음이다(#638). 하한과 달리 0 으로 채우면 «0원 미만» 이 되어
+    // 모든 결제를 막으므로 NULL 을 그대로 둔다.
+    max_amount: blankToNull(body.max_amount),
     memo: body.memo || null,
     // 비우면 결제방식 무관이다. 넣은 혜택에만 제약이 걸린다(#563).
     payment_style: body.payment_style || null,
@@ -172,7 +186,7 @@ router.get('/', (req, res) => {
   }
 });
 
-router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'card_threshold_tier_id']), (req, res) => {
+router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'max_amount', 'card_threshold_tier_id']), (req, res) => {
   try {
     const err = validate(req.body);
     if (err) return res.status(400).json({ error: err });
@@ -180,10 +194,10 @@ router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', '
     const b = normalize(req.body);
     const info = db.prepare(`
       INSERT INTO card_benefits
-        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, memo, payment_style, card_threshold_tier_id, rule_json, threshold_exempt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (card_product_id, category_id, merchant_pattern, benefit_type, rate, monthly_cap, min_amount, max_amount, memo, payment_style, card_threshold_tier_id, rule_json, threshold_exempt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
-           b.rate, b.monthly_cap, b.min_amount, b.memo, b.payment_style,
+           b.rate, b.monthly_cap, b.min_amount, b.max_amount, b.memo, b.payment_style,
            b.card_threshold_tier_id, b.rule_json, b.threshold_exempt);
     res.status(201).json({ id: info.lastInsertRowid, ok: true });
   } catch (e) {
@@ -191,7 +205,7 @@ router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', '
   }
 });
 
-router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'card_threshold_tier_id']), (req, res) => {
+router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'max_amount', 'card_threshold_tier_id']), (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM card_benefits WHERE id=?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: '찾는 혜택이 없습니다. 이미 삭제됐을 수 있어요.' });
@@ -206,11 +220,11 @@ router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap',
     db.prepare(`
       UPDATE card_benefits
       SET card_product_id=?, category_id=?, merchant_pattern=?, benefit_type=?,
-          rate=?, monthly_cap=?, min_amount=?, memo=?, payment_style=?,
+          rate=?, monthly_cap=?, min_amount=?, max_amount=?, memo=?, payment_style=?,
           card_threshold_tier_id=?, rule_json=?, threshold_exempt=?
       WHERE id=?
     `).run(b.card_product_id, b.category_id, b.merchant_pattern, b.benefit_type,
-           b.rate, b.monthly_cap, b.min_amount, b.memo, b.payment_style,
+           b.rate, b.monthly_cap, b.min_amount, b.max_amount, b.memo, b.payment_style,
            b.card_threshold_tier_id, b.rule_json, b.threshold_exempt, req.params.id);
     res.json({ ok: true });
   } catch (e) {
