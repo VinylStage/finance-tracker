@@ -89,3 +89,17 @@ jobs:
 
       - name: Test server (node --test)
         run: npm run test:coverage --if-present
+
+      # 서버 기동 시간을 CI 러너에서 잰다(#379).
+      #
+      # 게이트가 아니라 **기록**이다. 실패시키지 않는다 — 임계값을 정할 근거가
+      # 아직 없고, 여기서 빌드를 깨면 «측정하려다 만든 플레이키» 가 된다.
+      #
+      # 로컬(Apple M4 Pro 12코어)에서는 12개 동시 기동에 최대 345ms, 상한의 2.3%
+      # 였다. CI 러너가 몇 배 느린지는 이 단계의 로그가 말해 준다.
+      #
+      # `if: always()` 로 둔다. 앞 단계가 깨져서 조사할 때가 이 숫자를 가장 보고
+      # 싶은 순간이다.
+      - name: Measure server startup
+        if: always()
+        run: npm run measure:startup
