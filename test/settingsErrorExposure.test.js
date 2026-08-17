@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const Database = require('better-sqlite3');
 const { startTestServer } = require('./helpers/testServer');
 
-const PORT = 34579; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20579; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 
