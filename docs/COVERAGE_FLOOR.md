@@ -116,6 +116,26 @@ DOM 이 똑같다.
 
 ---
 
+## 2-2. 서버 렌더 가드 — `theme.applyTheme` (2026-08-18 판정)
+
+`lib/theme.js` 분기 **83.33%** 에서 안 도는 두 갈래다.
+
+```js
+const el = root || (typeof document !== 'undefined' ? document.documentElement : null);
+if (!el) return DEFAULT_THEME;
+```
+
+- `typeof document !== 'undefined'` 의 **false** 갈래 — jsdom 에는 `document` 가 있다
+- `!el` 의 **true** 갈래 — 위가 false 여야 도달하므로 같은 이유로 못 온다
+
+`root` 를 주는 경로와 안 주는 경로는 **둘 다 이미 검사한다**(`pureFallbacks.test.jsx`).
+돌연변이로도 확인했다 — `root` 폴백을 지우면 3건이 죽는다. 즉 **테스트가 그 줄을 실제로
+지나가는데도 숫자가 안 움직인다.** 남은 것은 SSR 전용 갈래이고 이 저장소는 SSR 을 하지 않는다.
+
+같은 판정이 `hooks/usePeriod.js`(2번)에 이미 있다. 서버 렌더 가드는 **일관되게 도달 불가**다.
+
+---
+
 ## 관찰 불가로 판정된 것들 (커버리지 100% 여도 돌연변이가 산다)
 
 - `asInt('')` 가 `null` 이라 빈 값 검사가 **중복 방어**가 된다 (#485)
@@ -124,6 +144,15 @@ DOM 이 똑같다.
 - 조회 실패 시 `.catch` 제거 — 초기 상태가 이미 `[]` 라 화면이 같다 (#575)
 - `minAmount !== ''` — 자료형이 문자열뿐이라 같다 (위 5번)
 - `periodConfig` 의 `case '주'`·`case '연'` — 차트 안에서만 드러난다 (위 6번)
+
+## 이 목록에서 빠진 것 (덮어서 해결됨)
+
+- **`lib/categoryChart.js`** — 분기 85.71% 였고 남은 두 갈래(배열 아님 · `total` 폴백)가
+  **도달 가능했다.** `pureFallbacks.test.jsx` 로 덮어 **100%** 가 됐다(2026-08-18).
+  이 파일이 «후보를 고르는 데만 쓴다» 의 성공 사례다 — 순위에 올라온 것을 열어 보니
+  도달 불가가 아니라 그냥 안 덮인 자리였다
+- **`lib/auditFormat.js`** — `describeAction` 이 함수 전체 미실행이었다(42.85%).
+  덮어서 함수 100% 가 됐다(#649)
 
 ## 관련
 
