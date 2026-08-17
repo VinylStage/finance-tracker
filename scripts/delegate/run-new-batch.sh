@@ -74,9 +74,14 @@ acquire_lock() {
 scope_check() {   # 배치 밖 파일이 바뀌었나
   git status --porcelain=v1 > "$SC/after-$label.txt"
   # target 과 DELEGATE_EXTRA_PATHS 는 이 배치가 만들기로 한 것이라 stray 가 아니다.
+  #
+  # 경로는 `awk '{print $2}'` 로 뽑지 않는다. **공백이 든 이름을 못 자른다** —
+  # 실제로 모델이 산문 한 줄을 파일명으로 만든 적이 있고(«Actually, looking at
+  # the error message again»), 그때 감지는 됐는데 정리가 안 돼 남았다.
+  # porcelain 은 3열부터가 경로이고, 특수문자가 있으면 따옴표로 감싼다.
   local allowed=("$target" "${extra[@]}")
   local stray=$(comm -13 <(sort "$SC/before-$label.txt") <(sort "$SC/after-$label.txt") \
-                | awk '{print $2}' \
+                | cut -c4- | sed 's/^"//; s/"$//' \
                 | grep -vxF -- "${(F)allowed}")
   if [[ -n "$stray" ]]; then
     print "  ✖ 배치 밖 편집: $stray"
