@@ -13,7 +13,7 @@ const { startTestServer } = require('./helpers/testServer');
 //   1. 프리뷰가 조용히 쓰기를 하면 원칙이 무의미해진다
 //   2. API 를 직접 호출하면 프리뷰를 건너뛸 수 있다
 
-const PORT = 34713; // 다른 테스트와 겹치지 않는 포트
+const PORT = 20713; // 다른 테스트와 겹치지 않는 포트
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

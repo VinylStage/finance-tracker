@@ -7,7 +7,7 @@ const { startTestServer } = require('./helpers/testServer');
 // 계산을 고정한다면 여기서는 "API 를 직접 호출해 프리뷰를 건너뛸 수 있는가" 를
 // 본다 — ADR 0008 이 "지켜지지 않을 수 있는 지점" 으로 지목한 바로 그 경로다.
 
-const PORT = 34605; // 다른 테스트와 겹치지 않는 포트 (현재 최대는 34604)
+const PORT = 20605; // 다른 테스트와 겹치지 않는 포트 (현재 최대는 20604)
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

@@ -3,7 +3,7 @@ const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
 const { startTestServer } = require('./helpers/testServer');
 
-const PORT = 35046;
+const PORT = 21046;
 let server;
 let pmId;
 let cardId;
