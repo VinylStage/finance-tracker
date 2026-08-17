@@ -97,6 +97,10 @@ function loadCards() {
   const benefits = db.prepare(`
     SELECT id, card_product_id, category_id, merchant_pattern,
            benefit_type, rate, monthly_cap, min_amount, payment_style,
+           -- 건당 결제액 상한(#638). 이 칸이 빠지면 «10만원 미만 30%» 줄이
+           -- 금액과 무관하게 후보로 남아, 10만원 이상 결제에서 20% 줄을
+           -- 밀어내고 자기 한도로 잘린다 — 아래 threshold_exempt 와 같은 종류다.
+           max_amount,
            card_threshold_tier_id, rule_json,
            -- 실적 조건이 붙지 않는 혜택(#636). 이 칸이 빠지면 계산기가 전부
            -- «조건 붙음» 으로 보고 실적 미달인 달에 죽인다 — 위 rule_json 과
@@ -494,6 +498,7 @@ router.get('/detail', (req, res) => {
           rate: b.rate,
           monthlyCap: b.monthly_cap,
           minAmount: b.min_amount,
+          maxAmount: b.max_amount ?? null,
           paymentStyle: b.payment_style || null,
           tierId: b.card_threshold_tier_id ?? null,
           tierLabel: tier ? (tier.label || null) : null,

@@ -143,6 +143,10 @@ function compareCards({ transactions, cards } = {}) {
         // 그 구간의 카드 월 통합 한도(#578). 구간이 없으면 undefined 이고, 그때는
         // 옛 `card_benefits.monthly_cap` 컬럼으로 되돌아간다.
         tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
+        // 거래일(#638). 국군의 날·현충일처럼 특정 날에만 붙는 혜택을 가린다.
+        // 안 넘기면 그런 혜택이 통째로 빠진다 — 여기서 빠뜨리면 계산기는
+        // 「날짜를 모른다」 로 읽고 조용히 뺀다.
+        date: tx.date,
       });
       return { cardId: card.id, productName: card.product_name, ...r };
     });
