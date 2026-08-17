@@ -147,8 +147,13 @@ describe('D. 월 한도가 누적된다', () => {
     assert.equal(r.details[1].gap, 300);
   });
 
-  test('D-2. 가정 계산은 서로의 한도를 깎지 않는다', () => {
-    // 가정끼리 한도를 소진시키면 계산이 뒤엉킨다. 실제 쓴 카드만 소진한다.
+  // 이 테스트는 예전에 «가정 계산은 서로의 한도를 깎지 않는다» 로 두 건 모두 1000원을
+  // 기대했다. 그 기대가 **과대추정을 계약으로 굳히고 있었다**(#637).
+  //
+  // 갈라야 하는 것은 «가정끼리» 가 아니라 «어느 시나리오인가» 다. 「B로 계속 썼다면」
+  // 안에서는 B 의 한도가 당연히 줄어든다 — 안 줄이면 한 달에 여러 건이 있을 때 월
+  // 한도가 건마다 새로 열려 실측 6배까지 부푼다. 카드 사이의 독립은 D-3 이 잠근다.
+  test('D-2. 같은 카드의 가정은 한 달 안에서 누적된다', () => {
     const capped = { id: 2, product_name: 'B카드', thresholdMet: true,
       benefits: [benefit({ id: 2, rate: 10, monthly_cap: 1000 })] };
 
@@ -157,9 +162,12 @@ describe('D. 월 한도가 누적된다', () => {
       cards: [CARD_A, capped],
     });
 
-    // 두 건 모두 B 가 최적이고 한도가 안 깎였으므로 각각 1000원까지 가능.
+    // 첫 건에서 B 의 월 한도를 다 쓴다.
+    assert.equal(r.details[0].best.cardId, 2);
     assert.equal(r.details[0].best.benefit, 1000);
-    assert.equal(r.details[1].best.benefit, 1000, '가정끼리 한도를 깎았다');
+    // 두 번째 건에서 B 는 0 이므로 A(1% = 100원)가 최적이 된다.
+    assert.equal(r.details[1].best.cardId, 1, 'B 가정의 한도가 두 번째 건에서도 열려 있다');
+    assert.equal(r.details[1].best.benefit, 100);
   });
 });
 
