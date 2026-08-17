@@ -78,9 +78,31 @@ jobs:
         run: npm audit --audit-level=high
         working-directory: client
 
+  # ───────────────────────────────────────────────────────────────────────
+  # 클라이언트를 샤드 둘로 쪼갠 이유(#630)
+  #
+  # job 분리(#619) 뒤에 남은 장대가 이 job 하나였다. 112초 중 **96초가 vitest 자체**라
+  # 오버헤드(setup+npm ci+build 16초)에서는 짤 것이 없었다.
+  #
+  # **커버리지 게이트를 잃지 않는다.** 샤드는 자기가 실행한 파일만 놓고 커버리지를
+  # 계산하므로 단독으로는 분모가 쪼그라들지만(실측 73.25 / 67.03), `--reporter=blob`
+  # 으로 기록해 `--mergeReports` 로 합치면 전체 실행과 **소수점까지 같아진다**
+  # (93.92 / 90.89 / 91.03 / 95.51). 그래서 규칙이 하나 생긴다 —
+  #
+  #   샤드 job    게이트를 돌리지 않는다. blob 만 뜬다
+  #   병합 job    게이트를 여기서 한 번 돈다
+  #
+  # 샤드가 각자 게이트를 돌면 **거짓 실패**가 난다(75.87% 가 90% 미달로 잡힌다).
+  # 그래서 샤드 job 은 임계값을 0 으로 눌러 끈다.
   client:
-    name: Test client (vitest)
+    name: Test client (vitest) ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
+    strategy:
+      # 한 샤드가 깨져도 나머지를 끝까지 돌린다. 어느 샤드가 깨졌는지만 보고
+      # 끝내면 다른 샤드의 실패를 다음 실행에서 또 발견한다.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -92,8 +114,49 @@ jobs:
         working-directory: client
       - run: npm run build
         working-directory: client
-      - name: Test client (vitest)
-        run: npm run test:coverage
+      # 임계값을 0 으로 눌러 게이트를 끈다. 샤드 커버리지로 판정하면 안 된다.
+      - name: Test client shard ${{ matrix.shard }}/2
+        run: >-
+          npx vitest run --shard=${{ matrix.shard }}/2 --coverage --reporter=blob
+          --coverage.thresholds.lines=0 --coverage.thresholds.branches=0
+          --coverage.thresholds.functions=0 --coverage.thresholds.statements=0
+        working-directory: client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: client/.vitest-reports/*
+          retention-days: 1
+          if-no-files-found: error
+          # `.vitest-reports` 는 **점으로 시작하는 디렉터리**다. upload-artifact v4 는
+          # 숨김 파일을 기본으로 제외해서, blob 이 제대로 쓰였는데도
+          # «No files were found» 로 죽는다(첫 실행에서 실제로 겪었다 —
+          # 로그에 `blob report written to …/client/.vitest-reports/blob-1-2.json` 이
+          # 찍힌 뒤 업로드가 빈손으로 끝났다).
+          include-hidden-files: true
+
+  # 샤드 결과를 합쳐 **커버리지 게이트를 여기서 한 번** 돈다.
+  #
+  # `--mergeReports` 는 테스트를 다시 돌리지 않는다. 기록만 읽어 리포트를 내므로
+  # 이 job 은 몇 초짜리다 — 비용은 npm ci 와 artifact 내려받기 쪽이다.
+  client-coverage:
+    name: Test client (coverage gate)
+    needs: [client]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        working-directory: client
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vitest-blob-*
+          path: client/.vitest-reports
+          merge-multiple: true
+      - name: Merge shard reports and check coverage
+        run: npx vitest --mergeReports --coverage
         working-directory: client
 
   server:
@@ -116,13 +179,13 @@ jobs:
   # 있다. 그러면 빨간 CI 를 머지할 수 있게 된다 — 막으려던 것과 정반대다.
   ci:
     name: ci
-    needs: [checks, client, server]
+    needs: [checks, client, client-coverage, server]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: 앞 job 이 하나라도 실패하면 막는다
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
         run: |
-          echo "checks=${{ needs.checks.result }} client=${{ needs.client.result }} server=${{ needs.server.result }}"
+          echo "checks=${{ needs.checks.result }} client=${{ needs.client.result }} client-coverage=${{ needs['client-coverage'].result }} server=${{ needs.server.result }}"
           exit 1
-      - run: echo "checks · client · server 전부 통과"
+      - run: echo "checks · client(샤드) · client-coverage · server 전부 통과"
