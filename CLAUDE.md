@@ -34,6 +34,11 @@ Node 내장 러너(`node --test`). 각 테스트가 `mkdtemp` 로 임시 DB 를 
 
 커버리지 게이트는 `npm run test:coverage` (lines 80 / branches 75 / functions 85 / statements 80).
 
+**커버리지 순위로 파일을 고르기 전에 `docs/COVERAGE_FLOOR.md` 를 본다.** 거기 적힌
+자리는 도달 불가로 판정이 끝난 것이라 아무리 테스트를 써도 숫자가 안 움직인다
+(`hooks/usePeriod.js` 는 테스트를 0건 → 11건으로 올렸는데 분기 50% 가 그대로였다).
+성과는 커버리지 증가가 아니라 **죽인 돌연변이 수**로 본다.
+
 ### 테스트 상한은 60초다 (#602)
 
 `--test-timeout=60000`. **node 의 기본값은 무한이라 매달린 테스트가 영영 안 끝난다.**
