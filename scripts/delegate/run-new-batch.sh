@@ -85,7 +85,10 @@ scope_check() {   # 배치 밖 파일이 바뀌었나
     # 안 지워진다 — 실제로 stray 가 그대로 남아 다음 실행을 오염시켰다.
     # 인덱스에서 먼저 빼고, 추적 중이던 파일만 되돌린다.
     print -r -- "$stray" | while read f; do
-      if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+      # 판정은 **HEAD 기준**이다. `git ls-files` 는 인덱스를 보므로 aider 가
+      # 스테이지해 둔 새 파일도 «추적 중» 이라고 답한다 — 그러면 아래 checkout
+      # 갈래로 가서 HEAD 에 없는 경로라 실패하고, 파일이 그대로 남는다(실측).
+      if git cat-file -e "HEAD:$f" 2>/dev/null; then
         git checkout HEAD -- "$f" 2>/dev/null
       else
         git rm -q --cached --force -- "$f" 2>/dev/null
@@ -210,7 +213,13 @@ round=1
 while (( round <= 3 )); do
   # zsh print 는 `---` 을 옵션으로 읽는다. -r -- 로 끊어 준다
   print -r -- "--- $label 수정 $round 회차 ---"
+  # 수정 라운드에는 원 명세가 안 실린다. 그래서 «어느 파일을 만드는가» 를 여기서
+  # 다시 못 박는다 — 안 그러면 모델이 확장자를 바꾼 파일을 새로 만들어 범위
+  # 위반으로 배치가 통째로 날아간다(실측 2회, 매번 같은 자리).
   { print "직전 결과가 아래 이유로 실패했다. 그 부분만 고친다. 파일 전체를 다시 쓴다."
+    print ""
+    print "고칠 파일은 이것뿐이다. 새 파일을 만들지 않는다:"
+    for f in "$target" "${extra[@]}"; do print "  $f"; done
     print ""; cat "$SC/fail-$label.txt" } > "$SC/fix-$label-$round.md"
   snapshot_before
   run_aider "$SC/fix-$label-$round.md" "$M/aider-$label-fix$round.log"
