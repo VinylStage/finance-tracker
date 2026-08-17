@@ -9,6 +9,15 @@
 #
 #   DELEGATE_TARGET_KIND=server run-new-batch.sh 라벨 /abs/spec.md test/x.test.js src/y.js
 #
+# 테스트만이 아니라 **구현까지** 위임하려면 DELEGATE_EXTRA_PATHS 에 같이 만들
+# 파일을 적는다. 안 적으면 scope_check 가 «배치 밖 편집» 으로 보고 지운다 —
+# 실제로 그것 때문에 구현 위임이 구조적으로 막혀 있었다.
+#
+#   DELEGATE_EXTRA_PATHS='client/src/lib/x.js' run-new-batch.sh 라벨 spec.md client/src/lib/x.test.jsx
+#
+# 검수는 여전히 target(테스트 파일) 하나로 한다. 그래도 구현이 틀리면 테스트가
+# 못 도니 같이 잡힌다 — 검수를 두 개로 늘릴 이유가 없다.
+#
 # 러너를 둘로 복제하지 않는 이유는 가드 때문이다. 아래 가드는 전부 실제 사고에서
 # 하나씩 붙은 것이고, 파일을 나누면 다음 사고 때 한쪽만 고쳐진다. 실제로 다른
 # 것은 `verify()` 안 세 줄뿐이라 거기서만 갈래를 탄다.
@@ -28,6 +37,8 @@ M=${DELEGATE_METRICS:-$SC}
 # 위임 비율을 잘못 냈다. 비워 둔 채로 돌지 못하게 필수로 막는다.
 ISSUE=${DELEGATE_ISSUE:?DELEGATE_ISSUE 가 필요하다 (예: DELEGATE_ISSUE=526)}
 MIN_TESTS=${MIN_TESTS:-5}
+# 이 배치가 target 말고 더 만들어도 되는 파일들(공백으로 구분). 구현 위임용이다.
+extra=(${=DELEGATE_EXTRA_PATHS:-})
 # 검수 방식을 고른다. client 는 vitest, server 는 node --test 다.
 KIND=${DELEGATE_TARGET_KIND:-client}
 if [[ $KIND != client && $KIND != server ]]; then
@@ -62,8 +73,11 @@ acquire_lock() {
 
 scope_check() {   # 배치 밖 파일이 바뀌었나
   git status --porcelain=v1 > "$SC/after-$label.txt"
+  # target 과 DELEGATE_EXTRA_PATHS 는 이 배치가 만들기로 한 것이라 stray 가 아니다.
+  local allowed=("$target" "${extra[@]}")
   local stray=$(comm -13 <(sort "$SC/before-$label.txt") <(sort "$SC/after-$label.txt") \
-                | awk '{print $2}' | grep -v "^${target}$")
+                | awk '{print $2}' \
+                | grep -vxF -- "${(F)allowed}")
   if [[ -n "$stray" ]]; then
     print "  ✖ 배치 밖 편집: $stray"
     print -r -- "$stray" | while read f; do git checkout -- "$f" 2>/dev/null || rm -f "$f"; done
@@ -96,6 +110,13 @@ verify() {   # 통과하면 0, 실패 사유를 $SC/fail-$label.txt 로
   if [[ ! -f "$REPO/$target" ]]; then
     print "파일이 만들어지지 않았다: $target" >> "$SC/fail-$label.txt"; return 1
   fi
+  # 같이 만들기로 한 파일도 확인한다. 테스트만 쓰고 구현을 빼면 아래 실행에서
+  # «못 찾음» 으로 잡히긴 하지만, 사유가 «파일이 없다» 로 나와야 모델이 고친다.
+  for e in "${extra[@]}"; do
+    if [[ ! -f "$REPO/$e" ]]; then
+      print "같이 만들기로 한 파일이 없다: $e" >> "$SC/fail-$label.txt"; return 1
+    fi
+  done
   # 껍데기 방지 — 테스트 개수를 센다. 삭제형/빈껍데기 실패는 실행결과로 안 잡힌다.
   # 서버는 node:test 라 `test(` 도 쓴다. 둘 다 세지 않으면 멀쩡한 산출물이
   # "0 개" 로 반려된다.
@@ -145,11 +166,15 @@ verify() {   # 통과하면 0, 실패 사유를 $SC/fail-$label.txt 로
 
 record_numstat() {
   local out="$M/numstat-$label-$1.tsv"
-  git diff --numstat -- "$target" > "$out" 2>/dev/null
+  git diff --numstat -- "$target" "${extra[@]}" > "$out" 2>/dev/null
   # 새 파일은 diff --numstat 에 안 잡힌다. 추적되지 않은 파일은 줄수로 센다
-  if [[ ! -s "$out" && -f "$REPO/$target" ]]; then
-    printf "%s\t0\t%s\n" "$(wc -l < "$REPO/$target" | tr -d ' ')" "$target" > "$out"
-  fi
+  # 새 파일은 diff --numstat 에 안 잡힌다. 추적되지 않은 파일은 줄수로 센다.
+  # **구현 파일도 같이 센다** — 안 세면 위임한 줄이 통계에서 빠져 비율이 낮게 나온다.
+  for f in "$target" "${extra[@]}"; do
+    [[ -f "$REPO/$f" ]] || continue
+    grep -qF -- "	$f" "$out" 2>/dev/null && continue
+    printf "%s\t0\t%s\n" "$(wc -l < "$REPO/$f" | tr -d ' ')" "$f" >> "$out"
+  done
   local add=$(awk '{a+=$1} END{print a+0}' "$out")
   printf "  numstat(%s) +%s → %s\n" "$1" "$add" "$out"
   printf "%s\t%s\t%s\n" "$label" "$1" "$add" >> "$M/numstat-summary.tsv"
