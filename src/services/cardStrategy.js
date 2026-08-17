@@ -5,7 +5,12 @@
 'use strict';
 
 const { BENEFIT_TYPES } = require('../constants.js');
-const { benefitForTransaction } = require('./benefitRules.js');
+const { benefitForTransaction, capsOf, applyItemCaps } = require('./benefitRules.js');
+
+function toInt(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.floor(n) : 0;
+}
 
 function estimateBenefit({
   benefits,
@@ -16,6 +21,9 @@ function estimateBenefit({
   activeTierId,
   thresholdMet,
   benefitUsedThisMonth,
+  // 이번 달에 적용되는 실적 구간의 카드 월 통합 한도(#578). 없으면 옛
+  // `card_benefits.monthly_cap` 컬럼으로 되돌아간다.
+  tierMonthlyCap,
 }) {
   // 1. 후보 고르기
   let candidates = [];
@@ -112,19 +120,82 @@ function estimateBenefit({
   // 4. 혜택 계산
   let benefit = 0;
   let capped = false;
+  // 어느 층에 잘렸나(#578). `item-transaction` · `item-day` · `item-month` ·
+  // `card-monthly` · null. 통합 한도가 걸리면 그쪽이 이긴다 — 마지막에 잘린 층이다.
+  let cappedBy = null;
+  // 선언은 있는데 누적을 몰라 **적용하지 못한** 창(#631). 화면이 «아직 반영 못 한다»
+  // 를 말할 수 있어야 한다. 조용히 비우면 사용자는 한도가 걸린 줄 안다.
+  let unappliedCapWindows = [];
   let skipped = [];
 
   if (best) {
     // 고를 때 이미 계산한 값을 다시 쓴다. 여기서 한 번 더 계산하면 두 곳이
     // 갈라질 수 있다 — 고른 근거와 보여주는 값이 달라진다.
     const calculatedBenefit = bestBenefit;
-    const remainingCap = Math.max(0, (best.monthly_cap || Infinity) - benefitUsedThisMonth);
-    benefit = Math.min(calculatedBenefit, remainingCap);
 
-    if (calculatedBenefit > remainingCap) {
-      capped = true;
+    // ── 한도를 두 층으로 자른다(#578). **순서가 결과를 바꾼다.**
+    //
+    // 항목 한도가 통합보다 큰 카드에서 «항목 → 통합» 과 그 반대가 다른 값을 낸다.
+    // 약관이 «항목별로 이만큼까지, 그리고 카드 전체로 이만큼까지» 라고 읽히므로
+    // **항목을 먼저 자르고 통합으로 한 번 더 자른다.** 이 순서를 뒤집지 않는다.
+    //
+    // 1층: 항목별 한도 — `rule_json.caps[]`
+    //
+    // `month` 창에 넘기는 누적이 `benefitUsedThisMonth` 다. 이 값은 **카드 단위**
+    // 누적이라 항목 단위로는 과하게 잡힌다(같은 카드의 다른 항목이 쓴 몫까지 뺀다).
+    // 항목별 누적을 알려면 «어느 거래에 어느 혜택이 붙었나» 가 남아 있어야 하는데
+    // 이 저장소는 그것을 저장하지 않는다(#631). 과하게 자르는 쪽이 과대추정보다
+    // 덜 해롭다 — 다른 카드에서 과대적립을 되돌린 것과 같은 기준이다.
+    // 옛 `card_benefits.monthly_cap` 컬럼도 **항목 한도로 읽는다.**
+    //
+    // 이게 없으면 구간에 통합 한도가 생기는 순간 그 컬럼이 아래 폴백 자리에서
+    // 밀려나 **그 줄의 한도가 계산에서 아예 사라진다.** 나라사랑카드의 Easy 줄
+    // 6개가 정확히 그 모양이다 — 실적과 무관한 줄이라 구간을 안 가리키면서 각자
+    // 개별 한도(3,000 · 5,000 · 50,000 · 100,000)를 이 컬럼에 갖고 있다. 요율
+    // 20% / 한도 3,000 인 줄이면 5만원 결제에서 3,000 이 10,000 으로 부푼다.
+    //
+    // 선언(`caps`)에 `month` 창이 있으면 그것이 정본이다. 컬럼은 선언이 없을 때만 쓴다.
+    //
+    // 아래 통합 폴백과 겹쳐 같은 값으로 두 번 자르는 카드가 생기는데, 두 자르기가
+    // 모두 `min` 이라 결과가 달라지지 않는다(#578 에서 48개 조합으로 확인).
+    const itemCaps = capsOf(best);
+    if (best.monthly_cap !== null && best.monthly_cap !== undefined
+        && !itemCaps.some((c) => c.window === 'month')) {
+      itemCaps.push({ window: 'month', amount: toInt(best.monthly_cap) });
     }
 
+    const itemCut = applyItemCaps(calculatedBenefit, itemCaps, {
+      month: benefitUsedThisMonth,
+    });
+
+    // 2층: 카드 월 통합 한도 — 실적 구간의 값이 정본이고, 없으면 옛
+    // `card_benefits.monthly_cap` 컬럼으로 되돌아간다.
+    //
+    // **되돌리는 이유**: 지금 등록된 카드는 그 컬럼에 통합 한도를 넣어 우회하고
+    // 있다(나라사랑카드). 컬럼을 무시하면 그 카드들의 한도가 사라진다. 구간 값이
+    // 들어오면 그때부터 구간이 이긴다.
+    const unifiedCap = tierMonthlyCap !== undefined && tierMonthlyCap !== null
+      ? toInt(tierMonthlyCap)
+      : (best.monthly_cap === undefined || best.monthly_cap === null
+        ? null
+        : toInt(best.monthly_cap));
+
+    let afterUnified = itemCut.benefit;
+    let unifiedCapped = false;
+    if (unifiedCap !== null) {
+      const remaining = Math.max(0, unifiedCap - benefitUsedThisMonth);
+      if (afterUnified > remaining) {
+        afterUnified = remaining;
+        unifiedCapped = true;
+      }
+    }
+
+    benefit = afterUnified;
+    // 예전 계약을 지킨다 — `capped` 는 «어느 한도든 걸렸다» 다. 어느 쪽에 잘렸는지는
+    // `cappedBy` 로 따로 싣는다. 화면이 그 둘을 구분해 말해야 하기 때문이다.
+    capped = calculatedBenefit > benefit;
+    cappedBy = unifiedCapped ? 'card-monthly' : (itemCut.cappedBy ? `item-${itemCut.cappedBy}` : null);
+    unappliedCapWindows = itemCut.unapplied;
   }
 
   // **걸러진 이유를 전부 싣는다.** "왜 추천 안 됐는지" 가 결과의 일부다
@@ -138,6 +209,8 @@ function estimateBenefit({
     applied: best ? { id: best.id, benefit_type: best.benefit_type, rate: best.rate, matched: best.matched } : null,
     skipped,
     capped,
+    cappedBy,
+    unappliedCapWindows,
   };
 
   // 실적 미달이면 혜택은 0 이다. 다만 **고른 혜택은 그대로 둔다** — 화면이
@@ -146,6 +219,9 @@ function estimateBenefit({
   if (!thresholdMet) {
     result.benefit = 0;
     result.capped = false;
+    // 한도에 잘린 것이 아니라 실적이 모자란 것이다. `cappedBy` 를 남겨 두면 화면이
+    // «월 한도를 다 썼어요» 라고 잘못 말한다 — 사유가 둘 다 서 있으면 안 된다.
+    result.cappedBy = null;
     result.thresholdUnmet = true;
   }
 

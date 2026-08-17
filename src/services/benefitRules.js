@@ -145,6 +145,75 @@ function evaluatorFor(kind) {
   return EVALUATORS[kind] || null;
 }
 
+// ─────────────────────────── 항목별 한도 ───────────────────────────
+//
+// 한도가 두 층이라 자리를 갈랐다(#578).
+//
+//   항목별 한도    `rule_json.caps[]`                       ← 여기
+//   카드 월 통합   `card_threshold_tiers.monthly_cap`       ← 카드 단위 정본
+//
+// 통합 한도를 `rule_json` 에 넣으면 혜택 줄마다 복제되어 정본이 어디인지 코드가
+// 정할 수 없다. 실제로 나라사랑카드가 그 상태로 들어가 항목 29개가 구간 5개마다
+// 복제돼 151줄이 됐다.
+//
+// `window` 를 **값으로** 두는 것이 «카드마다 리셋 주기가 다르다» 를 흡수하는 자리다.
+// 카드별 특수 코드 없이 데이터로 갈린다.
+//
+//   { "window": "transaction", "amount": 4000 }   건당
+//   { "window": "day",         "amount": 4000 }   그날 하루
+//   { "window": "month",       "amount": 10000 }  그 달
+//
+// **`day` 는 아직 계산에 걸리지 않는다.** 걸려면 «어느 날 어느 혜택이 얼마 붙었나» 가
+// 남아 있어야 하는데 이 저장소는 그것을 저장하지 않는다(#631). 그래서 선언은 받고,
+// 적용하지 못한 창을 결과에 실어 **화면이 «아직 반영 못 한다» 를 말할 수 있게** 한다.
+// 조용히 무시하면 사용자는 한도가 걸린 줄 안다.
+const CAP_WINDOWS = ['transaction', 'day', 'month'];
+
+// 선언에서 한도를 꺼낸다. 없으면 빈 배열이다.
+//
+// 옛 `card_benefits.monthly_cap` 컬럼은 여기 섞지 않는다. 그 칸에는 지금 **통합
+// 한도가 들어가 있는 카드가 있어서**(위 사고) 항목 한도로 읽으면 뜻이 뒤집힌다.
+// 컬럼은 호출부가 예전처럼 따로 적용한다.
+function capsOf(benefit) {
+  const rule = ruleOf(benefit);
+  const list = Array.isArray(rule.caps) ? rule.caps : [];
+  return list
+    .filter((c) => c && CAP_WINDOWS.includes(c.window) && Number.isFinite(Number(c.amount)))
+    .map((c) => ({ window: c.window, amount: toInt(c.amount) }));
+}
+
+/**
+ * 항목별 한도로 자른다. **통합 한도는 여기서 다루지 않는다** — 자르는 순서가
+ * «항목 → 통합» 이어야 하고, 그 순서를 호출부가 아니라 두 함수의 경계로 고정한다.
+ *
+ * @param {number} benefit 자르기 전 금액
+ * @param {Array<{window: string, amount: number}>} caps
+ * @param {object} used 창별로 이미 받은 금액. 아는 창만 넘긴다 (`{ month: 3000 }`)
+ * @returns {{benefit: number, cappedBy: string|null, unapplied: string[]}}
+ */
+function applyItemCaps(benefit, caps, used = {}) {
+  let out = toInt(benefit);
+  let cappedBy = null;
+  const unapplied = [];
+
+  for (const cap of caps) {
+    // 건당 한도는 누적이 필요 없다 — 이 결제 하나만 보면 된다.
+    const spent = cap.window === 'transaction' ? 0 : used[cap.window];
+    if (spent === undefined || spent === null) {
+      // 누적을 모르는 창. 자르지 않고 그 사실을 싣는다(#631).
+      unapplied.push(cap.window);
+      continue;
+    }
+    const remaining = Math.max(0, cap.amount - toInt(spent));
+    if (out > remaining) {
+      out = remaining;
+      cappedBy = cap.window;
+    }
+  }
+
+  return { benefit: out, cappedBy, unapplied };
+}
+
 // 이 결제에 붙는 혜택. 모르는 유형은 0 을 낸다 — 던지면 카드 하나가 화면 전체를 죽인다.
 function benefitForTransaction(benefit, ctx) {
   const rule = ruleOf(benefit);
@@ -175,6 +244,26 @@ function validateRule(rule) {
     const rate = Number(rule.rate);
     if (!Number.isFinite(rate) || rate < 0) return '요율은 0 이상의 숫자여야 합니다.';
   }
+  // 항목별 한도(#578). 유형과 무관하게 붙을 수 있다 — 요율형에도, 정액구간형에도.
+  if (rule.caps !== undefined && rule.caps !== null) {
+    if (!Array.isArray(rule.caps)) return '혜택 한도는 목록이어야 합니다.';
+    const seenWindow = new Set();
+    for (const c of rule.caps) {
+      if (!c || typeof c !== 'object') return '혜택 한도 형식이 올바르지 않습니다.';
+      if (!CAP_WINDOWS.includes(c.window)) {
+        // 오타를 막는다. `monthly` 로 저장되면 한도가 **조용히 사라진다** —
+        // 모르는 유형을 막는 것과 같은 이유다.
+        return `모르는 한도 기간입니다: ${c.window} (${CAP_WINDOWS.join(' · ')} 중 하나)`;
+      }
+      const amount = Number(c.amount);
+      if (!Number.isFinite(amount) || amount < 0) return '한도는 0 이상의 숫자여야 합니다.';
+      // 같은 창이 둘이면 어느 것이 맞는지 정할 수 없다. 더 작은 값으로 합치는 것도
+      // 방법이지만, 그러면 입력 실수가 조용히 넘어간다.
+      if (seenWindow.has(c.window)) return `한도 기간 ${c.window} 이 두 번 있습니다.`;
+      seenWindow.add(c.window);
+    }
+  }
+
   if (rule.kind === 'flat_monthly') {
     const tiers = Array.isArray(rule.tiers) ? rule.tiers : null;
     if (!tiers || tiers.length === 0) return '구간을 하나 이상 넣어 주세요.';
@@ -195,7 +284,10 @@ function validateRule(rule) {
 module.exports = {
   RATE_KIND,
   BENEFIT_KINDS: Object.keys(EVALUATORS),
+  CAP_WINDOWS,
   ruleOf,
+  capsOf,
+  applyItemCaps,
   benefitForTransaction,
   benefitForMonth,
   validateRule,

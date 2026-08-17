@@ -140,6 +140,9 @@ function compareCards({ transactions, cards } = {}) {
         activeTierId: card.threshold && card.threshold.tier ? card.threshold.tier.id : null,
         thresholdMet: card.thresholdMet !== false,
         benefitUsedThisMonth: used.get(card.id) || 0,
+        // 그 구간의 카드 월 통합 한도(#578). 구간이 없으면 undefined 이고, 그때는
+        // 옛 `card_benefits.monthly_cap` 컬럼으로 되돌아간다.
+        tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
       });
       return { cardId: card.id, productName: card.product_name, ...r };
     });

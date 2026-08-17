@@ -113,7 +113,7 @@ function loadCards() {
 // 단일 임계값으로 예전처럼 판정한다.
 function tiersFor(cardProductId) {
   return db.prepare(`
-    SELECT id, min_spend, rate, label FROM card_threshold_tiers
+    SELECT id, min_spend, rate, label, monthly_cap FROM card_threshold_tiers
     WHERE card_product_id = ? ORDER BY min_spend
   `).all(cardProductId);
 }
@@ -213,6 +213,9 @@ router.get('/estimate', (req, res) => {
         // 기록으로 굳히는 일이라 하지 않기로 했다. 여기서는 0 으로 둔다 —
         // **한도가 남았다고 가정하므로 추정이 실제보다 클 수 있다.**
         benefitUsedThisMonth: 0,
+        // 그 구간의 카드 월 통합 한도(#578). 위 누적이 0 이므로 통합 한도는 «아직
+        // 하나도 안 썼다» 를 기준으로 걸린다 — 건당 한도만 실효가 있다.
+        tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
       });
       return {
         cardProductId: card.id,
@@ -346,7 +349,7 @@ router.get('/tiers/:cardProductId', (req, res) => {
   }
 });
 
-// PUT /api/card-strategy/tiers/:cardProductId  { tiers: [{ min_spend, rate, label }] }
+// PUT /api/card-strategy/tiers/:cardProductId  { tiers: [{ min_spend, rate, label, monthly_cap }] }
 router.put('/tiers/:cardProductId', (req, res) => {
   try {
     const id = asInt(req.params.cardProductId);
@@ -379,7 +382,16 @@ router.put('/tiers/:cardProductId', (req, res) => {
           return res.status(400).json({ error: '요율은 0 이상의 숫자여야 합니다.' });
         }
       }
-      rows.push({ min, rate, label: t.label ? String(t.label) : null });
+      // 그 구간의 카드 월 통합 한도(#578). 빈 값은 NULL 로 둔다 — 0 으로 저장하면
+      // «한도 0원» 이 되어 그 구간의 혜택이 전부 사라진다. 그 둘은 다른 뜻이다.
+      let monthlyCap = null;
+      if (t.monthly_cap !== null && t.monthly_cap !== undefined && t.monthly_cap !== '') {
+        monthlyCap = asInt(t.monthly_cap);
+        if (monthlyCap === null || monthlyCap < 0) {
+          return res.status(400).json({ error: '월 통합 한도는 0 이상의 숫자여야 합니다.' });
+        }
+      }
+      rows.push({ min, rate, label: t.label ? String(t.label) : null, monthlyCap });
     }
 
     // 통째로 교체한다. 트랜잭션으로 감싸 중간 상태가 남지 않게 한다 —
@@ -387,9 +399,9 @@ router.put('/tiers/:cardProductId', (req, res) => {
     db.transaction(() => {
       db.prepare('DELETE FROM card_threshold_tiers WHERE card_product_id = ?').run(id);
       const ins = db.prepare(
-        'INSERT INTO card_threshold_tiers (card_product_id, min_spend, rate, label) VALUES (?,?,?,?)'
+        'INSERT INTO card_threshold_tiers (card_product_id, min_spend, rate, label, monthly_cap) VALUES (?,?,?,?,?)'
       );
-      for (const r of rows) ins.run(id, r.min, r.rate, r.label);
+      for (const r of rows) ins.run(id, r.min, r.rate, r.label, r.monthlyCap);
     })();
 
     res.json({ ok: true, data: tiersFor(id) });

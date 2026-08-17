@@ -102,6 +102,11 @@ function normalizeTiers(tiers) {
       min_spend: Number(t.min_spend),
       rate: t.rate === null || t.rate === undefined ? null : Number(t.rate),
       label: t.label ?? null,
+      // 그 구간의 카드 월 통합 한도(#578). NULL 이면 통합 한도를 걸지 않는다 —
+      // 0 으로 떨어뜨리면 «한도 0원» 이 되어 혜택이 전부 사라진다.
+      monthly_cap: t.monthly_cap === null || t.monthly_cap === undefined
+        ? null
+        : Number(t.monthly_cap),
     }))
     .sort((a, b) => a.min_spend - b.min_spend);
 }
