@@ -11,7 +11,7 @@ const { startTestServer } = require('./helpers/testServer');
 //
 // 함수는 이미 `options` 를 받게 돼 있었다. **부르는 입구가 없었을 뿐이다.**
 
-const PORT = 35001;
+const PORT = 21001;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 

@@ -13,12 +13,12 @@ const { startTestServer, READY_TIMEOUT_MS } = require('./helpers/testServer');
 
 describe('A. 기동과 조기 종료', () => {
   test('A-1. 정상 기동하면 base 와 stop 을 준다', async () => {
-    const s = await startTestServer({ port: 35201 });
+    const s = await startTestServer({ port: 21201 });
     try {
-      assert.equal(s.base, 'http://127.0.0.1:35201');
+      assert.equal(s.base, 'http://127.0.0.1:21201');
       const r = await fetch(`${s.base}/api/health`);
       assert.equal(r.status, 200);
-      assert.match(s.dbPath, /finance-test-35201-/);
+      assert.match(s.dbPath, /finance-test-21201-/);
     } finally {
       s.stop();
     }
@@ -30,7 +30,7 @@ describe('A. 기동과 조기 종료', () => {
     const t0 = Date.now();
     await assert.rejects(
       () => startTestServer({
-        port: 35202,
+        port: 21202,
         env: { DB_PATH: '/nonexistent-dir-379/x.db' },
       }),
       (err) => {
@@ -52,7 +52,7 @@ describe('A. 기동과 조기 종료', () => {
 
   test('A-3. stop 은 프로세스와 DB 파일을 정리한다', async () => {
     const fs = require('node:fs');
-    const s = await startTestServer({ port: 35203 });
+    const s = await startTestServer({ port: 21203 });
     const dbPath = s.dbPath;
     assert.ok(fs.existsSync(dbPath), '전제: DB 파일이 만들어져 있다');
 
@@ -65,7 +65,7 @@ describe('A. 기동과 조기 종료', () => {
   });
 
   test('A-4. 두 번 stop 해도 던지지 않는다', async () => {
-    const s = await startTestServer({ port: 35204 });
+    const s = await startTestServer({ port: 21204 });
     s.stop();
     s.stop(); // after() 훅이 중복 호출돼도 테스트가 깨지면 안 된다
   });
@@ -73,8 +73,8 @@ describe('A. 기동과 조기 종료', () => {
 
 describe('B. 격리', () => {
   test('B-1. 서버마다 다른 DB 파일을 쓴다', async () => {
-    const a = await startTestServer({ port: 35205 });
-    const b = await startTestServer({ port: 35206 });
+    const a = await startTestServer({ port: 21205 });
+    const b = await startTestServer({ port: 21206 });
     try {
       assert.notEqual(a.dbPath, b.dbPath);
       // 한쪽에 넣은 데이터가 다른 쪽에 보이면 안 된다.

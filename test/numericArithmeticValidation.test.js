@@ -10,7 +10,7 @@ const os = require('node:os');
 // 그 결과가 그대로 DB에 저장됐다. 이 파일은 asInt() 적용 후 문자열 숫자가
 // 정상적으로 강제변환되고, 숫자가 아닌 값은 400으로 거부되는지 확인한다.
 
-const PORT = 34588; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20588; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;

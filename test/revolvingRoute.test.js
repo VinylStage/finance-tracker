@@ -9,7 +9,7 @@ const os = require('node:os');
 // 잔액 계산(FND-06과 연계)뿐 아니라 current_carried_balance가 항상 "최신 달"
 // 기준인지, 월/카드 중복 등록이 막히는지까지 왕복으로 확인한다.
 
-const PORT = 34574; // 다른 테스트와 충돌 안 나게 임의 포트 사용
+const PORT = 20574; // 다른 테스트와 충돌 안 나게 임의 포트 사용
 const BASE = `http://127.0.0.1:${PORT}`;
 let server;
 let dbPath;
