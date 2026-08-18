@@ -1,4 +1,5 @@
 'use strict';
+const { isRealDate } = require('../utils/period');
 
 // 부채 금리의 시점별 이력(#285).
 //
@@ -94,7 +95,9 @@ function validateRateChange({ annual_rate, effective_from }) {
   if (annual_rate < 0 || annual_rate > 100) {
     return '금리는 0에서 100 사이로 입력해 주세요.';
   }
-  if (!effective_from || !/^\d{4}-\d{2}-\d{2}$/.test(effective_from)) {
+  // 글자꼴만 보면 2026-02-30 이 통과한다. 금리 구간의 시작이 없는 날짜면
+  // 그 뒤 이자 계산이 통째로 어긋난다(#670).
+  if (!isRealDate(String(effective_from || ''))) {
     return '금리가 적용되기 시작한 날짜를 입력해 주세요.';
   }
   return null;
