@@ -92,9 +92,16 @@ jobs:
   # 개수로 나누면 `[30.2, 3.1, 24.3]` 초가 된다 — 한 샤드는 3초에 끝나고 러너가 노는
   # 동안 CI 는 30초를 기다린다.
   #
-  # 그래서 그 셋을 `jsdom-heavy` 갈래로 빼고(`client/vite.config.js`) 나머지를 둘로
-  # 나눈다. 목록이 낡아도 파일은 안 빠진다 — `jsdom` 갈래가 «그 셋을 뺀 나머지 전부»
+  # 그래서 무거운 것들을 `jsdom-heavy` 갈래로 빼고(`client/vite.config.js`) 나머지를 셋으로
+  # 나눈다. 목록이 낡아도 파일은 안 빠진다 — `jsdom` 갈래가 «그것들을 뺀 나머지 전부»
   # 라서다. 갱신은 `npm run test:timings`.
+  #
+  # **나머지를 둘이 아니라 셋으로 나누는 이유도 실측이다.** 둘로 나눴을 때 CI 가
+  # `rest-1 52초 / rest-2 62초` 로 갈렸다 — `--shard` 가 개수로만 나누는 탓에 1초대
+  # 파일 다섯이 한쪽에 몰렸다. 셋으로 나누면 그 편중이 흩어진다.
+  #
+  # 더 잘게 나눠도 이득이 없다. job 마다 `npm ci` 6초 + `setup-node` 3초가 곱해지고,
+  # 그 아래로 내려가면 **server job(54초)이 벽시계를 정한다** — 거기가 다음 지렛대다.
   #
   # 커버리지는 그대로 지킨다 — 샤드 job 은 게이트를 돌리지 않고 blob 만 뜨고,
   # 병합 job 이 한 번 돈다. 샤드가 각자 돌면 거짓 실패가 난다(부분 커버리지).
@@ -111,9 +118,11 @@ jobs:
           - label: heavy
             args: --project=node --project=jsdom-heavy
           - label: rest-1
-            args: --project=jsdom --shard=1/2
+            args: --project=jsdom --shard=1/3
           - label: rest-2
-            args: --project=jsdom --shard=2/2
+            args: --project=jsdom --shard=2/3
+          - label: rest-3
+            args: --project=jsdom --shard=3/3
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
