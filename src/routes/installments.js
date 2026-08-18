@@ -18,6 +18,19 @@ const { estimateBilling, billingBasis } = require('../services/installmentBillin
 const { resolvePolicy } = require('../services/cardPolicy');
 const { BILLING_END, STATUS_EXPR } = require('../services/installmentStatus');
 
+// YYYY-MM-DD 이고 실제로 있는 날짜인가
+function isUsableDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(new Date(value).getTime());
+}
+
+// YYYY-MM 이고 달이 01~12 인가
+function isUsableMonth(value) {
+  const s = String(value || '');
+  if (!/^\d{4}-\d{2}$/.test(s)) return false;
+  const month = Number(s.slice(5, 7));
+  return month >= 1 && month <= 12;
+}
+
 // 프리뷰 관련 오류를 상태코드로 옮긴다(ADR 0008).
 //
 // 428 은 "먼저 확인을 거쳐라", 409 는 "확인한 내용이 이미 낡았다" 다. 둘을 같은
@@ -265,6 +278,12 @@ router.post('/', numericBody(['total_amount', 'months', 'monthly_amount', 'fee_p
     if (!purchase_date || !merchant || !total_amount || !months || !monthly_amount || !start_billing_month) {
       return res.status(400).json({ error: '구입일, 가맹점, 총액, 개월수, 월 납입액, 첫 청구월은 필수입니다.' });
     }
+    if (!isUsableDate(purchase_date)) {
+      return res.status(400).json({ error: '구입일은 YYYY-MM-DD 형식의 실제 날짜여야 합니다.' });
+    }
+    if (!isUsableMonth(start_billing_month)) {
+      return res.status(400).json({ error: '첫 청구월은 YYYY-MM 형식이어야 합니다.' });
+    }
     if (months < 2) {
       return res.status(400).json({ error: 'months must be >= 2 (2개월 미만은 일시불로 처리)' });
     }
@@ -308,6 +327,13 @@ router.put('/:id', (req, res) => {
     if (!existing) return res.status(404).json({ error: '찾는 할부 내역이 없습니다. 이미 삭제됐을 수 있어요.' });
 
     const { preview_token, ...changes } = req.body || {};
+
+    if (changes.purchase_date !== undefined && !isUsableDate(changes.purchase_date)) {
+      return res.status(400).json({ error: '구입일은 YYYY-MM-DD 형식의 실제 날짜여야 합니다.' });
+    }
+    if (changes.start_billing_month !== undefined && !isUsableMonth(changes.start_billing_month)) {
+      return res.status(400).json({ error: '첫 청구월은 YYYY-MM 형식이어야 합니다.' });
+    }
 
     if (changesSchedule(existing, changes)) {
       const applied = applyInstallmentDerived(db, Number(req.params.id), {
