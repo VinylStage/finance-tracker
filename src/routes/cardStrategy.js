@@ -6,7 +6,7 @@ const { serverError } = require('../utils/errors');
 const { asInt } = require('../utils/validate');
 const { localYMD } = require('../utils/date');
 const { computeThreshold, INCOME_MAJOR_TYPE } = require('../services/cardThreshold');
-const { compareCards, NON_ELIGIBLE_ORIGINS } = require('../services/cardComparison');
+const { compareCards, accrueActual, NON_ELIGIBLE_ORIGINS } = require('../services/cardComparison');
 const { estimateBenefit } = require('../services/cardStrategy');
 const { benefitForMonth } = require('../services/benefitRules');
 
@@ -209,6 +209,23 @@ router.get('/estimate', (req, res) => {
 
     const cards = withThresholds(loadCards(), asOf);
 
+    // ── 이 달에 이미 받은 몫을 다시 계산한다(#637).
+    //
+    // 예전에는 `benefitUsedThisMonth: 0` 을 넘겼다. 「기록하지 않기로 했다」 가 이유였는데,
+    // **필요한 것은 기록이 아니라 재계산이다.** 0 을 넘기면 한도가 늘 열려 있는 것으로
+    // 계산돼 «이 카드로 결제하면 3,000원» 이라고 말해 놓고 실제로는 한도를 다 써서
+    // 0원인 상황이 생긴다 — 추정이 사용자에게 손해를 끼치는 방향으로 틀린다.
+    //
+    // 달력월의 1일부터 `asOf` 까지를 훑는다. 전월 실적과 같은 기준이다(#398).
+    // SQL 이 `date, id` 순으로 읽으므로 같은 날 여러 건은 앞선 건이 먼저 한도를 받는다.
+    const monthStart = `${asOf.slice(0, 7)}-01`;
+    const resolveForMonth = cardIdResolver(cards);
+    const monthRows = db.prepare(TX_IN_RANGE).all(monthStart, asOf)
+      .filter((r) => r.major_type !== INCOME_MAJOR_TYPE)
+      .map((r) => ({ ...r, card_product_id: resolveForMonth(r) }));
+    const ledger = accrueActual({ transactions: monthRows, cards });
+    const ym = asOf.slice(0, 7);
+
     const data = cards.map((card) => {
       const r = estimateBenefit({
         benefits: card.benefits,
@@ -219,14 +236,14 @@ router.get('/estimate', (req, res) => {
         // 이번 달에 적용되는 구간(#563). 지난달 지출로 정해진다.
         activeTierId: card.threshold && card.threshold.tier ? card.threshold.tier.id : null,
         thresholdMet: card.thresholdMet,
-        // 이번 달 이미 받은 혜택은 아직 기록하지 않는다. 한도 소진을 알려면
-        // 거래마다 어느 혜택이 걸렸는지를 저장해야 하는데, 그건 추정값을
-        // 기록으로 굳히는 일이라 하지 않기로 했다. 여기서는 0 으로 둔다 —
-        // **한도가 남았다고 가정하므로 추정이 실제보다 클 수 있다.**
-        benefitUsedThisMonth: 0,
-        // 그 구간의 카드 월 통합 한도(#578). 위 누적이 0 이므로 통합 한도는 «아직
-        // 하나도 안 썼다» 를 기준으로 걸린다 — 건당 한도만 실효가 있다.
+        // 이 달에 **그 카드로 실제 결제한** 건들에서 이미 받은 몫(#637).
+        benefitUsedThisMonth: ledger.readCard(card.id, ym),
+        // 그 구간의 카드 월 통합 한도(#578).
         tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
+        // 지금 결제하는 날. 날짜 조건이 붙은 혜택을 가린다(#638).
+        date: asOf,
+        // 항목·창별 누적(#637). 일 한도와 횟수 한도가 여기서도 걸린다.
+        itemUsedFor: ledger.usedFor(ym, asOf),
       });
       return {
         cardProductId: card.id,
