@@ -21,7 +21,8 @@ test('데이터 무결성 점검 — 정상 데이터일 때 모든 항목 count
   assert.strictEqual(resp.status, 200);
   const data = await resp.json();
   // 7 이었다. "종료됐어야 하는데 진행중으로 남은 할부" 를 뺐다(#205).
-  assert.strictEqual(data.checks.length, 6);
+  // 다시 7 이다. "다른 표의 날짜꼴 이상" 을 더했다(#666).
+  assert.strictEqual(data.checks.length, 7);
   for (const check of data.checks) {
     assert.strictEqual(check.count, 0, `check ${check.name} should have count=0`);
     assert.deepStrictEqual(check.samples, [], `check ${check.name} should have empty samples`);
@@ -62,6 +63,10 @@ test('데이터 무결성 점검 — 각 이상 유형 테스트', async () => {
   db.prepare("INSERT INTO transactions (date, amount, payment_style, category_id, approval_number) VALUES ('2023-01-05', 1000, '일시불', ?, '123456')").run(catId);
   db.prepare("INSERT INTO transactions (date, amount, payment_style, category_id, approval_number) VALUES ('2023-01-06', 2000, '일시불', ?, '123456')").run(catId);
 
+  // 8. 날짜가 깨진 다른 표의 데이터
+  db.prepare("INSERT INTO savings_products (name, monthly_contribution, start_date, maturity_date, expected_payout) VALUES ('깨진저축', 100000, '언젠가', '2026-12-01', 1250000)").run();
+  db.prepare("INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, fee_per_month, start_billing_month) VALUES ('2026-01-05', '깨진할부', 120000, 12, 10000, 0, '언젠가')").run();
+
   db.close();
 
   const resp = await fetch(`${BASE}/api/data-integrity`);
@@ -82,6 +87,7 @@ test('데이터 무결성 점검 — 각 이상 유형 테스트', async () => {
   assert.strictEqual(countOf('금액이 비정상적으로 작은 임포트 건'), 1);
   assert.strictEqual(countOf('카테고리 없는 거래'), 1);
   assert.strictEqual(countOf('중복 승인번호'), 1);
+  assert.strictEqual(countOf('다른 표의 날짜꼴 이상'), 2);
 
   // 없어진 점검이 되살아나면 여기서 걸린다(#205).
   assert.strictEqual(
