@@ -62,10 +62,19 @@ function parse(json) {
 //
 // 비교는 로그에 남은 컬럼만 본다. 마이그레이션으로 컬럼이 늘면 현재 행에는
 // 있고 로그에는 없는 키가 생기는데, 그것 때문에 되돌리기가 막히면 안 된다.
+// 시스템이 스스로 갱신하는 컬럼. 비교에서 뺀다.
+//
+// 사용자가 반복규칙을 만들면 **곧바로 따라잡기가 돌아** last_run_on 을 채운다.
+// 그 컬럼까지 보면 「방금 만든 규칙」 의 되돌리기가 **항상 409** 가 된다(#681).
+// 사용자 라우트는 이 컬럼들을 받지 않으므로, 값이 달라진 것은 언제나 시스템이
+// 한 일이지 「사용자가 그 사이에 고친 것」 이 아니다.
+const SYSTEM_COLUMNS = new Set(['updated_at', 'last_run_on']);
+
 function matchesAfter(current, after) {
   if (!after) return current === undefined || current === null;
   if (!current) return false;
   for (const [k, v] of Object.entries(after)) {
+    if (SYSTEM_COLUMNS.has(k)) continue;
     // SQLite 는 정수/실수를 구분하지만 JSON 왕복에서 흔들릴 수 있어 느슨히 본다.
     if (String(current[k] ?? '') !== String(v ?? '')) return false;
   }
