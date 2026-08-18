@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
+const { isRealDate } = require('../utils/period');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
 const {
@@ -25,7 +26,14 @@ function resolveDate(yearMonth, dayOfMonth) {
   return `${yearMonth}-${pad2(day)}`;
 }
 
-function isYMD(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+// 달도 글자꼴만 보면 2026-13 이 통과한다. 하루를 붙여 실제 날짜인지 본다.
+function isRealMonth(s) {
+  return typeof s === 'string' && /^\d{4}-\d{2}$/.test(s) && isRealDate(`${s}-01`);
+}
+
+// 글자꼴만 보면 2026-13-45 가 통과한다. utils/period 의 isRealDate 는 달 범위와
+// 그 달의 마지막 날까지 본다(#670).
+function isYMD(s) { return typeof s === 'string' && isRealDate(s); }
 
 function today() {
   // 로컬 기준이다. UTC 로 하면 KST 자정~9시 사이에 하루 어긋난다(FND-20).
@@ -260,7 +268,7 @@ router.post('/suggestions/restore', (req, res) => {
 router.post('/catchup/run', (req, res) => {
   try {
     const asked = (req.body || {}).today;
-    if (asked !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(asked))) {
+    if (asked !== undefined && !isRealDate(String(asked))) {
       return res.status(400).json({ error: '날짜 형식이 올바르지 않습니다. 2026-08-06 처럼 입력해 주세요.' });
     }
     // **미래로는 못 간다.** 넘겨받은 날짜를 그대로 쓰면 아직 오지 않은 회차까지
@@ -297,7 +305,7 @@ router.get('/', (req, res) => {
 router.get('/due', (req, res) => {
   try {
     const yearMonth = req.query.month || thisYearMonth();
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
+    if (!isRealMonth(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rows = db.prepare(`
       SELECT r.*, c.name AS category_name, p.name AS payment_method_name
       FROM recurring_rules r
@@ -375,7 +383,7 @@ router.delete('/:id', (req, res) => {
 router.post('/:id/confirm', (req, res) => {
   try {
     const yearMonth = req.body.month || thisYearMonth();
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
+    if (!isRealMonth(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rule = db.prepare('SELECT * FROM recurring_rules WHERE id=? AND is_active=1').get(req.params.id);
     if (!rule) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
 
@@ -404,7 +412,7 @@ router.post('/:id/confirm', (req, res) => {
 router.post('/:id/skip', (req, res) => {
   try {
     const yearMonth = req.body.month || thisYearMonth();
-    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
+    if (!isRealMonth(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rule = db.prepare('SELECT id FROM recurring_rules WHERE id=? AND is_active=1').get(req.params.id);
     if (!rule) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
 
