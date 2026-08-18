@@ -69,6 +69,118 @@ function isEligible(tx) {
   return !NON_ELIGIBLE_ORIGINS.has(origin);
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 한도 누적 장부(#637)
+//
+// 카드 단위(통합 한도용)와 항목·창 단위(`caps[]` 용)를 한 덩어리로 든다.
+// **한 곳에만 둔다** — 훑는 곳이 둘(`compareCards` · `accrueActual`)이라 각자
+// 구현하면 언젠가 갈라지고, 갈라진 순간을 아무도 못 잡는다.
+//
+// 키에 창을 박는다(`혜택id|2026-03`). 훑는 순서에 기대지 않아야 «앞 창에서 넘어옴»
+// 이 안 생긴다. 월 경계는 달력월이다 — 전월 실적과 같은 기준(#398).
+const ZERO = { amount: 0, count: 0 };
+const monthOf = (date) => String(date || '').slice(0, 7);
+// 일 창은 날짜가 온전할 때만 쓴다. 못 읽으면 **안다고 하지 않는다.**
+const dayOf = (date) => (/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? String(date) : null);
+
+// 통합 한도 밖인 줄은 카드 단위 누적에 안 넣는다(#648). 넣으면 그 줄이 다른 항목의
+// 한도를 깎아 「한도 밖」 이라는 말이 반쪽만 지켜진다.
+const inUnified = (r) => !(r && r.applied && r.applied.unifiedCapExempt);
+
+function createLedger() {
+  const card = new Map();                              // cardId → Map<ym, 금액>
+  const item = { month: new Map(), day: new Map() };    // `혜택id|창키` → {amount, count}
+
+  const bump = (map, key, delta) => {
+    const cur = map.get(key) || ZERO;
+    // 금액과 함께 **붙은 횟수**를 센다(#638). 「월 1회」 는 결제액과 무관하다.
+    map.set(key, { amount: cur.amount + delta, count: cur.count + 1 });
+  };
+
+  return {
+    readCard(cardId, ym) {
+      const per = card.get(cardId);
+      return per ? (per.get(ym) || 0) : 0;
+    },
+    addCard(cardId, ym, delta) {
+      if (!delta) return;
+      let per = card.get(cardId);
+      if (!per) { per = new Map(); card.set(cardId, per); }
+      per.set(ym, (per.get(ym) || 0) + delta);
+    },
+    // 계산기가 **고른 줄에 대해서만** 부르는 조회 함수를 만든다.
+    usedFor(ym, ymd) {
+      return (benefitId) => {
+        const m = item.month.get(`${benefitId}|${ym}`) || ZERO;
+        const used = { month: m.amount };
+        const count = { month: m.count };
+        // 날짜를 모르면 `day` 를 아예 안 싣는다. 0 으로 채우면 한도가 안 걸린 것을
+        // 걸린 것처럼 보이게 한다 — 계산기가 «적용 못 한 창» 으로 보고해야 한다.
+        if (ymd !== null) {
+          const d = item.day.get(`${benefitId}|${ymd}`) || ZERO;
+          used.day = d.amount;
+          count.day = d.count;
+        }
+        return { used, count };
+      };
+    },
+    // 고른 줄이 있고 실제로 붙었을 때만 적는다. 아무것도 안 걸린 거래는 어떤 줄의
+    // 한도도 소진하지 않는다.
+    addApplied(result, ym, ymd) {
+      if (!result || !result.applied || !(result.benefit > 0)) return;
+      const id = result.applied.id;
+      bump(item.month, `${id}|${ym}`, result.benefit);
+      if (ymd !== null) bump(item.day, `${id}|${ymd}`, result.benefit);
+    },
+  };
+}
+
+/**
+ * **실제로 그 카드로 결제한** 건들만 훑어 누적 장부를 만든다(#637).
+ *
+ * `/estimate` 가 쓴다 — 「지금 이 카드로 결제하면 얼마?」 는 그 카드가 이 달에
+ * **이미 받은 몫**을 알아야 답할 수 있다. 예전에는 0 을 넘겨 한도가 늘 열려 있는
+ * 것으로 계산했고, 그래서 추정이 실제보다 컸다.
+ *
+ * 저장하지 않는다. 그 달 거래를 다시 훑어 계산한다 — 필요한 것은 기록이 아니라
+ * 재계산이다.
+ *
+ * **호출부가 `date, id` 순으로 정렬해 준다.** 같은 날 여러 건이 같은 한도를 다투면
+ * 앞선 건이 먼저 받는다. SQL 이 이미 그 순서로 읽으므로 여기서 다시 정렬하지 않는다 —
+ * 두 곳에서 정렬하면 규칙이 갈라진다.
+ */
+function accrueActual({ transactions, cards } = {}) {
+  const list = Array.isArray(transactions) ? transactions : [];
+  const cardList = Array.isArray(cards) ? cards : [];
+  const byId = new Map(cardList.map((c) => [c.id, c]));
+  const ledger = createLedger();
+
+  for (const tx of list) {
+    if (!isEligible(tx) || isUnknownCard(tx)) continue;
+    const card = byId.get(tx.card_product_id);
+    if (!card) continue;
+
+    const ym = monthOf(tx.date);
+    const ymd = dayOf(tx.date);
+    const r = estimateBenefit({
+      benefits: card.benefits || [],
+      amount: Number(tx.amount) || 0,
+      categoryId: tx.category_id,
+      merchant: tx.merchant,
+      paymentStyle: tx.payment_style,
+      activeTierId: card.threshold && card.threshold.tier ? card.threshold.tier.id : null,
+      thresholdMet: card.thresholdMet !== false,
+      benefitUsedThisMonth: ledger.readCard(card.id, ym),
+      tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
+      date: tx.date,
+      itemUsedFor: ledger.usedFor(ym, ymd),
+    });
+    if (inUnified(r)) ledger.addCard(card.id, ym, r.benefit);
+    ledger.addApplied(r, ym, ymd);
+  }
+  return ledger;
+}
+
 /**
  * 거래 목록을 카드별로 다시 계산해 실제 대비 최적의 차액을 낸다.
  *
@@ -134,76 +246,9 @@ function compareCards({ transactions, cards } = {}) {
   // 그리고 둘 다 **달력월로 리셋한다.** 예전에는 창 개념이 없어 조회 기간 전체에
   // 한 번만 열렸다(`/comparison` 기본 기간은 최근 3개월이다). 월 경계를 달력월로
   // 두는 것은 전월 실적과 같은 기준이다(#398).
-  const hypoUsed = new Map(cardList.map((c) => [c.id, new Map()]));
-  const actualUsed = new Map(cardList.map((c) => [c.id, new Map()]));
+  const hypo = createLedger();
+  const actual2 = createLedger();
   const gained = new Map(cardList.map((c) => [c.id, 0]));
-
-  // 거래일에서 달력월을 꺼낸다. 'YYYY-MM-DD' 라 앞 7자다.
-  const monthOf = (date) => String(date || '').slice(0, 7);
-  const readUsed = (store, cardId, ym) => {
-    const per = store.get(cardId);
-    return per ? (per.get(ym) || 0) : 0;
-  };
-  const addUsed = (store, cardId, ym, delta) => {
-    if (!delta) return;
-    let per = store.get(cardId);
-    if (!per) { per = new Map(); store.set(cardId, per); }
-    per.set(ym, (per.get(ym) || 0) + delta);
-  };
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // 항목별·창별 누적(#637)
-  //
-  // 위 두 벌과 **같은 이유로 두 벌**이다. 가정과 실제가 서로 다른 값을 봐야 하는데,
-  // 항목 한도만 한 벌로 두면 «이 카드로 계속 썼다면» 이 실제 결제 건수만큼만
-  // 소진돼 항목 한도가 헐거워진다.
-  //
-  //   1. `day` 창이 계산에 **걸린다.** 예전에는 일 누적을 아무도 몰라 선언만 받고
-  //      넘겼다(#631) — «군마트 일 2만원» 같은 줄이 전부 안 걸리고 있었다
-  //   2. `month` 창을 **항목 단위**로 자른다. 카드 단위 누적을 넘기면 같은 카드의
-  //      다른 항목이 쓴 몫까지 빼서 과하게 잘린다
-  //
-  // 저장 표를 새로 만들지 않는다. 훑는 동안만 들고 있으면 된다 — 표를 두면 계산할
-  // 때마다 쓰고 지워야 하고, 그 표가 계산 결과와 어긋나는 순간을 아무도 못 잡는다.
-  //
-  // 키에 창을 박아 둔다(`혜택id|2026-03`). 위 `hypoUsed` 가 달력월로 키를 잡는 것과
-  // 같은 이유다 — 훑는 순서에 기대지 않아야 «앞 창에서 넘어옴» 이 안 생긴다.
-  const itemStore = () => ({ month: new Map(), day: new Map() });
-  const hypoItem = itemStore();
-  const actualItem = itemStore();
-
-  // 이 거래 시점에서 그 혜택 줄이 이미 받은 몫. 계산기가 **고른 줄에 대해서만** 묻는다.
-  // 창마다 «얼마» 와 «몇 번» 을 같이 든다. 횟수 한도(#638)는 금액과 같은 창을 쓰지만
-  // 세는 것이 달라서, 한쪽만 들면 「월 1회」 를 표현할 수 없다.
-  const ZERO = { amount: 0, count: 0 };
-  const itemUsedFrom = (store, ym, ymd) => (benefitId) => {
-    const m = store.month.get(`${benefitId}|${ym}`) || ZERO;
-    const used = { month: m.amount };
-    const count = { month: m.count };
-    // 날짜를 모르면 `day` 를 아예 안 싣는다. 0 으로 채우면 한도가 안 걸린 것을
-    // 걸린 것처럼 보이게 한다 — 신호 부재를 통과로 읽는 셈이다. 안 실으면
-    // 계산기가 «적용 못 한 창» 으로 보고해 화면이 그 사실을 말할 수 있다.
-    if (ymd !== null) {
-      const d = store.day.get(`${benefitId}|${ymd}`) || ZERO;
-      used.day = d.amount;
-      count.day = d.count;
-    }
-    return { used, count };
-  };
-
-  // 고른 줄이 있고 실제로 붙었을 때만 적는다. 아무것도 안 걸린 거래는 어떤 줄의
-  // 한도도 소진하지 않는다.
-  const addItemUsed = (store, result, ym, ymd) => {
-    if (!result || !result.applied || !(result.benefit > 0)) return;
-    const id = result.applied.id;
-    const bump = (map, key) => {
-      const cur = map.get(key) || ZERO;
-      // 금액과 함께 **붙은 횟수**를 센다(#638). 「월 1회」 는 결제액과 무관하다.
-      map.set(key, { amount: cur.amount + result.benefit, count: cur.count + 1 });
-    };
-    bump(store.month, `${id}|${ym}`);
-    if (ymd !== null) bump(store.day, `${id}|${ymd}`);
-  };
 
   let totalGap = 0;
   const details = [];
@@ -211,8 +256,7 @@ function compareCards({ transactions, cards } = {}) {
   for (const tx of analyzable) {
     const amount = Number(tx.amount) || 0;
     const ym = monthOf(tx.date);
-    // 일 창을 쓰려면 날짜가 온전해야 한다. 못 읽으면 **안다고 하지 않는다.**
-    const ymd = /^\d{4}-\d{2}-\d{2}$/.test(String(tx.date || '')) ? String(tx.date) : null;
+    const ymd = dayOf(tx.date);
 
     // 카드마다 이 거래를 계산한다. **그 카드의 가정 누적**을 넘긴다 — 한도가 작은
     // 카드가 실제보다 좋아 보이지 않게 하려면 이 값이 0 으로 고정돼선 안 된다.
@@ -229,7 +273,7 @@ function compareCards({ transactions, cards } = {}) {
         // 정해지고, 그 구간에 걸린 혜택만 후보가 된다.
         activeTierId: card.threshold && card.threshold.tier ? card.threshold.tier.id : null,
         thresholdMet: card.thresholdMet !== false,
-        benefitUsedThisMonth: readUsed(hypoUsed, card.id, ym),
+        benefitUsedThisMonth: hypo.readCard(card.id, ym),
         // 그 구간의 카드 월 통합 한도(#578). 구간이 없으면 undefined 이고, 그때는
         // 옛 `card_benefits.monthly_cap` 컬럼으로 되돌아간다.
         tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
@@ -239,7 +283,7 @@ function compareCards({ transactions, cards } = {}) {
         date: tx.date,
         // 항목별·창별 누적(#637). **가정 쪽 누적**을 본다 — 계산기가 고른 줄에
         // 대해서만 불린다.
-        itemUsedFor: itemUsedFrom(hypoItem, ym, ymd),
+        itemUsedFor: hypo.usedFor(ym, ymd),
       });
       return { cardId: card.id, productName: card.product_name, ...r };
     });
@@ -265,7 +309,7 @@ function compareCards({ transactions, cards } = {}) {
           paymentStyle: tx.payment_style,
           activeTierId: actualCard.threshold && actualCard.threshold.tier ? actualCard.threshold.tier.id : null,
           thresholdMet: actualCard.thresholdMet !== false,
-          benefitUsedThisMonth: readUsed(actualUsed, actualCard.id, ym),
+          benefitUsedThisMonth: actual2.readCard(actualCard.id, ym),
           tierMonthlyCap: actualCard.threshold && actualCard.threshold.tier
             ? actualCard.threshold.tier.monthly_cap : null,
           // 가정 쪽과 **같이** 넘긴다(#638). 여기만 빠뜨리면 날짜 조건이 붙은
@@ -274,7 +318,7 @@ function compareCards({ transactions, cards } = {}) {
           date: tx.date,
           // 항목 누적도 **실제 쪽**을 본다(#637). 가정 누적을 물리면 실제로는
           // 한 건만 쓴 줄이 세 건 쓴 것으로 잘려 실제 혜택이 낮게 잡힌다.
-          itemUsedFor: itemUsedFrom(actualItem, ym, ymd),
+          itemUsedFor: actual2.usedFor(ym, ymd),
         }),
       }
       : null;
@@ -287,18 +331,16 @@ function compareCards({ transactions, cards } = {}) {
     //
     // **가정은 카드마다 자기 시나리오에서만 오른다.** 「이 카드로 계속 썼다면」 이므로
     // 그 카드가 이 거래에서 받을 값을 그 카드의 누적에만 더한다 — A 가정이 B 의 누적을
-    // 건드리지 않으므로 예전 주석이 걱정한 «가정끼리 뒤엉킴» 은 생기지 않는다.
-    //
-    // **통합 한도 밖인 줄은 카드 단위 누적에 안 넣는다**(#648). 넣으면 그 줄이 다른
-    // 항목의 한도를 깎아, 「한도 밖」 이라는 말이 반쪽만 지켜진다. 가정·실제 두 벌에
-    // 똑같이 건다 — 한쪽만 걸면 같은 혜택이 시나리오에 따라 다르게 취급된다.
-    const inUnified = (r) => !(r && r.applied && r.applied.unifiedCapExempt);
-    for (const p of perCard) if (inUnified(p)) addUsed(hypoUsed, p.cardId, ym, p.benefit);
+    // 건드리지 않으므로 «가정끼리 뒤엉킴» 은 생기지 않는다.
+    for (const p of perCard) {
+      if (inUnified(p)) hypo.addCard(p.cardId, ym, p.benefit);
+      hypo.addApplied(p, ym, ymd);
+    }
     // 실제는 실제로 그 카드로 결제한 건에서만 오른다.
-    if (actual && inUnified(actual)) addUsed(actualUsed, actual.cardId, ym, actual.benefit);
-    // 항목 누적은 면제와 무관하게 올린다 — 면제는 **통합 한도 한 층**에만 걸린다.
-    for (const p of perCard) addItemUsed(hypoItem, p, ym, ymd);
-    if (actual) addItemUsed(actualItem, actual, ym, ymd);
+    if (actual) {
+      if (inUnified(actual)) actual2.addCard(actual.cardId, ym, actual.benefit);
+      actual2.addApplied(actual, ym, ymd);
+    }
 
     const actualBenefit = actual ? actual.benefit : 0;
     const gap = Math.max(0, best.benefit - actualBenefit);
@@ -324,4 +366,4 @@ function compareCards({ transactions, cards } = {}) {
   return { comparable: true, totalGap, byCard, details, unknownCard };
 }
 
-module.exports = { compareCards, isEligible, isUnknownCard, NON_ELIGIBLE_ORIGINS, CARD_PAYMENT_TYPES };
+module.exports = { compareCards, accrueActual, isEligible, isUnknownCard, NON_ELIGIBLE_ORIGINS, CARD_PAYMENT_TYPES };
