@@ -7,8 +7,8 @@ const { runAs } = require('../utils/auditContext');
 const { TRANSACTION_ORIGINS } = require('../constants');
 const { localYMD } = require('../utils/date');
 const { asInt } = require('../utils/validate');
+const { isRealDate } = require('../utils/period');
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // FND-14(감사): POST /import 핸들러 하나에 입력검증·카테고리 폴백·레거시
 // 필드 판정·FK 폴백·트랜잭션 실행이 전부 들어있어 순환복잡도가 43까지
@@ -22,7 +22,11 @@ function resolveImportRow(tx, lookups) {
   // FND-06(감사): date 형식/amount 타입을 검증하지 않아 백업 파일을 통해
   // 문자열 금액이 그대로 들어올 수 있었다. 형식이 안 맞는 행은 (기존의
   // 필드 누락 행과 동일하게) 스킵하고 나머지는 정상 복원한다.
-  if (!DATE_RE.test(tx.date)) return null;
+  //
+  // 글자꼴만 보면 2026-13-45 · 0000-00-00 · 2026-02-30 이 그대로 들어온다(#670).
+  // 라우트가 막는 값을 복원 경로가 우회하면 막은 의미가 없다 — 실제로 네 건을
+  // 넣었더니 imported 4 · skipped 0 이었다.
+  if (!isRealDate(String(tx.date))) return null;
   const amount = asInt(tx.amount);
   if (amount === null) return null;
 
