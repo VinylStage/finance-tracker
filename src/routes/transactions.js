@@ -5,7 +5,7 @@ const db = require('../db/init');
 const { asInt, missingFields, escapeLike, toIdList } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
-const { resolvePeriod } = require('../utils/period');
+const { resolvePeriod, isRealDate } = require('../utils/period');
 const { isEditable, lockedMessage, findLocked, countLockedAll, derivedFilter } = require('../services/transactionOrigin');
 const { PAYMENT_STYLES } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
@@ -14,6 +14,11 @@ const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTo
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=&merchant=&memo=&min_amount=&max_amount=&payment_method_id=
 router.get('/', (req, res) => {
   try {
+    // 기간을 받아서 필터에 넣는 라우트다. 검증을 안 하면 없는 날짜가 그대로
+    // WHERE 절에 들어가 빈 결과가 나가고, 사용자는 「거래가 없다」 로 읽는다.
+    const period = resolvePeriod(req.query);
+    if (period.error) return res.status(400).json({ error: period.error });
+
     // limit/offset 은 정수로 강제하고 범위를 제한한다(잘못된 값으로 인한 500·과도한 조회 방지)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
@@ -270,7 +275,13 @@ router.delete('/', (req, res) => {
           error: `자동으로 만들어진 내역 ${locked}건이 포함돼 있어 전체 삭제를 할 수 없어요. 할부·리볼빙·부채 화면에서 원본을 먼저 정리해 주세요.`,
         });
       }
-      const deleted = db.prepare('DELETE FROM transactions').run().changes;
+      // 반복거래가 만든 행은 recurring_occurrences.transaction_id 가 가리킨다.
+      // 그 컬럼에 ON DELETE 절이 없어 그냥 지우면 외래키 위반으로 500 이 난다(#685).
+      // 개별 삭제는 이미 같은 처리를 한다 — 발생 기록은 남기고 연결만 끊는다.
+      const deleted = db.transaction(() => {
+        db.prepare('UPDATE recurring_occurrences SET transaction_id = NULL WHERE transaction_id IS NOT NULL').run();
+        return db.prepare('DELETE FROM transactions').run().changes;
+      })();
       return res.json({ ok: true, deleted });
     }
     if (Array.isArray(ids) && ids.length > 0) {
@@ -287,7 +298,11 @@ router.delete('/', (req, res) => {
       }
 
       const placeholders = validIds.map(() => '?').join(',');
-      const deleted = db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
+      // 개별 삭제와 같은 처리다(#685). 연결을 안 끊으면 외래키 위반으로 500 이 난다.
+      const deleted = db.transaction(() => {
+        db.prepare(`UPDATE recurring_occurrences SET transaction_id = NULL WHERE transaction_id IN (${placeholders})`).run(...validIds);
+        return db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
+      })();
       return res.json({ ok: true, deleted });
     }
     return res.status(400).json({ error: '삭제할 거래를 선택해 주세요.' });
@@ -369,8 +384,9 @@ function validateTxBody(body) {
       asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
   if (body.card_product_id !== undefined && body.card_product_id !== null &&
       asInt(body.card_product_id) === null) return 'card_product_id must be an integer';
-  // date 형식 검증 (ISO 8601 YYYY-MM-DD)
-  if (body.date && !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return 'date must be in YYYY-MM-DD format';
+  // date 검증 (ISO 8601 YYYY-MM-DD). 글자꼴만 보면 2026-13-45·0000-00-00 이
+  // 그대로 저장된다 — 그 거래는 합계에는 잡히는데 기간 조회에 안 걸린다(#670).
+  if (body.date && !isRealDate(String(body.date))) return 'date must be in YYYY-MM-DD format';
   if (body.payment_style !== undefined && body.payment_style !== null &&
       !PAYMENT_STYLES.includes(body.payment_style)) {
     return `payment_style must be one of ${PAYMENT_STYLES.join(', ')}`;
