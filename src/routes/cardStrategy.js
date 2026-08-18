@@ -422,14 +422,64 @@ router.put('/tiers/:cardProductId', (req, res) => {
       rows.push({ min, rate, label: t.label ? String(t.label) : null, monthlyCap });
     }
 
-    // 통째로 교체한다. 트랜잭션으로 감싸 중간 상태가 남지 않게 한다 —
-    // 지우고 넣는 사이에 실패하면 구간이 통째로 사라진 카드가 된다.
+    // ── 통째로 지우고 다시 넣지 않는다(#656).
+    //
+    // 예전에는 `DELETE ... WHERE card_product_id = ?` 로 싹 비우고 새로 넣었다.
+    // 그러면 **혜택 줄이 가리키던 구간 id 가 전부 사라진다.** 혜택이 하나라도
+    // 그 구간을 참조하고 있으면 FK 가 막아 500 이 났고, 화면에는 «잠시 후 다시
+    // 시도해 주세요» 만 떴다 — 다시 시도해도 영원히 같은 결과인데 일시적 오류처럼
+    // 말했다. 나라사랑카드에서 실제로 났다(혜택 151줄 중 145줄이 참조 중).
+    //
+    // 하한(`min_spend`)으로 짝지어 **남는 구간은 갱신한다.** 하한은 이 요청 안에서
+    // 이미 중복이 막혀 있어(위 `seen`) 짝짓기가 애매해지지 않는다. 라벨이나 한도만
+    // 고치는 흔한 편집에서는 id 가 그대로 살아 참조가 안 끊긴다.
+    const existing = db.prepare(
+      'SELECT id, min_spend FROM card_threshold_tiers WHERE card_product_id = ?'
+    ).all(id);
+    const idByMin = new Map(existing.map((t) => [t.min_spend, t.id]));
+    const incomingMins = new Set(rows.map((r) => r.min));
+    const removed = existing.filter((t) => !incomingMins.has(t.min_spend));
+
+    // 정말 없어지는 구간만 남는다. 그것을 가리키는 혜택이 있으면 **막고 말한다.**
+    // 자동으로 다른 구간에 다시 이어 붙이지 않는다 — 어느 구간이 어느 구간에
+    // 대응하는지 코드가 정할 수 없어서, 사용자가 뜻하지 않은 재매핑을 당한다.
+    if (removed.length > 0) {
+      // **참조가 걸린 구간만 이름에 넣는다.** 없어지는 구간을 전부 나열하면
+      // 참조가 하나도 없는 구간까지 «문제인 것» 으로 읽혀, 사용자가 엉뚱한 줄을
+      // 찾아 헤맨다. 세는 것과 말하는 것이 같은 집합이어야 한다.
+      const marks = removed.map(() => '?').join(',');
+      const hits = db.prepare(
+        `SELECT card_threshold_tier_id AS tierId, COUNT(*) AS n FROM card_benefits
+         WHERE card_threshold_tier_id IN (${marks}) GROUP BY card_threshold_tier_id`
+      ).all(...removed.map((t) => t.id));
+      if (hits.length > 0) {
+        const minById = new Map(removed.map((t) => [t.id, t.min_spend]));
+        const total = hits.reduce((a, h) => a + h.n, 0);
+        const mins = hits
+          .map((h) => `${Number(minById.get(h.tierId)).toLocaleString()}원`)
+          .join(' · ');
+        return res.status(400).json({
+          error: `없어지는 구간(${mins})을 가리키는 혜택이 ${total}개 있어요. `
+            + '그 혜택들의 구간 지정을 먼저 바꾸거나 지운 뒤에 다시 시도해 주세요.',
+        });
+      }
+    }
+
+    // 트랜잭션으로 감싸 중간 상태가 남지 않게 한다.
     db.transaction(() => {
-      db.prepare('DELETE FROM card_threshold_tiers WHERE card_product_id = ?').run(id);
+      const upd = db.prepare(
+        'UPDATE card_threshold_tiers SET rate=?, label=?, monthly_cap=? WHERE id=?'
+      );
       const ins = db.prepare(
         'INSERT INTO card_threshold_tiers (card_product_id, min_spend, rate, label, monthly_cap) VALUES (?,?,?,?,?)'
       );
-      for (const r of rows) ins.run(id, r.min, r.rate, r.label, r.monthlyCap);
+      const del = db.prepare('DELETE FROM card_threshold_tiers WHERE id=?');
+      for (const r of rows) {
+        const hit = idByMin.get(r.min);
+        if (hit !== undefined) upd.run(r.rate, r.label, r.monthlyCap, hit);
+        else ins.run(id, r.min, r.rate, r.label, r.monthlyCap);
+      }
+      for (const t of removed) del.run(t.id);
     })();
 
     res.json({ ok: true, data: tiersFor(id) });
