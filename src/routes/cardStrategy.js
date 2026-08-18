@@ -6,7 +6,7 @@ const { serverError } = require('../utils/errors');
 const { asInt } = require('../utils/validate');
 const { localYMD } = require('../utils/date');
 const { computeThreshold, INCOME_MAJOR_TYPE } = require('../services/cardThreshold');
-const { compareCards, NON_ELIGIBLE_ORIGINS } = require('../services/cardComparison');
+const { compareCards, accrueActual, NON_ELIGIBLE_ORIGINS } = require('../services/cardComparison');
 const { estimateBenefit } = require('../services/cardStrategy');
 const { benefitForMonth } = require('../services/benefitRules');
 
@@ -209,6 +209,23 @@ router.get('/estimate', (req, res) => {
 
     const cards = withThresholds(loadCards(), asOf);
 
+    // ── 이 달에 이미 받은 몫을 다시 계산한다(#637).
+    //
+    // 예전에는 `benefitUsedThisMonth: 0` 을 넘겼다. 「기록하지 않기로 했다」 가 이유였는데,
+    // **필요한 것은 기록이 아니라 재계산이다.** 0 을 넘기면 한도가 늘 열려 있는 것으로
+    // 계산돼 «이 카드로 결제하면 3,000원» 이라고 말해 놓고 실제로는 한도를 다 써서
+    // 0원인 상황이 생긴다 — 추정이 사용자에게 손해를 끼치는 방향으로 틀린다.
+    //
+    // 달력월의 1일부터 `asOf` 까지를 훑는다. 전월 실적과 같은 기준이다(#398).
+    // SQL 이 `date, id` 순으로 읽으므로 같은 날 여러 건은 앞선 건이 먼저 한도를 받는다.
+    const monthStart = `${asOf.slice(0, 7)}-01`;
+    const resolveForMonth = cardIdResolver(cards);
+    const monthRows = db.prepare(TX_IN_RANGE).all(monthStart, asOf)
+      .filter((r) => r.major_type !== INCOME_MAJOR_TYPE)
+      .map((r) => ({ ...r, card_product_id: resolveForMonth(r) }));
+    const ledger = accrueActual({ transactions: monthRows, cards });
+    const ym = asOf.slice(0, 7);
+
     const data = cards.map((card) => {
       const r = estimateBenefit({
         benefits: card.benefits,
@@ -219,14 +236,14 @@ router.get('/estimate', (req, res) => {
         // 이번 달에 적용되는 구간(#563). 지난달 지출로 정해진다.
         activeTierId: card.threshold && card.threshold.tier ? card.threshold.tier.id : null,
         thresholdMet: card.thresholdMet,
-        // 이번 달 이미 받은 혜택은 아직 기록하지 않는다. 한도 소진을 알려면
-        // 거래마다 어느 혜택이 걸렸는지를 저장해야 하는데, 그건 추정값을
-        // 기록으로 굳히는 일이라 하지 않기로 했다. 여기서는 0 으로 둔다 —
-        // **한도가 남았다고 가정하므로 추정이 실제보다 클 수 있다.**
-        benefitUsedThisMonth: 0,
-        // 그 구간의 카드 월 통합 한도(#578). 위 누적이 0 이므로 통합 한도는 «아직
-        // 하나도 안 썼다» 를 기준으로 걸린다 — 건당 한도만 실효가 있다.
+        // 이 달에 **그 카드로 실제 결제한** 건들에서 이미 받은 몫(#637).
+        benefitUsedThisMonth: ledger.readCard(card.id, ym),
+        // 그 구간의 카드 월 통합 한도(#578).
         tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
+        // 지금 결제하는 날. 날짜 조건이 붙은 혜택을 가린다(#638).
+        date: asOf,
+        // 항목·창별 누적(#637). 일 한도와 횟수 한도가 여기서도 걸린다.
+        itemUsedFor: ledger.usedFor(ym, asOf),
       });
       return {
         cardProductId: card.id,
@@ -405,14 +422,64 @@ router.put('/tiers/:cardProductId', (req, res) => {
       rows.push({ min, rate, label: t.label ? String(t.label) : null, monthlyCap });
     }
 
-    // 통째로 교체한다. 트랜잭션으로 감싸 중간 상태가 남지 않게 한다 —
-    // 지우고 넣는 사이에 실패하면 구간이 통째로 사라진 카드가 된다.
+    // ── 통째로 지우고 다시 넣지 않는다(#656).
+    //
+    // 예전에는 `DELETE ... WHERE card_product_id = ?` 로 싹 비우고 새로 넣었다.
+    // 그러면 **혜택 줄이 가리키던 구간 id 가 전부 사라진다.** 혜택이 하나라도
+    // 그 구간을 참조하고 있으면 FK 가 막아 500 이 났고, 화면에는 «잠시 후 다시
+    // 시도해 주세요» 만 떴다 — 다시 시도해도 영원히 같은 결과인데 일시적 오류처럼
+    // 말했다. 나라사랑카드에서 실제로 났다(혜택 151줄 중 145줄이 참조 중).
+    //
+    // 하한(`min_spend`)으로 짝지어 **남는 구간은 갱신한다.** 하한은 이 요청 안에서
+    // 이미 중복이 막혀 있어(위 `seen`) 짝짓기가 애매해지지 않는다. 라벨이나 한도만
+    // 고치는 흔한 편집에서는 id 가 그대로 살아 참조가 안 끊긴다.
+    const existing = db.prepare(
+      'SELECT id, min_spend FROM card_threshold_tiers WHERE card_product_id = ?'
+    ).all(id);
+    const idByMin = new Map(existing.map((t) => [t.min_spend, t.id]));
+    const incomingMins = new Set(rows.map((r) => r.min));
+    const removed = existing.filter((t) => !incomingMins.has(t.min_spend));
+
+    // 정말 없어지는 구간만 남는다. 그것을 가리키는 혜택이 있으면 **막고 말한다.**
+    // 자동으로 다른 구간에 다시 이어 붙이지 않는다 — 어느 구간이 어느 구간에
+    // 대응하는지 코드가 정할 수 없어서, 사용자가 뜻하지 않은 재매핑을 당한다.
+    if (removed.length > 0) {
+      // **참조가 걸린 구간만 이름에 넣는다.** 없어지는 구간을 전부 나열하면
+      // 참조가 하나도 없는 구간까지 «문제인 것» 으로 읽혀, 사용자가 엉뚱한 줄을
+      // 찾아 헤맨다. 세는 것과 말하는 것이 같은 집합이어야 한다.
+      const marks = removed.map(() => '?').join(',');
+      const hits = db.prepare(
+        `SELECT card_threshold_tier_id AS tierId, COUNT(*) AS n FROM card_benefits
+         WHERE card_threshold_tier_id IN (${marks}) GROUP BY card_threshold_tier_id`
+      ).all(...removed.map((t) => t.id));
+      if (hits.length > 0) {
+        const minById = new Map(removed.map((t) => [t.id, t.min_spend]));
+        const total = hits.reduce((a, h) => a + h.n, 0);
+        const mins = hits
+          .map((h) => `${Number(minById.get(h.tierId)).toLocaleString()}원`)
+          .join(' · ');
+        return res.status(400).json({
+          error: `없어지는 구간(${mins})을 가리키는 혜택이 ${total}개 있어요. `
+            + '그 혜택들의 구간 지정을 먼저 바꾸거나 지운 뒤에 다시 시도해 주세요.',
+        });
+      }
+    }
+
+    // 트랜잭션으로 감싸 중간 상태가 남지 않게 한다.
     db.transaction(() => {
-      db.prepare('DELETE FROM card_threshold_tiers WHERE card_product_id = ?').run(id);
+      const upd = db.prepare(
+        'UPDATE card_threshold_tiers SET rate=?, label=?, monthly_cap=? WHERE id=?'
+      );
       const ins = db.prepare(
         'INSERT INTO card_threshold_tiers (card_product_id, min_spend, rate, label, monthly_cap) VALUES (?,?,?,?,?)'
       );
-      for (const r of rows) ins.run(id, r.min, r.rate, r.label, r.monthlyCap);
+      const del = db.prepare('DELETE FROM card_threshold_tiers WHERE id=?');
+      for (const r of rows) {
+        const hit = idByMin.get(r.min);
+        if (hit !== undefined) upd.run(r.rate, r.label, r.monthlyCap, hit);
+        else ins.run(id, r.min, r.rate, r.label, r.monthlyCap);
+      }
+      for (const t of removed) del.run(t.id);
     })();
 
     res.json({ ok: true, data: tiersFor(id) });
