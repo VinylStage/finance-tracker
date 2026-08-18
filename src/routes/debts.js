@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { isRealDate } = require('../utils/period');
 const { asInt, numericBody } = require('../utils/validate');
 const {
   createDebtInterestDerived, deleteDebtDerived, derivedRowsForDebt,
@@ -56,6 +57,8 @@ router.post('/', numericBody(['balance', 'credit_limit', 'compounds', 'interest_
     }
     const rateInvalid = validateAnnualRate(annual_rate);
     if (rateInvalid) return res.status(400).json({ error: rateInvalid });
+    const numberInvalid = validateDebtNumbers(req.body);
+    if (numberInvalid) return res.status(400).json({ error: numberInvalid });
     const invalid = validateLoanFields({ loan_type, credit_limit });
     if (invalid) return res.status(400).json({ error: invalid });
 
@@ -91,6 +94,11 @@ router.put('/:id', (req, res) => {
     const existing = db.prepare('SELECT * FROM debts WHERE id=?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: '찾는 부채가 없습니다. 이미 삭제됐을 수 있어요.' });
     const merged = { ...existing, ...req.body };
+    // **`merged` 가 아니라 `req.body` 를 본다.** 마이그레이션 전에 들어온 나쁜 값이
+    // 행에 남아 있으면, merged 로 보는 순간 그 부채는 이름조차 못 고치게 된다.
+    // 사용자가 이번에 보낸 값만 막는다 — 남은 나쁜 값은 무결성 점검이 잡는다.
+    const numberInvalid = validateDebtNumbers(req.body);
+    if (numberInvalid) return res.status(400).json({ error: numberInvalid });
     const invalid = validateLoanFields(merged);
     if (invalid) return res.status(400).json({ error: invalid });
 
@@ -305,8 +313,11 @@ router.get('/:id/interest-projection', (req, res) => {
   }
 });
 
+// 글자꼴만 보면 2026-02-30 이 통과해 **계산까지 들어간다.** 실제로 그 값으로
+// interest-projection 이 200 과 함께 이자 3,150원을 냈다 — JS 가 3월 2일로 읽는다.
+// 사용자는 2월 30일을 넣은 적이 없는데 3월 2일 기준 숫자를 보게 된다(#670).
 function isYMD(v) {
-  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  return typeof v === 'string' && isRealDate(v);
 }
 
 // GET /api/debts/:id/rates — 금리 이력(#285)
@@ -346,7 +357,7 @@ router.post('/:id/rates', (req, res) => {
 router.get('/:id/rate-on', (req, res) => {
   try {
     const { date } = req.query;
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (!isRealDate(String(date || ''))) {
       return res.status(400).json({ error: '조회할 날짜를 선택해 주세요.' });
     }
     res.json({ data: rateAt(db, Number(req.params.id), date) });
@@ -354,6 +365,24 @@ router.get('/:id/rate-on', (req, res) => {
     serverError(res, e, 'debts');
   }
 });
+
+// 잔액과 이자일의 범위. 잔액 0 은 「다 갚았다」 라 정상이고, 이자일은 달력에
+// 있는 날이어야 한다 — 반복규칙의 day_of_month 와 같은 범위다.
+function validateDebtNumbers(body) {
+  if (body.balance !== undefined && body.balance !== null && body.balance !== '') {
+    const balance = Number(body.balance);
+    if (!Number.isFinite(balance) || balance < 0) {
+      return '잔액은 0 이상으로 입력해 주세요.';
+    }
+  }
+  if (body.interest_day !== undefined && body.interest_day !== null && body.interest_day !== '') {
+    const day = Number(body.interest_day);
+    if (!Number.isInteger(day) || day < 1 || day > 31) {
+      return '이자일은 1일에서 31일 사이로 입력해 주세요.';
+    }
+  }
+  return null;
+}
 
 // 금리는 소수를 허용해야 한다(연 4.17%). numericBody 는 정수 전용이라 여기서
 // 직접 막는다 — services/cardPolicy.js 의 annual_rate 검증과 같은 이유다.
