@@ -5,7 +5,7 @@ const db = require('../db/init');
 const { asInt, missingFields, escapeLike, toIdList } = require('../utils/validate');
 const { serverError } = require('../utils/errors');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
-const { resolvePeriod } = require('../utils/period');
+const { resolvePeriod, isRealDate } = require('../utils/period');
 const { isEditable, lockedMessage, findLocked, countLockedAll, derivedFilter } = require('../services/transactionOrigin');
 const { PAYMENT_STYLES } = require('../constants');
 const { pad2, lastNDates, mondayOf, lastNWeeks, lastNMonths, localYMD, monthBounds } = require('../utils/date');
@@ -374,8 +374,9 @@ function validateTxBody(body) {
       asInt(body.payment_method_id) === null) return 'payment_method_id must be an integer';
   if (body.card_product_id !== undefined && body.card_product_id !== null &&
       asInt(body.card_product_id) === null) return 'card_product_id must be an integer';
-  // date 형식 검증 (ISO 8601 YYYY-MM-DD)
-  if (body.date && !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return 'date must be in YYYY-MM-DD format';
+  // date 검증 (ISO 8601 YYYY-MM-DD). 글자꼴만 보면 2026-13-45·0000-00-00 이
+  // 그대로 저장된다 — 그 거래는 합계에는 잡히는데 기간 조회에 안 걸린다(#670).
+  if (body.date && !isRealDate(String(body.date))) return 'date must be in YYYY-MM-DD format';
   if (body.payment_style !== undefined && body.payment_style !== null &&
       !PAYMENT_STYLES.includes(body.payment_style)) {
     return `payment_style must be one of ${PAYMENT_STYLES.join(', ')}`;

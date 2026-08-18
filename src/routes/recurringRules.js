@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
+const { isRealDate } = require('../utils/period');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
 const {
@@ -25,7 +26,9 @@ function resolveDate(yearMonth, dayOfMonth) {
   return `${yearMonth}-${pad2(day)}`;
 }
 
-function isYMD(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+// 글자꼴만 보면 2026-13-45 가 통과한다. utils/period 의 isRealDate 는 달 범위와
+// 그 달의 마지막 날까지 본다(#670).
+function isYMD(s) { return typeof s === 'string' && isRealDate(s); }
 
 function today() {
   // 로컬 기준이다. UTC 로 하면 KST 자정~9시 사이에 하루 어긋난다(FND-20).
