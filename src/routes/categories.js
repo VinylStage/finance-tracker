@@ -51,8 +51,16 @@ router.put('/:id', numericBody(['monthly_budget', 'is_active']), (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  db.prepare('UPDATE categories SET is_active=0 WHERE id=?').run(req.params.id);
-  res.json({ ok: true });
+  try {
+    const existing = db.prepare('SELECT id FROM categories WHERE id=?').get(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: '찾는 분류가 없습니다. 이미 삭제됐을 수 있어요.' });
+    }
+    db.prepare('UPDATE categories SET is_active=0 WHERE id=?').run(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    serverError(res, e, 'categories');
+  }
 });
 
 module.exports = router;
