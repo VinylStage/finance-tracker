@@ -47,8 +47,16 @@ router.put('/:id', numericBody(['is_active']), (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  db.prepare('UPDATE payment_methods SET is_active=0 WHERE id=?').run(req.params.id);
-  res.json({ ok: true });
+  try {
+    const existing = db.prepare('SELECT id FROM payment_methods WHERE id=?').get(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: '찾는 결제수단이 없습니다. 이미 삭제됐을 수 있어요.' });
+    }
+    db.prepare('UPDATE payment_methods SET is_active=0 WHERE id=?').run(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    serverError(res, e, 'paymentMethods');
+  }
 });
 
 module.exports = router;
