@@ -357,7 +357,7 @@ router.post('/:id/rates', (req, res) => {
 router.get('/:id/rate-on', (req, res) => {
   try {
     const { date } = req.query;
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (!isRealDate(String(date || ''))) {
       return res.status(400).json({ error: '조회할 날짜를 선택해 주세요.' });
     }
     res.json({ data: rateAt(db, Number(req.params.id), date) });
