@@ -14,6 +14,11 @@ const { INCOME_CASE, EXPENSE_CASE, EXPENSE_ROW, installmentsDueForMonth, rangeTo
 // GET /api/transactions?limit=50&offset=0&from=&to=&category_id=&merchant=&memo=&min_amount=&max_amount=&payment_method_id=
 router.get('/', (req, res) => {
   try {
+    // 기간을 받아서 필터에 넣는 라우트다. 검증을 안 하면 없는 날짜가 그대로
+    // WHERE 절에 들어가 빈 결과가 나가고, 사용자는 「거래가 없다」 로 읽는다.
+    const period = resolvePeriod(req.query);
+    if (period.error) return res.status(400).json({ error: period.error });
+
     // limit/offset 은 정수로 강제하고 범위를 제한한다(잘못된 값으로 인한 500·과도한 조회 방지)
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
