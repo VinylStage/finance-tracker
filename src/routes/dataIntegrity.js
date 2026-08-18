@@ -11,14 +11,18 @@ router.get('/', (req, res) => {
     const checks = [];
 
     // 1. 비ISO 날짜 형식
+    //
+    // `date(x) IS NOT x` 는 «SQLite 가 날짜로 못 읽거나, 읽었더니 원래 글자와
+    // 다른» 값을 잡는다. 글자꼴만 보던 예전 검사는 `abcd-ef-gh` 를 통과시켰고
+    // (길이 10, 5·8번째가 하이픈), `2026-13-45`·`2026-02-30` 도 통과시켰다.
     const invalidDates = db.prepare(`
       SELECT id, date FROM transactions
-      WHERE length(date) != 10 OR substr(date, 5, 1) != '-' OR substr(date, 8, 1) != '-'
+      WHERE date IS NULL OR date(date) IS NOT date
       LIMIT 20
     `).all();
     checks.push({
       name: '비ISO 날짜 형식',
-      count: db.prepare(`SELECT count(*) as count FROM transactions WHERE length(date) != 10 OR substr(date, 5, 1) != '-' OR substr(date, 8, 1) != '-'`).get().count,
+      count: db.prepare(`SELECT count(*) as count FROM transactions WHERE date IS NULL OR date(date) IS NOT date`).get().count,
       samples: invalidDates
     });
 
@@ -101,6 +105,37 @@ router.get('/', (req, res) => {
         )
       `).get().count,
       samples: duplicateApprovalNumbers.map(row => ({ approval_number: row.approval_number, count: row.cnt }))
+    });
+
+    // 6. 다른 표의 날짜꼴 이상
+    //
+    // transactions.date 만 보던 검사를 넓힌다. 저축·할부·반복규칙의 날짜가 깨지면
+    // 만기 처리·회차 생성이 NaN 을 낳고, 그 결과가 다시 거래로 들어간다(#666).
+    // 날짜 컬럼은 `date(x) IS NOT x` 하나로 본다 — 글자꼴이 틀린 것과 «없는 날짜»
+    // 를 한꺼번에 잡는다. start_billing_month 만 YYYY-MM 이라 하루를 붙여 본다.
+    const DAY = (t, c, label) => `
+      SELECT '${label}' AS table_name, '${c}' AS column_name, id AS row_id, ${c} AS value
+        FROM ${t} WHERE ${c} IS NOT NULL AND date(${c}) IS NOT ${c}`;
+    const DATE_COLUMNS = [
+      DAY('savings_products', 'start_date', '저축'),
+      DAY('savings_products', 'maturity_date', '저축'),
+      DAY('installments', 'purchase_date', '할부'),
+      `
+      SELECT '할부' AS table_name, 'start_billing_month' AS column_name, id AS row_id,
+             start_billing_month AS value
+        FROM installments
+       WHERE start_billing_month IS NOT NULL
+         AND (start_billing_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+              OR date(start_billing_month || '-01') IS NOT (start_billing_month || '-01'))`,
+      DAY('recurring_rules', 'starts_on', '반복규칙'),
+      DAY('recurring_rules', 'ends_on', '반복규칙'),
+      DAY('debt_repayments', 'repaid_on', '부채 상환'),
+      DAY('debt_interest_log', 'log_date', '부채 이자'),
+    ].join('\n      UNION ALL\n');
+    checks.push({
+      name: '다른 표의 날짜꼴 이상',
+      count: db.prepare(`SELECT count(*) AS count FROM (${DATE_COLUMNS})`).get().count,
+      samples: db.prepare(`${DATE_COLUMNS} LIMIT 20`).all(),
     });
 
     res.json({ checks });
