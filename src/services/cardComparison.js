@@ -83,7 +83,24 @@ function isCandidate(card) {
   return card.is_active === undefined || card.is_active === null || !!card.is_active;
 }
 
-function compareCards({ transactions, cards } = {}) {
+/**
+ * `cardsByMonth` 는 «그 달 기준으로 실적을 판정한 카드 목록» 이다(#650).
+ *
+ * 실적은 **달마다 다시 정해지는 값**이다(전월 달력월, #526 · #398). 그런데 예전에는
+ * 호출부가 `to` 하나로 판정한 목록을 넘겼고, 그 판정이 구간 전체에 그대로 쓰였다.
+ * 기본 구간이 3개월이라 거의 항상 여러 달을 훑으므로 **마지막 달의 판정이 앞의 달들을
+ * 덮어썼다.**
+ *
+ * 실측: 6월에 실적을 채우고 7월에 결제한 거래가
+ *   `from=2026-03-01&to=2026-10-31` → 차액 3,450원 (9월 지출이 0 이라 «미달» 로 판정)
+ *   `from=2026-07-01&to=2026-07-31` → 차액 19,000원
+ * 로 갈렸다. 반대 방향도 성립한다 — 마지막 달만 채웠으면 못 채운 달까지 혜택이 붙어
+ * 과대추정된다.
+ *
+ * 안 넘기면 예전처럼 `cards` 하나를 모든 달에 쓴다. 계산기를 단독으로 쓰는 호출부와
+ * 기존 테스트가 그대로 동작해야 하기 때문이다.
+ */
+function compareCards({ transactions, cards, cardsByMonth } = {}) {
   const list = Array.isArray(transactions) ? transactions : [];
   const cardList = Array.isArray(cards) ? cards : [];
 
@@ -214,9 +231,12 @@ function compareCards({ transactions, cards } = {}) {
     // 일 창을 쓰려면 날짜가 온전해야 한다. 못 읽으면 **안다고 하지 않는다.**
     const ymd = /^\d{4}-\d{2}-\d{2}$/.test(String(tx.date || '')) ? String(tx.date) : null;
 
+    // **그 거래가 일어난 달의 실적 판정**을 쓴다(#650). 없으면 예전처럼 하나를 쓴다.
+    const monthCards = (cardsByMonth && cardsByMonth.get(ym)) || cardList;
+
     // 카드마다 이 거래를 계산한다. **그 카드의 가정 누적**을 넘긴다 — 한도가 작은
     // 카드가 실제보다 좋아 보이지 않게 하려면 이 값이 0 으로 고정돼선 안 된다.
-    const perCard = cardList.map((card) => {
+    const perCard = monthCards.map((card) => {
       const r = estimateBenefit({
         benefits: card.benefits || [],
         amount,
@@ -252,7 +272,7 @@ function compareCards({ transactions, cards } = {}) {
     // 두 누적이 다른 예: 세 건 중 한 건만 A 로 결제했다면 hypo 는 세 건, actual 은 한 건이다.
     const actualCard = tx.card_product_id === null || tx.card_product_id === undefined
       ? null
-      : cardList.find((c) => c.id === tx.card_product_id) || null;
+      : monthCards.find((c) => c.id === tx.card_product_id) || null;
     const actual = actualCard
       ? {
         cardId: actualCard.id,

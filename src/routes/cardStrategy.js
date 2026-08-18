@@ -157,6 +157,26 @@ function thresholdFor(card, asOf, resolve, excluded) {
   });
 }
 
+// 구간에 걸친 달 목록. 'YYYY-MM' 오름차순이다(#650).
+//
+// 실적이 달마다 다시 정해지므로 «어느 달들을 판정해야 하나» 가 필요하다. 양 끝을
+// 포함한다 — `from` 이 그 달 15일이어도 그 달 거래가 구간에 들어온다.
+function monthsInRange(from, to) {
+  const out = [];
+  let year = Number(from.slice(0, 4));
+  let month = Number(from.slice(5, 7));
+  const endYear = Number(to.slice(0, 4));
+  const endMonth = Number(to.slice(5, 7));
+
+  // 구간이 길어도 달 수만큼만 돈다. 뒤집힌 입력은 호출부가 이미 400 으로 막는다.
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    out.push(`${year}-${String(month).padStart(2, '0')}`);
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  return out;
+}
+
 function withThresholds(cards, asOf) {
   const resolve = cardIdResolver(cards);
   // 제외 목록은 카드마다 다시 읽을 이유가 없다. 카드 수만큼 같은 쿼리가
@@ -269,7 +289,26 @@ router.get('/comparison', (req, res) => {
 
     if (from > to) return res.status(400).json({ error: '시작일이 종료일보다 뒤입니다.' });
 
-    const cards = withThresholds(loadCards(), to);
+    // **달마다 실적을 다시 판정한다**(#650).
+    //
+    // 실적은 전월 달력월 기준이라 달이 바뀌면 다시 정해진다(#526 · #398). 예전에는
+    // `to` 하나로 판정해 그 결과를 구간 전체에 썼고, 기본 구간이 3개월이라 거의 항상
+    // **마지막 달의 판정이 앞의 달들을 덮어썼다.**
+    //
+    // 실측: 6월에 실적을 채우고 7월에 결제한 거래가 넓은 구간에서는 «미달» 로 판정돼
+    // 차액이 3,450원, 7월만 보면 19,000원이었다. 같은 거래인데 보는 구간에 따라 값이 달랐다.
+    //
+    // 각 달의 판정에 필요한 «그 달의 전월 지출» 은 `thresholdFor` 가 자기 기간을 직접
+    // 조회해 가져온다. 그래서 아래 거래 조회 범위(`from`~`to`)는 넓히지 않아도 된다.
+    const baseCards = loadCards();
+    const months = monthsInRange(from, to);
+    const cardsByMonth = new Map(
+      months.map((ym) => [ym, withThresholds(baseCards, `${ym}-01`)])
+    );
+
+    // 화면이 카드 목록을 쓸 때의 기준은 **마지막 달**이다. «지금 이 카드가 실적을
+    // 채웠나» 를 묻는 자리라 구간의 끝이 맞다.
+    const cards = cardsByMonth.get(months[months.length - 1]) || withThresholds(baseCards, to);
     const resolve = cardIdResolver(cards);
     const rows = db.prepare(TX_IN_RANGE).all(from, to);
 
@@ -278,13 +317,15 @@ router.get('/comparison', (req, res) => {
       .filter((r) => r.major_type !== INCOME_MAJOR_TYPE)
       .map((r) => ({ ...r, card_product_id: resolve(r) }));
 
-    const result = compareCards({ transactions: expenses, cards });
+    const result = compareCards({ transactions: expenses, cards, cardsByMonth });
 
     res.json({
       ...result,
       period: { from, to },
       // 실적 판정이 추정이면 차액도 추정이다. 화면이 이어서 말해야 한다.
-      thresholdEstimated: cards.some((c) => c.threshold.estimated),
+      // **어느 달이든 추정이면 추정이다** — 한 달만 정확해도 결과는 추정이 섞인 값이다.
+      thresholdEstimated: [...cardsByMonth.values()]
+        .some((list) => list.some((c) => c.threshold.estimated)),
     });
   } catch (e) {
     serverError(res, e, 'cardStrategy');
