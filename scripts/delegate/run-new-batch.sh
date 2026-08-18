@@ -122,8 +122,13 @@ run_aider() {  # $1=스펙 $2=로그
     --no-stream --map-tokens 0 --timeout 900 --edit-format whole \
     --message-file "$1" "${readargs[@]}" "$target" > "$2" 2>&1
   local rc=$?
-  # 지시를 못 읽었으면 그 뒤 결과는 볼 필요가 없다
-  if grep -q "file not found error" "$2"; then
+  # 지시를 못 읽었으면 그 뒤 결과는 볼 필요가 없다.
+  #
+  # **명세 파일 이름으로 좁혀서 본다.** 예전에는 "file not found error" 를 통째로
+  # 찾았는데, aider 는 «아직 없는 파일을 만들라» 고 시켰을 때도 같은 문장을 찍는다
+  # (열어 보고 → 없다고 말하고 → 그냥 만든다). 그래서 구현까지 위임하는 배치가
+  # **정상 산출물을 내고도 3라운드 내내 반려**됐다.
+  if grep -q "$(basename -- "$1"): file not found error" "$2"; then
     print "  ✖ aider 가 메시지 파일을 못 읽었다 — 지시 없이 돌았다"; return 1
   fi
   print "  aider 소요 $(($(date +%s)-S))초 exit=$rc"

@@ -4,6 +4,8 @@ import EmptyState from './EmptyState';
 import { formatWon } from '../lib/format';
 import { conditionText } from '../lib/benefitConditionText';
 import CardBenefitConditionFields from './CardBenefitConditionFields';
+import CardBenefitCapsFields from './CardBenefitCapsFields';
+import { capsToRows, rowsToCaps, datesToText, textToDates } from '../lib/benefitRuleForm';
 import { useConfirm } from './ConfirmProvider';
 
 // 서버 `src/constants.js` 의 BENEFIT_TYPES 와 같아야 한다. 어긋나면 저장할 때만 400 이 난다.
@@ -69,6 +71,8 @@ const EMPTY_FORM = {
   monthly_cap: '', min_amount: '', memo: '',
   // 건당 상한(#638) · 실적 무관(#636) · 통합 한도 밖(#648).
   max_amount: '', threshold_exempt: false, unified_cap_exempt: false,
+  // 창별 한도와 날짜 조건(#638). 값은 전부 문자열로 들고 저장할 때만 규칙으로 바꾼다.
+  capRows: [], dates: '',
 };
 
 export default function CardBenefitSection({ categories = [] }) {
@@ -137,6 +141,27 @@ export default function CardBenefitSection({ categories = [] }) {
       // 요율형으로 되돌릴 때 저장된 규칙을 지운다. 안 보내면 기존 규칙이 남아
       // 화면은 요율인데 계산은 정액으로 도는 상태가 된다.
       body.rule = null;
+    }
+
+    // ── 창별 한도와 날짜 조건을 규칙에 얹는다(#638).
+    //
+    // 유형과 무관하게 붙는다 — 요율형에도, 정액구간형에도.
+    //
+    // **`kind` 없이 보내면 조용히 버려진다.** 읽는 쪽(`ruleOf`)이 `kind` 가 문자열일
+    // 때만 규칙으로 인정하므로, 요율형에 한도만 넣으려면 `kind: 'rate'` 를 같이
+    // 실어야 한다. 안 실으면 저장은 되는데 계산이 그 한도를 못 본다.
+    const caps = rowsToCaps(form.capRows);
+    if (caps.error) return { error: caps.error };
+    const when = textToDates(form.dates);
+    if (when.error) return { error: when.error };
+
+    if (caps.caps || when.dates) {
+      const baseRule = body.rule || { kind: 'rate', rate: Number(form.rate) || 0 };
+      body.rule = {
+        ...baseRule,
+        ...(caps.caps ? { caps: caps.caps } : {}),
+        ...(when.dates ? { when: { dates: when.dates } } : {}),
+      };
     }
     for (const k of ['category_id', 'merchant_pattern', 'monthly_cap', 'min_amount', 'memo']) {
       if (form[k] === '') continue;
@@ -248,6 +273,8 @@ export default function CardBenefitSection({ categories = [] }) {
       max_amount: String(b.max_amount ?? ''),
       threshold_exempt: Boolean(b.threshold_exempt),
       unified_cap_exempt: Boolean(b.unified_cap_exempt),
+      capRows: capsToRows(rule),
+      dates: datesToText(rule),
       memo: b.memo || '',
       payment_style: b.payment_style || '',
     });
@@ -280,12 +307,20 @@ export default function CardBenefitSection({ categories = [] }) {
       }
     }
 
+    // 한도·날짜는 여기서 규칙으로 바뀐다. 형식이 틀리면 **보내기 전에** 말한다(#638) —
+    // 서버도 막지만, 그때는 «저장 실패» 로만 보여서 어느 칸이 문제인지 알 수 없다.
+    const built = buildBody();
+    if (built.error) {
+      await alert(built.error);
+      return;
+    }
+
     setSaving(true);
     try {
       if (editingId) {
-        await api.put(`/api/card-benefits/${editingId}`, buildBody());
+        await api.put(`/api/card-benefits/${editingId}`, built);
       } else {
-        await api.post('/api/card-benefits', buildBody());
+        await api.post('/api/card-benefits', built);
       }
       setShowForm(false);
       await loadBenefits(selectedCardId);
@@ -475,6 +510,16 @@ export default function CardBenefitSection({ categories = [] }) {
             </div>
 
             <CardBenefitConditionFields form={form} setField={setField} inp={inp} />
+
+            <div className="sm:col-span-2">
+              <CardBenefitCapsFields
+                rows={form.capRows}
+                onRowsChange={(rows) => setField('capRows', rows)}
+                dates={form.dates}
+                onDatesChange={(v) => setField('dates', v)}
+                inp={inp}
+              />
+            </div>
 
             <div className="sm:col-span-2">
               <label className="block text-xs text-caption mb-1" htmlFor="benefit-memo">메모 (선택)</label>
