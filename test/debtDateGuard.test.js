@@ -101,3 +101,18 @@ test('제대로 된 금리 시작일은 201 이고, 그 뒤 계산이 여전히 
   const projRes = await projection('2026-01-01', '2026-01-31');
   assert.strictEqual(projRes.status, 200);
 });
+
+// 「그 시점의 금리」 조회도 같은 문이다.
+//
+// 고치기 전에는 date=2026-02-30 이 200 { data: null } 을 냈다 — 없는 날짜인데
+// 「그 시점에 금리가 없다」 고 답해서, 사용자는 금리 이력을 안 넣은 줄 안다.
+test('금리 조회 날짜가 날짜가 아니면 400 이다', async () => {
+  for (const bad of BAD_DATES) {
+    const res = await req('GET', `/api/debts/${debtId}/rate-on?date=${bad}`);
+    assert.strictEqual(res.status, 400, `${bad} 가 통과했다: ${JSON.stringify(res.body)}`);
+  }
+
+  // 정상 날짜는 그대로 답한다 — 검증을 넣다가 조회 자체를 막으면 안 된다.
+  const ok = await req('GET', `/api/debts/${debtId}/rate-on?date=2026-01-15`);
+  assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
+});
