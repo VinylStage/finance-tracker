@@ -12,6 +12,12 @@ function monthsBetween(startDate, endDate) {
   return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1);
 }
 
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+function isUsableDate(value) {
+  return YMD.test(String(value || '')) && !Number.isNaN(new Date(value).getTime());
+}
+
 // GET /api/savings
 router.get('/', (req, res) => {
   try {
@@ -78,6 +84,14 @@ router.post('/:id/mature', (req, res) => {
     if (product.status === '완료') return res.status(400).json({ error: '이미 만기 처리된 상품입니다.' });
 
     const settleDate = req.body.settle_date || product.maturity_date || localYMD();
+
+    if (!isUsableDate(settleDate)) {
+      return res.status(400).json({ error: '만기 정산일은 YYYY-MM-DD 형식의 실제 날짜여야 합니다.' });
+    }
+    if (!isUsableDate(product.start_date)) {
+      return res.status(400).json({ error: '이 상품의 시작일이 올바르지 않습니다. 상품 정보를 먼저 고쳐 주세요.' });
+    }
+
     const months = monthsBetween(product.start_date, settleDate);
     const principal = product.monthly_contribution * months;
     const payout = product.expected_payout || principal;
