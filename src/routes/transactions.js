@@ -275,7 +275,13 @@ router.delete('/', (req, res) => {
           error: `자동으로 만들어진 내역 ${locked}건이 포함돼 있어 전체 삭제를 할 수 없어요. 할부·리볼빙·부채 화면에서 원본을 먼저 정리해 주세요.`,
         });
       }
-      const deleted = db.prepare('DELETE FROM transactions').run().changes;
+      // 반복거래가 만든 행은 recurring_occurrences.transaction_id 가 가리킨다.
+      // 그 컬럼에 ON DELETE 절이 없어 그냥 지우면 외래키 위반으로 500 이 난다(#685).
+      // 개별 삭제는 이미 같은 처리를 한다 — 발생 기록은 남기고 연결만 끊는다.
+      const deleted = db.transaction(() => {
+        db.prepare('UPDATE recurring_occurrences SET transaction_id = NULL WHERE transaction_id IS NOT NULL').run();
+        return db.prepare('DELETE FROM transactions').run().changes;
+      })();
       return res.json({ ok: true, deleted });
     }
     if (Array.isArray(ids) && ids.length > 0) {
@@ -292,7 +298,11 @@ router.delete('/', (req, res) => {
       }
 
       const placeholders = validIds.map(() => '?').join(',');
-      const deleted = db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
+      // 개별 삭제와 같은 처리다(#685). 연결을 안 끊으면 외래키 위반으로 500 이 난다.
+      const deleted = db.transaction(() => {
+        db.prepare(`UPDATE recurring_occurrences SET transaction_id = NULL WHERE transaction_id IN (${placeholders})`).run(...validIds);
+        return db.prepare(`DELETE FROM transactions WHERE id IN (${placeholders})`).run(...validIds).changes;
+      })();
       return res.json({ ok: true, deleted });
     }
     return res.status(400).json({ error: '삭제할 거래를 선택해 주세요.' });
