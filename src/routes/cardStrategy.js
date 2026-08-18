@@ -405,6 +405,30 @@ router.put('/tiers/:cardProductId', (req, res) => {
       rows.push({ min, rate, label: t.label ? String(t.label) : null, monthlyCap });
     }
 
+    // 구간을 가리키는 혜택이 있으면 **막고 무엇을 해야 하는지 말한다**(#656).
+    //
+    // 통째로 지우고 다시 넣는 방식이라, 참조가 살아 있으면 FK 가 DELETE 를 막아
+    // 500 이 난다. 트랜잭션이라 데이터가 깨지지는 않지만 화면에는
+    // «잠시 후 다시 시도해 주세요» 만 뜬다 — **다시 시도해도 영원히 같은 결과다.**
+    // 일시적 오류가 아니라 구조적 거부인데 문구가 일시적 오류처럼 말했다.
+    //
+    // 참조를 새 구간으로 자동으로 다시 잇지는 않는다. «어느 구간이 어느 구간에
+    // 대응하는가» 를 코드가 정할 수 없어서, 사용자가 뜻하지 않은 재매핑을 당한다.
+    //
+    // 실측: 나라사랑카드 재투입(#620) 중 혜택 151줄 중 145줄이 구간을 가리키고 있었다.
+    const referencing = db.prepare(`
+      SELECT COUNT(*) AS count FROM card_benefits
+      WHERE card_product_id = ? AND card_threshold_tier_id IS NOT NULL
+    `).get(id).count;
+
+    if (referencing > 0) {
+      return res.status(409).json({
+        error: `이 카드의 혜택 ${referencing}줄이 지금 실적 구간을 가리키고 있어요. `
+          + '구간을 바꾸려면 먼저 그 혜택들에서 구간 지정을 풀어 주세요.',
+        referencingBenefits: referencing,
+      });
+    }
+
     // 통째로 교체한다. 트랜잭션으로 감싸 중간 상태가 남지 않게 한다 —
     // 지우고 넣는 사이에 실패하면 구간이 통째로 사라진 카드가 된다.
     db.transaction(() => {
