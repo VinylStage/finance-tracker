@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { isRealDate } = require('../utils/period');
 const { asInt, numericBody } = require('../utils/validate');
 const {
   createDebtInterestDerived, deleteDebtDerived, derivedRowsForDebt,
@@ -312,8 +313,11 @@ router.get('/:id/interest-projection', (req, res) => {
   }
 });
 
+// 글자꼴만 보면 2026-02-30 이 통과해 **계산까지 들어간다.** 실제로 그 값으로
+// interest-projection 이 200 과 함께 이자 3,150원을 냈다 — JS 가 3월 2일로 읽는다.
+// 사용자는 2월 30일을 넣은 적이 없는데 3월 2일 기준 숫자를 보게 된다(#670).
 function isYMD(v) {
-  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  return typeof v === 'string' && isRealDate(v);
 }
 
 // GET /api/debts/:id/rates — 금리 이력(#285)
