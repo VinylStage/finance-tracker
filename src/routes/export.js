@@ -6,15 +6,19 @@ const { serverError } = require('../utils/errors');
 const { runAs } = require('../utils/auditContext');
 const { localYMD } = require('../utils/date');
 const { guardFormula } = require('../utils/csvFormulaGuard');
+const { isRealDate } = require('../utils/period');
 
 const SCHEMA_VERSION = 1;
 
 // FND-19(감사): from/to가 검증 없이 Content-Disposition 헤더와 SQL 바인딩에 쓰였다.
 // CRLF는 Node가 헤더 값에서 자체적으로 거부하지만(ERR_INVALID_CHAR), 따옴표로
 // 파일명을 조작하거나 제어문자로 500을 유발할 수 있었다. 날짜 형식만 허용한다.
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+//
+// 글자꼴만 보던 정규식을 `isRealDate` 로 바꿨다(#670). 형식만 보면
+// `2026-13-45`·`2026-02-30` 이 통과한다.
 function isInvalidDateParam(value) {
-  return value !== undefined && value !== null && value !== '' && !DATE_RE.test(value);
+  if (value === undefined || value === null || value === '') return false;
+  return !isRealDate(String(value));
 }
 
 // RFC 4180: 쉼표·따옴표·CR·LF 중 하나라도 있으면 따옴표로 감싸고 안쪽 따옴표는 겹친다.
