@@ -7,7 +7,10 @@ const { serverError } = require('../utils/errors');
 const DEFAULTS = { initial_balance: '0', monthly_income: '0' };
 
 // 숫자로 강제. 유한한 숫자가 아니면 null (NaN 저장·반환 방지).
+// **`Number(null)` 은 0 이다.** null 을 그냥 넘기면 「유효한 숫자 0」 으로 판정돼
+// 기존 설정이 조용히 0 으로 덮어써진다(#683). 값이 없는 것과 0 은 다르다.
 function asNumber(v) {
+  if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -36,6 +39,10 @@ router.put('/', (req, res) => {
     }
     if (monthly_income !== undefined && monthly_income !== '' && asNumber(monthly_income) === null) {
       return res.status(400).json({ error: '월 수입 기준값은 숫자로 입력해 주세요.' });
+    }
+    // 초기 잔액은 음수가 정상이다(빚). 수입 기준값은 아니다.
+    if (monthly_income !== undefined && monthly_income !== '' && asNumber(monthly_income) < 0) {
+      return res.status(400).json({ error: '월 수입 기준값은 0 이상으로 입력해 주세요.' });
     }
     const upsert = db.prepare(`
       INSERT INTO app_settings (key, value) VALUES (?, ?)
