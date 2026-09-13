@@ -1,6 +1,7 @@
 import { Link } from 'wouter';
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import ReactivateRuleDialog from '../components/ReactivateRuleDialog';
 import { useLoader } from '../hooks/useLoader';
 import { useConfirm } from '../components/ConfirmProvider';
 import LoadError from '../components/LoadError';
@@ -526,17 +527,10 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
     }
   };
 
-  const handleReActivate = async (r) => {
-    try {
-      await api.put(`/api/recurring-rules/${r.id}`, {
-        category_id: r.category_id, merchant: r.merchant, amount: r.amount, day_of_month: r.day_of_month,
-        payment_method_id: r.payment_method_id, payment_style: r.payment_style, memo: r.memo, is_active: 1,
-      });
-      onChanged();
-    } catch (err) {
-      await alert(err.message);
-    }
-  };
+  // 다시 켜기는 **묻고 나서** 한다(#489). 예전에는 `is_active: 1` 만 보내고 끝냈는데,
+  // 그러면 다음 기동의 따라잡기가 꺼져 있던 구간을 규칙대로 채운다 — 사용자는 그 사이
+  // 거래가 생기는 것을 고른 적이 없고 다음 기동 때까지 눈치채지도 못한다.
+  const [reactivating, setReactivating] = useState(null);
 
   const filteredRules = showInactive ? rules : rules.filter(r => r.is_active);
 
@@ -700,7 +694,7 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
                   {r.is_active ? (
                     <button onClick={() => handleDeactivate(r.id)} className="text-caption hover:text-loss-text text-xs">비활성화</button>
                   ) : (
-                    <button onClick={() => handleReActivate(r)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
+                    <button onClick={() => setReactivating(r)} className="text-caption hover:text-brand-text text-xs">재활성화</button>
                   )}
                 </td>
               </tr>
@@ -708,6 +702,14 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
           </tbody>
         </table>
       </div>
+
+      {reactivating && (
+        <ReactivateRuleDialog
+          rule={reactivating}
+          onClose={() => setReactivating(null)}
+          onDone={() => { setReactivating(null); onChanged(); }}
+        />
+      )}
     </div>
   );
 }
