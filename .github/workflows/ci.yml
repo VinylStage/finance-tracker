@@ -168,7 +168,7 @@ jobs:
           cache: npm
       - run: npm ci
         working-directory: client
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: vitest-blob-*
           path: client/.vitest-reports
