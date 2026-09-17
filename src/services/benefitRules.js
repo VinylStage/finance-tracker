@@ -285,7 +285,26 @@ function applyItemCaps(benefit, caps, used = {}, times = {}) {
 // 나중에 `when.range` 로 따로 받는다 — 지금 없는 걸 미리 만들지 않는다.
 //
 // `when` 이 없으면 날짜를 가리지 않는다. 이미 들어 있는 줄은 그대로 동작한다.
-const WHEN_KEYS = ['dates'];
+//
+// ─────────────────────────────────────────────────────────────────────────
+// `overseas` — 해외결제에만(또는 국내결제에만) 붙는 혜택(#710)
+//
+//   { "kind": "rate", "rate": 2, "when": { "overseas": true } }
+//
+// 위 `when.range` 주석이 «지금 없는 걸 미리 만들지 않는다» 고 적었는데, 이건
+// **지금 있다.** 카드 한 장이 이 칸 없이는 데이터에 아예 못 들어간다 —
+// 국내 혜택이 없고 해외 2% 적립만 있는 카드다. 조건 없이 넣으면 국내 결제에도
+// 2% 가 붙어 과대추정이고, 빼면 실제로 받는 혜택이 사라진다. `dates` 가 없던
+// 시절과 같은 모양이다.
+//
+// **`true` 와 `false` 를 둘 다 받는다.** 「국내 전용」 도 같은 축의 반대편이고
+// 비교 한 줄이라 비용이 같다. 한쪽만 받으면 다음 사람이 반대쪽을 적었을 때
+// **조용히 무시된다** — 이 파일이 모르는 칸을 막는 것과 같은 이유다.
+//
+// 「해외인가」 는 **원장의 칸**(`transactions.is_overseas`, 034)에서 온다. 계산
+// 시점에 가맹점 이름을 뜯어 추론하지 않는다 — 카드사마다 표기가 달라 규칙이
+// 곱으로 늘고, 하나를 빠뜨리면 그 카드에서만 조용히 샌다(#688 이 그것이었다).
+const WHEN_KEYS = ['dates', 'overseas'];
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];  // 2월은 윤년 기준
 
 // `MM-DD` 목록을 꺼낸다. 없으면 빈 배열 — 「날짜를 가리지 않는다」 는 뜻이다.
@@ -321,6 +340,25 @@ function matchesDates(dates, date) {
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   const md = date.slice(5);
   return dates.includes(md);
+}
+
+/**
+ * 이 혜택이 요구하는 해외 여부(#710). 조건이 없으면 `null` — 「가리지 않는다」 다.
+ *
+ * `dates` 와 달리 「모른다」 를 따로 두지 않는다. 원장의 칸이 `NOT NULL DEFAULT 0`
+ * 이라 호출부가 항상 값을 갖고, 임포트가 못 알아본 결제는 **국내로 본다**. 그쪽이
+ * 보수적이다 — 해외 전용 혜택이 안 붙는 방향으로 틀린다.
+ */
+function overseasOf(benefit) {
+  const when = ruleOf(benefit).when;
+  if (!when || typeof when !== 'object') return null;
+  return typeof when.overseas === 'boolean' ? when.overseas : null;
+}
+
+/** 해외 조건이 이 결제와 맞는가. 조건이 없으면 언제나 맞다. */
+function matchesOverseas(required, isOverseas) {
+  if (required === null || required === undefined) return true;
+  return Boolean(isOverseas) === required;
 }
 
 // 이 결제에 붙는 혜택. 모르는 유형은 0 을 낸다 — 던지면 카드 하나가 화면 전체를 죽인다.
@@ -396,6 +434,11 @@ function validateRule(rule) {
     for (const k of Object.keys(rule.when)) {
       if (!WHEN_KEYS.includes(k)) return `모르는 혜택 조건입니다: ${k} (${WHEN_KEYS.join(' · ')} 중 하나)`;
     }
+    if (rule.when.overseas !== undefined && typeof rule.when.overseas !== 'boolean') {
+      // 문자열 'true' 나 1 을 받아 주면 «참» 으로 읽히는 값과 안 읽히는 값이
+      // 섞인다. 조건이 조용히 사라지는 것을 막는 것이 이 검증의 목적이다.
+      return '해외 조건은 true 또는 false 여야 합니다.';
+    }
     if (rule.when.dates !== undefined) {
       if (!Array.isArray(rule.when.dates) || rule.when.dates.length === 0) {
         // 빈 목록은 «어느 날도 아니다» 가 된다. 그렇게 쓰려는 사람은 없으므로
@@ -434,6 +477,8 @@ module.exports = {
   capsOf,
   datesOf,
   matchesDates,
+  overseasOf,
+  matchesOverseas,
   applyItemCaps,
   benefitForTransaction,
   benefitForMonth,

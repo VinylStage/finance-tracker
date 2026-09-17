@@ -7,6 +7,7 @@
 const { BENEFIT_TYPES } = require('../constants.js');
 const {
   benefitForTransaction, capsOf, applyItemCaps, datesOf, matchesDates,
+  overseasOf, matchesOverseas,
 } = require('./benefitRules.js');
 
 function toInt(v) {
@@ -29,6 +30,14 @@ function estimateBenefit({
   // 거래일 `YYYY-MM-DD`(#638). 특정 날짜에만 붙는 혜택을 가리는 데만 쓴다.
   // 없으면 그런 혜택을 뺀 채 계산하고 `undatedSkipped` 로 알린다.
   date,
+  // 이 결제가 해외결제인가(#710). 사후 분석은 원장의 `transactions.is_overseas`
+  // 를 그대로 싣고, 사전 추천(`/estimate`)은 화면이 물어 보낸다.
+  //
+  // **안 주면 국내로 본다.** `date` 처럼 「모른다」 를 따로 두지 않는다 — 원장의
+  // 칸이 `NOT NULL DEFAULT 0` 이라 사후 분석에는 늘 값이 있고, 사전 추천에서
+  // 안 온 것은 화면이 아직 안 묻는 것이라 **해외 전용 혜택이 안 붙는 쪽**이
+  // 안전하다(결제방식 처리와 같은 기준).
+  isOverseas,
   // 혜택 줄 id 를 받아 그 줄이 이 창에서 이미 받은 몫을 내는 함수(#637).
   // `{ month, day }` 를 낸다. 아는 창만 실으면 된다 — 안 실은 창은 예전처럼
   // 「적용 못 함」 으로 보고된다.
@@ -104,7 +113,27 @@ function estimateBenefit({
       continue;
     }
 
-    // 3. 날짜 조건(#638). 국군의 날·현충일처럼 특정 날에만 붙는 혜택.
+    // 3. 해외 조건(#710). 「해외 이용금액 2% 적립」 처럼 해외결제에만 붙는 혜택.
+    //
+    // **가맹점·분류 판정보다 뒤에 둔다.** 그 층에 넣으면 이 혜택이 이 결제를
+    // «가리키지 않는» 것이 되어 «해당하는 혜택이 없어요» 로 읽힌다. 그건
+    // 거짓말이다 — 규칙은 그 결제를 **알고 있고** 조건이 안 맞는 것이다.
+    // 날짜(#638)와 같은 층이고, #688 이 「없다」 와 「못 찾았다」 를 뭉쳐
+    // 사용자를 오도한 것과 같은 종류의 실수를 막는다.
+    // 사유를 **방향까지** 나눈다. 「해외 전용인데 국내에서 썼다」 와 「국내
+    // 전용인데 해외에서 썼다」 는 사용자가 할 일이 다르고, 한 문구로 뭉치면
+    // 둘 중 하나에는 틀린 말이 된다.
+    const wantsOverseas = overseasOf(b);
+    if (!matchesOverseas(wantsOverseas, isOverseas)) {
+      candidates.push({
+        ...b,
+        skipped: true,
+        reason: wantsOverseas ? 'overseas-only' : 'domestic-only',
+      });
+      continue;
+    }
+
+    // 4. 날짜 조건(#638). 국군의 날·현충일처럼 특정 날에만 붙는 혜택.
     const onDate = matchesDates(datesOf(b), date);
     if (onDate === false) {
       candidates.push({ ...b, skipped: true, reason: 'date-mismatch' });
@@ -121,7 +150,7 @@ function estimateBenefit({
     candidates.push({ ...b, matched });
   }
 
-  // 4. 하나만 고르기
+  // 5. 하나만 고르기
   let best = null;
   let bestScore = -1;
   let bestBenefit = -1;
@@ -153,7 +182,7 @@ function estimateBenefit({
     }
   }
 
-  // 5. 혜택 계산
+  // 6. 혜택 계산
   let benefit = 0;
   let capped = false;
   // 어느 층에 잘렸나(#578). `item-transaction` · `item-day` · `item-month` ·

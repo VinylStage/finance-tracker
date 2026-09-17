@@ -17,6 +17,9 @@ test('혜택 계산이 거래에서 읽는 값', () => {
   const actual = txFields(read('src/services/cardComparison.js'));
   const EXPECTED_COMPARISON = [
     'amount', 'card_product_id', 'category_id', 'date', 'id',
+    // `is_overseas`(#710) — 열 번째. 「해외 이용금액 2% 적립」 을 담을 자리가
+    // 없어 카드 한 장이 혜택 0건으로 남아 있었다. 원장에서 읽는 값이 하나 늘었다.
+    'is_overseas',
     'merchant', 'origin', 'payment_method_type', 'payment_style',
   ];
   assert.deepStrictEqual(actual, EXPECTED_COMPARISON,
@@ -36,7 +39,7 @@ test('원장에서 긁어 오는 SQL 이 고르는 컬럼', () => {
   const sql = read('src/routes/cardStrategy.js').match(/const TX_IN_RANGE = `([\s\S]*?)`/)[1];
   const cols = [...new Set([...sql.matchAll(/\bt\.([a-z_]+)/g)].map((m) => m[1]))].sort();
   const EXPECTED_COLS = [
-    'amount', 'card_product_id', 'category_id', 'date', 'id',
+    'amount', 'card_product_id', 'category_id', 'date', 'id', 'is_overseas',
     'merchant', 'origin', 'payment_method_id', 'payment_style',
   ];
   assert.deepStrictEqual(cols, EXPECTED_COLS);

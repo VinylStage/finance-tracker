@@ -173,6 +173,8 @@ function accrueActual({ transactions, cards } = {}) {
       benefitUsedThisMonth: ledger.readCard(card.id, ym),
       tierMonthlyCap: card.threshold && card.threshold.tier ? card.threshold.tier.monthly_cap : null,
       date: tx.date,
+      // 해외결제 여부(#710). 원장의 칸을 그대로 싣는다.
+      isOverseas: tx.is_overseas,
       itemUsedFor: ledger.usedFor(ym, ymd),
     });
     if (inUnified(r)) ledger.addCard(card.id, ym, r.benefit);
@@ -301,6 +303,10 @@ function compareCards({ transactions, cards, cardsByMonth } = {}) {
         // 안 넘기면 그런 혜택이 통째로 빠진다 — 여기서 빠뜨리면 계산기는
         // 「날짜를 모른다」 로 읽고 조용히 뺀다.
         date: tx.date,
+        // 해외결제 여부(#710). **실제 쪽과 같이** 넘긴다 — 한쪽만 빠뜨리면 해외
+        // 전용 혜택이 그쪽 계산에서만 사라져 차액이 통째로 틀린다(#638 이 날짜에서
+        // 겪은 것과 같은 자리다).
+        isOverseas: tx.is_overseas,
         // 항목별·창별 누적(#637). **가정 쪽 누적**을 본다 — 계산기가 고른 줄에
         // 대해서만 불린다.
         itemUsedFor: hypo.usedFor(ym, ymd),
@@ -336,6 +342,7 @@ function compareCards({ transactions, cards, cardsByMonth } = {}) {
           // 혜택이 실제 카드 계산에서만 조용히 사라져, 실제로 받은 혜택이 0 으로
           // 잡히고 차액이 그만큼 부풀려진다.
           date: tx.date,
+          isOverseas: tx.is_overseas,
           // 항목 누적도 **실제 쪽**을 본다(#637). 가정 누적을 물리면 실제로는
           // 한 건만 쓴 줄이 세 건 쓴 것으로 잘려 실제 혜택이 낮게 잡힌다.
           itemUsedFor: actual2.usedFor(ym, ymd),
