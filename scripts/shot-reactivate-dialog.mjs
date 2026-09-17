@@ -89,10 +89,13 @@ try {
   const dialog = page.getByRole('dialog');
   await dialog.waitFor({ state: 'visible', timeout: 5000 });
   // 프리뷰 응답을 기다린다 — «확인하는 중» 이 사라져야 값이 찍힌다.
-  await page.waitForFunction(
-    () => !document.querySelector('[role="dialog"]')?.textContent?.includes('확인하는 중'),
-    { timeout: 5000 },
-  ).catch(() => {});
+  //
+  // page.waitForFunction 의 콜백은 브라우저에서 돌지만 eslint 는 이 파일을 Node 로
+  // 본다(eslint.config.mjs 의 scripts/**/*.mjs 는 globals.node 만 준다). document 를
+  // 쓰면 no-undef 로 CI 가 막히므로 Playwright 로케이터로 같은 일을 한다.
+  // 그 문구는 조건부 렌더라 프리뷰가 오면 DOM 에서 빠진다 — detached 가 맞다.
+  await dialog.getByText('확인하는 중').waitFor({ state: 'detached', timeout: 5000 })
+    .catch(() => {});
 
   assertDummy(await dialog.innerText());
   await dialog.screenshot({ path: `${OUT}/489-after-dialog.png` });
