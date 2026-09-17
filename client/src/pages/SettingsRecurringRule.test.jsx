@@ -429,42 +429,32 @@ describe('비활성화와 재활성화', () => {
     expect(del).not.toHaveBeenCalled();
   });
 
-  it('재활성화는 확인 없이 규칙 값을 그대로 실어 보낸다', async () => {
+  // 예전에는 «되살리는 쪽은 잃는 게 없어 확인을 받지 않는다» 가 계약이었다.
+  // **그 전제가 틀렸다**(#489) — 다시 켜면 다음 기동의 따라잡기가 꺼져 있던 구간을
+  // 규칙대로 채운다. 사용자는 그 사이 거래가 생기는 것을 고른 적이 없고, 되돌린
+  // 순간에는 아무 일도 없으므로 다음 기동 때까지 눈치채지도 못한다.
+  it('재활성화는 무엇이 생기는지 먼저 묻는다', async () => {
     renderSettings();
     const sec = await ruleSection();
     await userEvent.click(sec.getByRole('button', { name: '비활성 항목 보기' }));
 
     await userEvent.click(sec.getByRole('button', { name: '재활성화' }));
 
-    // 되살리는 쪽은 잃는 게 없어 확인을 받지 않는다. 대신 필드가 하나라도
-    // 빠지면 서버가 그 칸을 지운다 — 전체 교체 PUT 이다.
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/recurring-rules/21', {
-      category_id: 2, merchant: '옛날구독', amount: 5000, day_of_month: 30,
-      payment_method_id: null, payment_style: '해당없음', memo: '메모', is_active: 1,
-    }));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    // 바로 보내지 않는다. 프리뷰를 띄우고 어떻게 켤지 고르게 한다.
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(put).not.toHaveBeenCalled();
   });
 
-  it('재활성화에 성공하면 목록을 다시 읽는다', async () => {
-    renderSettings();
-    const sec = await ruleSection();
-    await userEvent.click(sec.getByRole('button', { name: '비활성 항목 보기' }));
-    const before = ruleCalls().length;
-
-    await userEvent.click(sec.getByRole('button', { name: '재활성화' }));
-
-    await waitFor(() => expect(ruleCalls().length).toBeGreaterThan(before));
-  });
-
-  it('재활성화가 실패하면 사유를 알린다', async () => {
-    put.mockRejectedValue(new Error('되살릴 수 없는 규칙입니다'));
+  it('재활성화 대화상자는 그 규칙을 이름으로 밝힌다', async () => {
     renderSettings();
     const sec = await ruleSection();
     await userEvent.click(sec.getByRole('button', { name: '비활성 항목 보기' }));
 
     await userEvent.click(sec.getByRole('button', { name: '재활성화' }));
 
-    expect(await screen.findByText('되살릴 수 없는 규칙입니다')).toBeTruthy();
+    // 어느 규칙을 켜는지 안 밝히면 목록에서 잘못 누른 것을 알아챌 수 없다.
+    const box = within(await screen.findByRole('dialog'));
+    expect(box.getByText('옛날구독')).toBeTruthy();
   });
 });
 
