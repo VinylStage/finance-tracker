@@ -32,13 +32,14 @@ CSS 에서 사라진다.
 
 <!-- inventory:start -->
 
-### 백엔드 라우트 (23개 파일 / API 마운트 23개)
+### 백엔드 라우트 (24개 파일 / API 마운트 24개)
 
 | 마운트 | 파일 |
 |---|---|
 | `/api/audit` | `audit.js` |
 | `/api/card-benefits` | `cardBenefits.js` |
 | `/api/card-import` | `cardImport.js` |
+| `/api/card-overseas` | `cardOverseas.js` |
 | `/api/card-policies` | `cardPolicies.js` |
 | `/api/card-products` | `cardProducts.js` |
 | `/api/card-strategy` | `cardStrategy.js` |
@@ -60,17 +61,17 @@ CSS 에서 사라진다.
 | `/api/stocks` | `stocks.js` |
 | `/api/transactions` | `transactions.js` |
 
-### 서비스 (26개)
+### 서비스 (27개)
 
-`auditRetention.js` · `benefitRules.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `installmentStatus.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurrenceDetect.js` · `recurringCatchup.js` · `transactionOrigin.js` · `undo.js`
+`auditRetention.js` · `benefitRules.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardOverseas.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `installmentStatus.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurrenceDetect.js` · `recurringCatchup.js` · `transactionOrigin.js` · `undo.js`
 
 ### 프론트엔드 페이지 (13개)
 
 `AuditLog` · `CardDetail` · `CardStrategy` · `Comparison` · `Dashboard` · `Debts` · `Guide` · `Installments` · `Revolving` · `Savings` · `Settings` · `Simulator` · `Transactions`
 
-### 프론트엔드 컴포넌트 (49개)
+### 프론트엔드 컴포넌트 (50개)
 
-`AnchorNav` · `BottomTabBar` · `CardBenefitCapsFields` · `CardBenefitConditionFields` · `CardBenefitSection` · `CardEstimateHint` · `CardInventorySection` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CardTierSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DataIntegritySection` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapCardPicker` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `ReactivateRuleDialog` · `RetentionNotice` · `SavingsGoalBar` · `SpendHeatmap` · `ThresholdExclusionSection` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
+`AnchorNav` · `BottomTabBar` · `CardBenefitCapsFields` · `CardBenefitConditionFields` · `CardBenefitSection` · `CardEstimateHint` · `CardInventorySection` · `CardOverseasSection` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CardTierSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DataIntegritySection` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapCardPicker` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `ReactivateRuleDialog` · `RetentionNotice` · `SavingsGoalBar` · `SpendHeatmap` · `ThresholdExclusionSection` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
 ### 마이그레이션 (34개)
 

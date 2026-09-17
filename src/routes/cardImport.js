@@ -68,15 +68,23 @@ function findDuplicateTransaction(row) {
 function previewImport(filteredTransactions, detectedCardCompany) {
   let count = 0;
   let skipped = 0;
+  // 새로 들어올 것 중 해외로 표시된 건수(#710). 「해외 N% 적립」 이 붙는 결제라
+  // 사용자가 들여오기 전에 숫자를 볼 수 있어야 한다 — 0 으로 나오면 그 카드사
+  // 형식에서 표시를 못 읽고 있다는 뜻이고, 그 사실이 여기서 드러난다.
+  let overseas = 0;
   for (const row of filteredTransactions) {
     if (findDuplicateTransaction(row)) skipped++;
-    else count++;
+    else {
+      count++;
+      if (row.is_overseas) overseas++;
+    }
   }
   return {
     cardCompany: detectedCardCompany,
     cardCompanyLabel: CARD_COMPANY_LABELS[detectedCardCompany],
     count,
     skipped,
+    overseas,
   };
 }
 
@@ -114,8 +122,8 @@ function performImport(filteredTransactions, detectedCardCompany) {
         }
         db.prepare(`
           INSERT INTO transactions
-            (date, category_id, amount, payment_method_id, payment_style, merchant, approval_number)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+            (date, category_id, amount, payment_method_id, payment_style, merchant, approval_number, is_overseas)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           row.date,
           category_id,
@@ -123,7 +131,11 @@ function performImport(filteredTransactions, detectedCardCompany) {
           payment_method_id,
           row.is_installment ? '할부' : '일시불',
           row.merchant,
-          row.approval_number
+          row.approval_number,
+          // 카드사가 명세서에 남긴 해외 표시(#710). 파서가 이미 읽어 왔다.
+          // 여기서 안 쓰면 「해외 N% 적립」 이 새로 들어오는 결제마다 조용히
+          // 빠지고, 백필로 뒤늦게 메워야 한다.
+          row.is_overseas ? 1 : 0
         );
         imported++;
       } catch (err) {
