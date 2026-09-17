@@ -5,7 +5,7 @@ import { useLoader } from '../hooks/useLoader';
 import LoadError from '../components/LoadError';
 import EmptyState from './../components/EmptyState';
 import { formatWon } from '../lib/format';
-import { benefitTargetLabel, benefitValueLabel, tierStatusLine } from '../lib/cardDetailView';
+import { benefitTargetLabel, benefitValueLabel, tierStatusLine, unmatchedSummary } from '../lib/cardDetailView';
 
 // 카드 상세(#563).
 //
@@ -114,7 +114,38 @@ function CardBlock({ card }) {
           </ul>
         )}
       </div>
+
+      <UnmatchedBlock unmatched={card.unmatched} />
     </section>
+  );
+}
+
+// 등록된 혜택이 **하나도 가리키지 않은** 가맹점(#688).
+//
+// 이 화면의 다른 자리는 «등록한 혜택이 왜 안 걸리는가» 를 말한다. 여기는 그
+// 반대다 — **혜택 쪽에 아예 자리가 없는 결제**를 보여준다. 둘을 같이 놓아야
+// 「혜택이 없다」 와 「우리가 못 찾았다」 가 구분된다.
+//
+// 자리를 접어 두지 않고 그냥 펼친다. 접으면 안 열어 보고, 그러면 이 자리를
+// 만든 이유가 없어진다. 대신 목록을 몇 곳으로 잘라 화면을 잡아먹지 않게 한다.
+function UnmatchedBlock({ unmatched }) {
+  const summary = unmatchedSummary(unmatched);
+  if (!summary) return null;
+
+  return (
+    <div className="bg-surface-sunken rounded-card px-3 py-2 space-y-1.5">
+      <p className="text-[11px] font-medium text-body">{summary.headline}</p>
+      <ul className="space-y-0.5">
+        {unmatched.merchants.map((m) => (
+          <li key={m.merchant} className="text-[11px] flex justify-between gap-2 text-caption">
+            <span className="truncate">{m.merchant}</span>
+            <span className="tabular-nums shrink-0">{m.count}건 {formatWon(m.amount)}</span>
+          </li>
+        ))}
+        {summary.more && <li className="text-[11px] text-caption">{summary.more}</li>}
+      </ul>
+      <p className="text-[11px] text-caption">{summary.detail}</p>
+    </div>
   );
 }
 

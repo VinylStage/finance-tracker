@@ -7,7 +7,7 @@ const { asInt } = require('../utils/validate');
 const { localYMD } = require('../utils/date');
 const { computeThreshold, INCOME_MAJOR_TYPE } = require('../services/cardThreshold');
 const { compareCards, accrueActual, NON_ELIGIBLE_ORIGINS } = require('../services/cardComparison');
-const { estimateBenefit } = require('../services/cardStrategy');
+const { estimateBenefit, unmatchedMerchants } = require('../services/cardStrategy');
 const { benefitForMonth } = require('../services/benefitRules');
 
 // 카드 전략 조회(#276).
@@ -36,6 +36,18 @@ const TX_IN_RANGE = `
   LEFT JOIN payment_methods pm ON pm.id = t.payment_method_id
   LEFT JOIN categories c ON c.id = t.category_id
   WHERE t.date BETWEEN ? AND ?
+  ORDER BY t.date, t.id
+`;
+
+// 같은 필드를 기간 제한 없이 뽑는다. 「혜택 규칙이 모르는 가맹점」 진단(#688)이
+// 쓴다 — 그 진단은 최근성이 아니라 빈도로 읽는 값이라 구간을 자르면 안 된다.
+const TX_ALL = `
+  SELECT t.id, t.date, t.amount, t.category_id, t.merchant, t.origin,
+         t.card_product_id, t.payment_method_id, t.payment_style,
+         pm.type AS payment_method_type, c.major_type
+  FROM transactions t
+  LEFT JOIN payment_methods pm ON pm.id = t.payment_method_id
+  LEFT JOIN categories c ON c.id = t.category_id
   ORDER BY t.date, t.id
 `;
 
@@ -595,6 +607,24 @@ router.get('/detail', (req, res) => {
       db.prepare('SELECT id, name FROM categories').all().map((c) => [c.id, c.name])
     );
 
+    // 「혜택 규칙이 모르는 가맹점」 진단(#688)에 쓸 결제 목록.
+    //
+    // **기간을 안 자른다.** 이 진단은 빈도로 읽는 값이라 최근 몇 달만 보면 매달
+    // 가던 가맹점이 이번 달에 안 갔다는 이유로 사라진다. 이 앱의 원장은 개인
+    // 가계부 규모라(실측 580건) 전 기간을 훑어도 부담이 없다.
+    //
+    // 거르는 기준은 비교 화면과 같다 — 수입은 혜택 대상이 아니고, 할부 이자·
+    // 리볼빙 수수료 같은 파생 거래도 아니다. 다르게 걸러 두면 같은 결제를 한쪽은
+    // 「혜택 못 받음」 으로, 다른 쪽은 「대상 아님」 으로 세게 된다.
+    const resolveCard = cardIdResolver(cards);
+    const txByCard = new Map(cards.map((c) => [c.id, []]));
+    for (const r of db.prepare(TX_ALL).all()) {
+      if (r.major_type === INCOME_MAJOR_TYPE) continue;
+      if (NON_ELIGIBLE_ORIGINS.has(r.origin || 'manual')) continue;
+      const cardId = resolveCard(r);
+      if (cardId !== null && txByCard.has(cardId)) txByCard.get(cardId).push(r);
+    }
+
     const data = cards.map((card) => {
       const th = card.threshold || {};
       const activeTierId = th.tier ? th.tier.id : null;
@@ -665,6 +695,12 @@ router.get('/detail', (req, res) => {
         monthlyLines,
         monthlyTotal: monthlyLines.reduce((sum, m) => sum + m.benefit, 0),
         activeBenefitCount: benefits.filter((b) => b.activeNow).length,
+        // 등록된 혜택 중 **어느 것도 가리키지 않는** 가맹점(#688). 화면이
+        // «혜택이 없다» 와 «우리가 못 찾았다» 를 구분해 말할 수 있어야 한다.
+        unmatched: unmatchedMerchants({
+          transactions: txByCard.get(card.id) || [],
+          benefits: card.benefits || [],
+        }),
       };
     });
 
