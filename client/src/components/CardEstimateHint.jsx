@@ -7,7 +7,7 @@ import { formatWon } from '../lib/format';
 // 없으면 50,000 하나 치는 데 다섯 번 부른다.
 const DEBOUNCE_MS = 400;
 
-export default function CardEstimateHint({ amount, categoryId, merchant }) {
+export default function CardEstimateHint({ amount, categoryId, merchant, isOverseas = false }) {
   const [result, setResult] = useState(null);
   const timer = useRef(null);
 
@@ -33,6 +33,11 @@ export default function CardEstimateHint({ amount, categoryId, merchant }) {
         const qs = new URLSearchParams({ amount: String(value) });
         if (categoryId) qs.set('category_id', String(categoryId));
         if (merchant) qs.set('merchant', merchant);
+        // 해외결제 여부(#710). **사후 분석과 달리 여기는 원장에 거래가 아직
+        // 없다** — 입력 중인 폼이 알려 줘야 한다. 안 보내면 서버가 국내로 보고
+        // 해외 전용 혜택을 후보에서 뺀다. 국내 혜택이 없는 카드라면 그 카드는
+        // 「해당하는 혜택이 없어요」 로만 보인다.
+        if (isOverseas) qs.set('is_overseas', '1');
         const res = await api.get(`/api/card-strategy/estimate?${qs}`);
         setResult(res);
       } catch {
@@ -50,7 +55,7 @@ export default function CardEstimateHint({ amount, categoryId, merchant }) {
         clearTimeout(timer.current);
       }
     };
-  }, [categoryId, merchant, value, ready]);
+  }, [categoryId, merchant, value, ready, isOverseas]);
 
   if (!result) {
     return null;
