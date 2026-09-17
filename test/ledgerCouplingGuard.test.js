@@ -56,24 +56,43 @@ test('원장을 훑는 SQL 이 늘지 않았다 — 이름이 아니라 개수�
     + '이 목록을 갱신한다 — 이름을 새로 지어 감시를 비껴가는 것을 막는다.');
 });
 
-test('원장에서 긁어 오는 SQL 이 고르는 컬럼 — 상수마다 전부 본다', () => {
+// 상수들이 읽는 것을 **합쳐서** 본다.
+//
+// 상수마다 «똑같아야 한다» 로 두면 안 된다. 이 이슈가 묻는 것은 「카드 계산이
+// 원장에서 **무엇을 읽는가**」 이고, 그 답은 **합집합**이다. 어느 한 쿼리가
+// 자기한테 필요한 것만 고르는 것은 결합을 늘리지 않는다 — 오히려 줄인다.
+//
+// 똑같기를 요구하면 **안 쓰는 컬럼을 넣게 만든다.** 실제로 그 일이 났다 —
+// #710 이 `TX_IN_RANGE` 에 `is_overseas` 를 더했는데, `TX_ALL`(#688 의 진단이
+// 쓴다)은 그 값을 안 본다. 그런데도 넣어야 통과하게 되면, 이 테스트가 결합을
+// **감시하는 것이 아니라 만들어 내는** 꼴이 된다.
+//
+// 합집합으로 봐도 감시는 그대로다. 어디든 컬럼이 늘면 합집합이 커지고, 전부에서
+// 빠지면 작아진다. 둘 다 여기서 깨진다.
+function ledgerUnion(source, re) {
+  const out = new Set();
+  for (const q of ledgerQueries(source)) {
+    for (const m of q.sql.matchAll(re)) out.add(m[1]);
+  }
+  return [...out].sort();
+}
+
+test('원장에서 긁어 오는 컬럼 — 상수들을 합쳐서 본다', () => {
   const EXPECTED_COLS = [
     'amount', 'card_product_id', 'category_id', 'date', 'id',
     'merchant', 'origin', 'payment_method_id', 'payment_style',
   ];
-  for (const q of ledgerQueries(read('src/routes/cardStrategy.js'))) {
-    const cols = [...new Set([...q.sql.matchAll(/\bt\.([a-z_]+)/g)].map((m) => m[1]))].sort();
-    assert.deepStrictEqual(cols, EXPECTED_COLS,
-      `${q.name} 이 원장에서 읽는 컬럼이 다르다. 늘었다면 #532 의 결합 목록에 적는다.`);
-  }
+  const cols = ledgerUnion(read('src/routes/cardStrategy.js'), /\bt\.([a-z_]+)/g);
+  assert.deepStrictEqual(cols, EXPECTED_COLS,
+    '카드 라우트가 원장에서 읽는 컬럼이 바뀌었다. 늘었다면 #532 의 결합 목록에 '
+    + '적고 이 목록을 갱신한다.');
 });
 
-test('그 SQL 들이 조인하는 원장 표 — 상수마다 전부 본다', () => {
+test('그 SQL 들이 조인하는 원장 표 — 상수들을 합쳐서 본다', () => {
   const EXPECTED_JOINED = ['categories', 'payment_methods'];
-  for (const q of ledgerQueries(read('src/routes/cardStrategy.js'))) {
-    const joined = [...new Set([...q.sql.matchAll(/JOIN\s+([a-z_]+)/g)].map((m) => m[1]))].sort();
-    assert.deepStrictEqual(joined, EXPECTED_JOINED, `${q.name} 이 조인하는 원장 표가 다르다.`);
-  }
+  const joined = ledgerUnion(read('src/routes/cardStrategy.js'), /JOIN\s+([a-z_]+)/g);
+  assert.deepStrictEqual(joined, EXPECTED_JOINED,
+    '카드 라우트가 조인하는 원장 표가 바뀌었다. 늘었다면 #532 의 결합 목록에 적는다.');
 });
 
 test('카드 표가 원장을 참조하는 외래키', () => {
