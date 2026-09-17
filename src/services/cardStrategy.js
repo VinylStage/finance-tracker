@@ -14,6 +14,28 @@ function toInt(v) {
   return Number.isFinite(n) ? Math.floor(n) : 0;
 }
 
+// 이 혜택 줄이 **이 거래를 가리키는가.** 가리키면 무엇으로 가리키는지
+// (`merchant` · `category` · `all`)를, 아니면 `null` 을 낸다.
+//
+// 추정(`estimateBenefit`)과 진단(`unmatchedMerchants`)이 **같은 판정을 써야 한다.**
+// 두 곳에 같은 조건을 따로 적으면, 화면이 «혜택이 이 가맹점을 모른다» 고 말하는
+// 것과 계산이 실제로 고르는 것이 갈라진다 — 진단이 거짓말을 하게 된다.
+//
+// 둘 다 설정돼 있으면 **둘 다** 맞아야 한다. 사용자가 카테고리와 가맹점을 같이
+// 적었다면 "그 가맹점에서 그 카테고리로 쓸 때" 라는 뜻이다. 하나만 맞아도 준다고
+// 보면 실제보다 많이 추정하게 되고, 추정이 사용자에게 손해를 끼치는 방향으로 틀린다.
+function targetsTransaction(b, { merchant, categoryId }) {
+  const hasMerchantRule = Boolean(b.merchant_pattern);
+  const hasCategoryRule = b.category_id !== null && b.category_id !== undefined;
+  const merchantOk = !hasMerchantRule
+    || (typeof merchant === 'string' && merchant.includes(b.merchant_pattern));
+  const categoryOk = !hasCategoryRule || b.category_id === categoryId;
+
+  if (!merchantOk || !categoryOk) return null;
+  // 구체성은 "무엇으로 걸렸는가" 를 알리는 값이다. 동점일 때만 쓴다.
+  return hasMerchantRule ? 'merchant' : (hasCategoryRule ? 'category' : 'all');
+}
+
 function estimateBenefit({
   benefits,
   amount,
@@ -44,10 +66,6 @@ function estimateBenefit({
   // 안 잡히는지 알 수 없다.
   let undatedSkipped = false;
   for (const b of benefits) {
-    // 둘 다 설정돼 있으면 **둘 다** 맞아야 한다. 사용자가 카테고리와 가맹점을
-    // 같이 적었다면 "그 가맹점에서 그 카테고리로 쓸 때" 라는 뜻이다. 하나만
-    // 맞아도 준다고 보면 실제보다 많이 추정하게 되고, 추정이 사용자에게
-    // 손해를 끼치는 방향으로 틀린다.
     // 카드사 상당수가 할부를 혜택 대상에서 뺀다(#563). 혜택이 결제방식을
     // 지정했으면 그것과 다른 결제는 아예 후보가 아니다 — 요율 비교에도 넣지
     // 않는다. 넣으면 "할부인데 일시불 혜택이 제일 크다" 가 골라진다.
@@ -75,17 +93,7 @@ function estimateBenefit({
       continue;
     }
 
-    const hasMerchantRule = Boolean(b.merchant_pattern);
-    const hasCategoryRule = b.category_id !== null && b.category_id !== undefined;
-    const merchantOk = !hasMerchantRule
-      || (typeof merchant === 'string' && merchant.includes(b.merchant_pattern));
-    const categoryOk = !hasCategoryRule || b.category_id === categoryId;
-
-    let matched = null;
-    if (merchantOk && categoryOk) {
-      // 구체성은 "무엇으로 걸렸는가" 를 알리는 값이다. 동점일 때만 쓴다.
-      matched = hasMerchantRule ? 'merchant' : (hasCategoryRule ? 'category' : 'all');
-    }
+    const matched = targetsTransaction(b, { merchant, categoryId });
 
     if (matched === null) {
       candidates.push({ ...b, skipped: true, reason: 'no-match' });
@@ -305,4 +313,82 @@ function estimateBenefit({
   return result;
 }
 
-module.exports = { estimateBenefit };
+// 이 카드의 결제 중 **어떤 혜택 줄도 가리키지 않는 가맹점**(#688).
+//
+// ─────────────────────────────────────────────────────────────────────────
+// 왜 필요한가
+//
+// 혜택은 `merchant_pattern` 을 거래의 `merchant` 에 **부분문자열**로 맞춘다. 그래서
+// 같은 브랜드라도 원장 표기가 갈리면 한쪽만 걸린다 — 「씨유◯◯점」 은 패턴
+// `CU` 에 안 걸린다. 실측(2026-09-17, 나라사랑카드): 그 표기 8건 91,840원이 혜택을
+// 못 받고 있었고, **화면은 "해당하는 혜택이 없어요" 라고 말하고 있었다.**
+//
+// 없다고 말한 것이 사실은 **우리가 못 찾은 것**이었다. 이 함수는 그 차이를 드러낸다.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// 「안 걸린다」 를 좁게 본다
+//
+// **가리키는 줄이 하나도 없는 것만** 센다. 실적 미달·한도 초과·할부 제외·날짜
+// 불일치로 0원인 것은 여기 넣지 않는다 — 그것들은 규칙이 이 거래를 **알고 있고**
+// 조건이 안 맞는 것이라, 화면이 이미 그 이유를 따로 말한다. 섞으면 목록이 커지고
+// 정작 「규칙이 이 가맹점을 모른다」 가 묻힌다.
+//
+// 그래서 무차별 줄(가맹점·분류를 안 가리키는 줄)이 하나라도 있는 카드는 **항상 빈
+// 목록**이다. 그 줄이 모든 결제를 가리키기 때문이고, 그것이 맞다.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// 기간을 좁히지 않는다
+//
+// 이것은 「최근에 얼마 썼나」 가 아니라 **「혜택 데이터가 원장을 따라잡고 있나」**
+// 이므로 최근성이 아니라 **빈도**가 중요하다. 반년 전부터 매달 가던 가맹점이
+// 이번 달에 안 갔다고 빠지면, 고쳐야 할 것이 목록에서 사라진다. 호출부가 기간을
+// 좁히고 싶으면 넘기는 거래를 먼저 거르면 된다.
+//
+// @param {Array}  input.transactions  { merchant, amount, category_id }
+// @param {Array}  input.benefits      이 카드의 혜택 줄
+// @param {number} input.limit         목록에 실을 가맹점 수. 나머지는 수로만 센다
+function unmatchedMerchants({ transactions, benefits, limit = 8 }) {
+  const empty = { merchants: [], distinctCount: 0, count: 0, amount: 0 };
+  // 혜택이 아예 없는 카드는 진단 대상이 아니다. 「규칙이 이 가맹점을 모른다」 가
+  // 아니라 「규칙이 없다」 이고, 화면은 그 사실을 이미 따로 말한다.
+  if (!Array.isArray(benefits) || benefits.length === 0) return empty;
+  if (!Array.isArray(transactions) || transactions.length === 0) return empty;
+
+  const byMerchant = new Map();
+  let count = 0;
+  let amount = 0;
+
+  for (const t of transactions) {
+    const merchant = typeof t.merchant === 'string' ? t.merchant.trim() : '';
+    // 가맹점이 안 적힌 결제는 셀 수 없다. 「(빈칸)」 을 목록에 올리면 사용자가
+    // 고칠 수 있는 것이 없다.
+    if (!merchant) continue;
+
+    const categoryId = t.category_id ?? null;
+    const covered = benefits.some((b) => targetsTransaction(b, { merchant, categoryId }) !== null);
+    if (covered) continue;
+
+    const amt = toInt(t.amount);
+    const e = byMerchant.get(merchant) || { merchant, count: 0, amount: 0 };
+    e.count += 1;
+    e.amount += amt;
+    byMerchant.set(merchant, e);
+    count += 1;
+    amount += amt;
+  }
+
+  // 건수 내림차순. 같으면 금액이 큰 쪽이 먼저다 — 둘 다 같으면 표기순으로
+  // 고정해 목록이 호출마다 흔들리지 않게 한다.
+  const merchants = [...byMerchant.values()].sort((a, b) => (
+    b.count - a.count || b.amount - a.amount || a.merchant.localeCompare(b.merchant)
+  ));
+
+  return {
+    merchants: merchants.slice(0, Math.max(0, toInt(limit))),
+    distinctCount: merchants.length,
+    count,
+    amount,
+  };
+}
+
+module.exports = { estimateBenefit, targetsTransaction, unmatchedMerchants };
