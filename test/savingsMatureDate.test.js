@@ -68,8 +68,18 @@ test('POST /api/savings/:id/mature — 제대로 준 날짜는 그대로 통과�
   assert.strictEqual(r.body.payout, 1250000);
 });
 
+// 이 상품은 **DB 에 직접 넣는다.** 생성 라우트가 이제 깨진 시작일을 막기 때문이다(#666).
+//
+// 그래도 이 테스트는 남긴다 — 마이그레이션 전에 들어온 행이 실제로 있을 수 있고,
+// 그때 만기 처리가 500 이 아니라 400 을 내는지가 여기서 지켜진다.
 test('POST /api/savings/:id/mature — 상품의 시작일이 깨져 있으면 400 이고 500 이 아니다', async () => {
-  const id = await makeProduct('날짜적금E', { start_date: '언젠가' });
+  const db = require('better-sqlite3')(server.dbPath);
+  const id = db.prepare(`
+    INSERT INTO savings_products (name, monthly_contribution, start_date, maturity_date, expected_payout, status)
+    VALUES ('날짜적금E', 100000, '언젠가', '2026-12-01', 1250000, '진행중')
+  `).run().lastInsertRowid;
+  db.close();
+
   const r = await req('POST', `/api/savings/${id}/mature`, { settle_date: '2026-12-01' });
   assert.strictEqual(r.status, 400);
   assert.ok(!r.body.error.includes('처리 중 문제가 생겼습니다.'));
