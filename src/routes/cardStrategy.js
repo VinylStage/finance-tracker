@@ -30,7 +30,7 @@ const { benefitForMonth } = require('../services/benefitRules');
 // 안 쓰는 값까지 노출된다.
 const TX_IN_RANGE = `
   SELECT t.id, t.date, t.amount, t.category_id, t.merchant, t.origin,
-         t.card_product_id, t.payment_method_id, t.payment_style,
+         t.card_product_id, t.payment_method_id, t.payment_style, t.is_overseas,
          pm.type AS payment_method_type, c.major_type
   FROM transactions t
   LEFT JOIN payment_methods pm ON pm.id = t.payment_method_id
@@ -208,7 +208,7 @@ router.get('/thresholds', (req, res) => {
   }
 });
 
-// GET /api/card-strategy/estimate?amount=&category_id=&merchant=&payment_style=&asOf=
+// GET /api/card-strategy/estimate?amount=&category_id=&merchant=&payment_style=&is_overseas=&asOf=
 //
 // 지금 결제하면 어느 카드가 나은가. 거래 입력 화면이 부른다.
 router.get('/estimate', (req, res) => {
@@ -226,6 +226,10 @@ router.get('/estimate', (req, res) => {
     // 입력 화면이 아직 안 보내는 동안 할부 전용 혜택이 일시불에 붙는 것보다,
     // 안 붙는 쪽이 안전하다.
     const paymentStyle = typeof req.query.payment_style === 'string' ? req.query.payment_style : null;
+    // 해외결제 여부(#710). **사후 분석과 달리 여기는 원장에 거래가 아직 없다** —
+    // 화면이 물어서 보내야 한다. 안 보내면 국내로 본다(위 결제방식과 같은 기준:
+    // 해외 전용 혜택이 국내 결제에 붙는 것보다 안 붙는 쪽이 안전하다).
+    const isOverseas = req.query.is_overseas === '1' || req.query.is_overseas === 'true';
 
     const cards = withThresholds(loadCards(), asOf);
 
@@ -250,6 +254,7 @@ router.get('/estimate', (req, res) => {
       const r = estimateBenefit({
         benefits: card.benefits,
         amount,
+        isOverseas,
         categoryId,
         merchant,
         paymentStyle,

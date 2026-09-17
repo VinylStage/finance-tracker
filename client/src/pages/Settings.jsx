@@ -20,6 +20,7 @@ import AnchorNav from '../components/AnchorNav';
 import CardPolicySection from '../components/CardPolicySection';
 import CardProductSection from '../components/CardProductSection';
 import CardRemapSection from '../components/CardRemapSection';
+import CardOverseasSection from '../components/CardOverseasSection';
 import CardBenefitSection from '../components/CardBenefitSection';
 import CardTierSection from '../components/CardTierSection';
 import CardInventorySection from '../components/CardInventorySection';
@@ -110,6 +111,12 @@ export default function Settings() {
           <Anchor id="card-remap">
             <CardRemapSection paymentMethods={paymentMethods} />
           </Anchor>
+          {/* 해외 표시 채우기도 「지난 거래를 손보는 일」 이라 재매핑 바로 아래다
+              (#710). 둘 다 프리뷰 → 확인 → 실행이고, 카드를 넣은 뒤에 한 번씩
+              돌리는 성격이 같다. */}
+          <Anchor id="card-overseas">
+            <CardOverseasSection />
+          </Anchor>
           {/* 할부 정책은 결제수단에 딸린 데이터라 바로 아래에 둔다. */}
           <Anchor id="card-policy">
             <CardPolicySection paymentMethods={paymentMethods} />
@@ -165,6 +172,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'card-tier', label: '카드 실적 구간' },
   { id: 'card-inventory', label: '카드 등록 현황' },
   { id: 'card-remap', label: '지난 거래 카드 지정' },
+  { id: 'card-overseas', label: '해외결제 표시' },
   { id: 'card-policy', label: '카드 할부 정책' },
   { id: 'recurring', label: '반복 거래 관리' },
   { id: 'history', label: '변경 이력' },

@@ -32,6 +32,10 @@ export default function TransactionForm({ initial, categories, paymentMethods, c
     payment_method_id: '',
     card_product_id: '',
     payment_style: '일시불',
+    // 해외결제 여부(#710). 「해외 N% 적립」 은 이 표시가 있어야 붙는다.
+    // 카드사 엑셀로 들여온 결제는 명세서의 표시를 읽어 자동으로 서지만,
+    // 손으로 넣는 결제는 여기서만 알 수 있다.
+    is_overseas: false,
     merchant: '',
     memo: '',
     ...( initial ? {
@@ -41,6 +45,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, c
       payment_method_id: String(initial.payment_method_id || ''),
       card_product_id: String(initial.card_product_id || ''),
       payment_style: initial.payment_style,
+      is_overseas: Boolean(initial.is_overseas),
       merchant: initial.merchant || '',
       memo: initial.memo || '',
     } : {}),
@@ -218,6 +223,25 @@ export default function TransactionForm({ initial, categories, paymentMethods, c
           </select>
         </div>
 
+        {/* 해외결제(#710). 결제방식 바로 아래다 — 둘 다 「어떻게 결제했나」 이고
+            혜택이 갈리는 조건이라는 점이 같다.
+            숨기지 않는다. 카드 결제일 때만 보이게 하면, 결제수단을 나중에 고르는
+            사용자는 이 칸을 아예 못 만난다. */}
+        <div>
+          <label htmlFor="tx-overseas" className="flex items-center gap-2 text-xs text-caption cursor-pointer">
+            <input
+              id="tx-overseas" type="checkbox"
+              checked={form.is_overseas}
+              onChange={e => set('is_overseas', e.target.checked)}
+            />
+            해외결제예요
+          </label>
+          <p className="text-[11px] text-caption mt-1">
+            「해외 N% 적립」 혜택은 이 표시가 있어야 붙어요. 카드사 엑셀로 들여온
+            결제는 명세서를 보고 자동으로 표시됩니다.
+          </p>
+        </div>
+
         <div>
           <label htmlFor="tx-merchant" className="flex items-center gap-1.5 text-xs text-caption mb-1">
             가맹점/내용
@@ -260,6 +284,7 @@ export default function TransactionForm({ initial, categories, paymentMethods, c
         amount={form.amount}
         categoryId={form.category_id}
         merchant={form.merchant}
+        isOverseas={form.is_overseas}
       />
 
       <div>

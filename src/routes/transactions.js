@@ -421,13 +421,17 @@ router.post('/', (req, res) => {
     if (err) return res.status(400).json({ error: err });
     const {
       date, category_id, amount, payment_method_id, card_product_id, payment_style = '일시불', merchant, memo,
+      is_overseas,
     } = req.body;
     const result = db.prepare(`
-      INSERT INTO transactions (date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo, is_overseas)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
            card_product_id != null ? asInt(card_product_id) : null,
-           payment_style, merchant || null, memo || null);
+           payment_style, merchant || null, memo || null,
+           // 해외결제 여부(#710). 안 보내면 국내다 — 「해외 N% 적립」 이 국내
+           // 결제에 붙는 것보다 안 붙는 쪽이 안전하다(결제방식과 같은 기준).
+           is_overseas ? 1 : 0);
     res.status(201).json({ id: result.lastInsertRowid });
   } catch (e) {
     serverError(res, e, 'transactions');
@@ -447,6 +451,7 @@ router.put('/:id', (req, res) => {
 
     const {
       date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo,
+      is_overseas,
     } = req.body;
     // card_product_id 는 COALESCE 를 쓰지 않는다. 카드사와 짝이라 payment_method_id
     // 와 같은 규칙을 따라야 하고(카드사를 바꾸면 카드도 다시 정해져야 한다),
@@ -454,11 +459,14 @@ router.put('/:id', (req, res) => {
     // 없어진다 — COALESCE 면 null 을 보내도 옛 값이 남는다.
     const result = db.prepare(`
       UPDATE transactions SET date=?, category_id=?, amount=?, payment_method_id=?, card_product_id=?,
-        payment_style=?, merchant=?, memo=?
+        payment_style=?, merchant=?, memo=?, is_overseas=?
       WHERE id=?
     `).run(date, asInt(category_id), asInt(amount), payment_method_id != null ? asInt(payment_method_id) : null,
            card_product_id != null ? asInt(card_product_id) : null,
            payment_style || '일시불', merchant || null, memo || null,
+           // COALESCE 를 쓰지 않는다 — 위 `card_product_id` 와 같은 이유다.
+           // 해외로 표시한 것을 국내로 되돌릴 길이 없어진다.
+           is_overseas ? 1 : 0,
            req.params.id);
     if (result.changes === 0) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     res.json({ ok: true });

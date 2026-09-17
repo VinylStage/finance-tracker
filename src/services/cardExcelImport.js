@@ -1,5 +1,6 @@
 const XLSX = require('xlsx');
 const { UserInputError } = require('../utils/errors');
+const { looksOverseas } = require('./cardOverseas');
 
 // 셀 값을 문자열로 정규화. 없거나 null이면 null 반환.
 function cell(row, i) {
@@ -239,20 +240,31 @@ function parseHyundaiExcel(buffer) {
 }
 
 function parseCardExcel(cardCompany, buffer) {
+  let rows;
   switch (cardCompany) {
     case 'nonghyup':
-      return parseNonghyupExcel(buffer);
+      rows = parseNonghyupExcel(buffer); break;
     case 'lotte':
-      return parseLotteExcel(buffer);
+      rows = parseLotteExcel(buffer); break;
     case 'samsung':
-      return parseSamsungExcel(buffer);
+      rows = parseSamsungExcel(buffer); break;
     case 'hana':
-      return parseHanaExcel(buffer);
+      rows = parseHanaExcel(buffer); break;
     case 'hyundai':
-      return parseHyundaiExcel(buffer);
+      rows = parseHyundaiExcel(buffer); break;
     default:
       throw new Error(`Unknown card company: ${cardCompany}`);
   }
+
+  // 해외 표시를 **여기 한 곳에서** 읽는다(#710).
+  //
+  // 카드사마다 파서가 따로인데 판정을 각 파서에 흩으면 새 카드사가 붙을 때
+  // 조용히 빠진다 — 오류가 아니라 「그 카드사만 해외결제가 0건」 이라는
+  // 그럴듯한 결과가 나와서 안 드러난다. 디스패처에 두면 **빠뜨릴 수가 없다.**
+  //
+  // 판정 근거는 가맹점 문자열에 카드사가 남긴 표시다(ADR 0010). 현대의
+  // `,USD:22.00` 은 아래 파서가 이름에 그대로 남겨 두므로 여기서 같이 읽힌다.
+  return rows.map((r) => ({ ...r, is_overseas: looksOverseas(r.merchant) }));
 }
 
 module.exports = { parseCardExcel, detectCardCompany };
