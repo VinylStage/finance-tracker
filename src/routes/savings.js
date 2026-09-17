@@ -18,6 +18,36 @@ function isUsableDate(value) {
   return YMD.test(String(value || '')) && !Number.isNaN(new Date(value).getTime());
 }
 
+// 월 납입액과 기간의 범위. 안 보낸 값은 검사하지 않는다 — 수정은 일부 필드만 온다.
+//
+// 기간은 시작일과 만기일 **둘을 같이** 봐야 판단이 선다. 그래서 수정에서는
+// 보낸 값이 하나뿐이어도 합쳐진 짝(pairStart·pairMaturity)으로 비교한다.
+function validateSavingsNumbers(v) {
+  if (v.monthly_contribution !== undefined && v.monthly_contribution !== null && v.monthly_contribution !== '') {
+    const amount = Number(v.monthly_contribution);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return '월 납입액은 0보다 큰 금액으로 입력해 주세요.';
+    }
+  }
+  if (v.start_date !== undefined && v.start_date !== null && v.start_date !== '' && !isUsableDate(v.start_date)) {
+    return '시작일은 YYYY-MM-DD 형식의 실제 날짜여야 합니다.';
+  }
+  if (v.maturity_date !== undefined && v.maturity_date !== null && v.maturity_date !== '' && !isUsableDate(v.maturity_date)) {
+    return '만기일은 YYYY-MM-DD 형식의 실제 날짜여야 합니다.';
+  }
+
+  const touchesPeriod = (v.start_date !== undefined && v.start_date !== null && v.start_date !== '')
+    || (v.maturity_date !== undefined && v.maturity_date !== null && v.maturity_date !== '');
+  if (!touchesPeriod) return null;
+
+  const from = v.pairStart !== undefined ? v.pairStart : v.start_date;
+  const to = v.pairMaturity !== undefined ? v.pairMaturity : v.maturity_date;
+  if (from && to && isUsableDate(from) && isUsableDate(to) && String(to) < String(from)) {
+    return '만기일은 시작일보다 뒤여야 합니다.';
+  }
+  return null;
+}
+
 // GET /api/savings
 router.get('/', (req, res) => {
   try {
@@ -40,6 +70,8 @@ router.post('/', numericBody(['monthly_contribution', 'expected_payout', 'catego
     if (!name || !monthly_contribution || !start_date) {
       return res.status(400).json({ error: '상품명, 월 납입액, 시작일은 필수입니다.' });
     }
+    const invalid = validateSavingsNumbers({ monthly_contribution, start_date, maturity_date });
+    if (invalid) return res.status(400).json({ error: invalid });
     const result = db.prepare(`
       INSERT INTO savings_products (name, monthly_contribution, start_date, maturity_date, expected_payout, category_id, status)
       VALUES (?, ?, ?, ?, ?, ?, '진행중')
@@ -56,6 +88,14 @@ router.put('/:id', (req, res) => {
     const existing = db.prepare('SELECT * FROM savings_products WHERE id=?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: '찾는 저축 상품이 없습니다. 이미 삭제됐을 수 있어요.' });
     const merged = { ...existing, ...req.body };
+    const invalid = validateSavingsNumbers({
+      monthly_contribution: req.body.monthly_contribution,
+      start_date: req.body.start_date,
+      maturity_date: req.body.maturity_date,
+      pairStart: merged.start_date,
+      pairMaturity: merged.maturity_date,
+    });
+    if (invalid) return res.status(400).json({ error: invalid });
     db.prepare(`
       UPDATE savings_products SET name=?, monthly_contribution=?, start_date=?, maturity_date=?,
         expected_payout=?, category_id=?, status=?
