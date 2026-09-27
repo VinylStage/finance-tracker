@@ -109,7 +109,14 @@ app.use((_req, res) => {
   const index = path.join(PUBLIC, 'index.html');
   const fs = require('fs');
   if (fs.existsSync(index)) {
-    res.sendFile(index);
+    // **`root` 를 반드시 준다.** 절대경로를 그대로 넘기면 `send` 가 경로 전체를
+    // 훑어 점으로 시작하는 세그먼트를 dotfile 로 판정하고 NotFound 를 던진다(#711).
+    // 저장소를 `~/.claude-worktrees/...` 같은 경로에 체크아웃하면 그 조건에 걸려
+    // **모든 화면이 500** 이 된다 — 첫 화면만 되고 새로고침하면 죽는다.
+    //
+    // `express.static` 은 `root` 기준 상대경로만 검사하므로 같은 파일을 정상으로
+    // 내어 준다. 그래서 「파일은 읽히는데 sendFile 만 실패」 로 보인다.
+    res.sendFile('index.html', { root: PUBLIC });
   } else {
     res.json({ message: 'finance-tracker API running. Frontend not built yet.' });
   }
