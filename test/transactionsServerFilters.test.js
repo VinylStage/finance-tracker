@@ -32,17 +32,30 @@ test('FND-02: 감사 PoC — 501건 중 가장 오래된 1건도 연도목록/�
   const expCat = categories.find(c => c.major_type !== '수입').id;
 
   // 최근 500건(필러) + 아주 오래된 식별 가능한 1건 = 총 501건
-  const fillerRequests = [];
+  //
+  // **한 번에 500개를 던지지 않는다.** Promise.all 로 500개를 동시에 열면 일부
+  // 연결이 `ECONNRESET` 으로 끊긴다 — 단독 실행하면 8/8 재현했다(#708).
+  // 부하가 아니라 동시성이 원인이라, 20개씩 나눠 보내면 건수는 그대로이고
+  // 걸리는 시간도 사실상 같다.
+  const CONCURRENCY = 20;
+  const bodies = [];
   for (let i = 0; i < 500; i++) {
     const day = (i % 27) + 1;
     const month = (Math.floor(i / 27) % 12) + 1;
     const date = `2025-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    fillerRequests.push(fetch(`${BASE}/api/transactions`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, category_id: expCat, amount: 1000, merchant: '필러' }),
-    }));
+    bodies.push({ date, category_id: expCat, amount: 1000, merchant: '필러' });
   }
-  await Promise.all(fillerRequests);
+  for (let start = 0; start < bodies.length; start += CONCURRENCY) {
+    const slice = bodies.slice(start, start + CONCURRENCY);
+    const results = await Promise.all(slice.map((body) => fetch(`${BASE}/api/transactions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })));
+    // 한 건이라도 못 들어가면 뒤의 단언이 「501건」 전제를 잃는다. 여기서 잡는다.
+    for (const r of results) {
+      assert.strictEqual(r.status, 201, `필러 삽입이 실패했다: ${r.status}`);
+    }
+  }
 
   const markerResp = await fetch(`${BASE}/api/transactions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
