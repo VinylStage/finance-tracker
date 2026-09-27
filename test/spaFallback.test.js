@@ -5,8 +5,12 @@ const path = require('node:path');
 
 const { startTestServer } = require('./helpers/testServer');
 
-// 포트는 20000~21999 에서 고른다(#627). 21655 는 아직 아무 테스트도 쓰지 않는다.
-const PORT = 21655;
+// 포트는 20000~21999 에서 고른다(#627).
+//
+// 처음에 21655 를 잡았는데 **다른 트랙의 #712 가 같은 번호를 썼다**
+// (`test/cardOverseasUndo.test.js`). 각자 브랜치에서는 `test:ports` 가 통과하고
+// 합친 뒤에만 걸린다 — 그 검사는 자기 트리만 보기 때문이다. 21661 로 옮긴다.
+const PORT = 21661;
 const BASE = `http://127.0.0.1:${PORT}`;
 const PUBLIC_INDEX = path.join(__dirname, '..', 'public', 'index.html');
 let server;
