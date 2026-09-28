@@ -29,16 +29,10 @@ import { monthRange as heatMonthRange, bucketToDaily } from '../lib/heatmapPerio
 import { bucketByDay } from '../lib/dailyBuckets';
 import CashFlowBars from '../components/CashFlowBars';
 import CashFlowSankey from '../components/CashFlowSankey';
-import { formatWon } from '../lib/format';
+import { formatWon, formatAxisTick } from '../lib/format';
 
 const PERIODS = ['일', '주', '월', '연'];
 
-
-function shortFmt(n) {
-  const v = Number(n || 0);
-  if (Math.abs(v) >= 10000) return `${Math.round(v / 10000)}만`;
-  return v.toLocaleString('ko-KR');
-}
 
 // 자체 기간 모드를 공용 필터로 갈아끼운다(#272).
 //
@@ -102,7 +96,7 @@ function CategoryComparison() {
             <BarChart data={rows}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="category" tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
-              <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
+              <YAxis tickFormatter={formatAxisTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
               <Tooltip formatter={(v) => formatWon(v)} />
               {/* 막대마다 색을 바꾸지 않는다. 카테고리는 X축 라벨이 구분하고,
                   색은 "이 막대가 무엇인지" 가 아니라 "지출 데이터" 라는 한 가지만
@@ -113,7 +107,7 @@ function CategoryComparison() {
             <LineChart data={rows}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="category" tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={0} angle={-30} textAnchor="end" height={60} />
-              <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
+              <YAxis tickFormatter={formatAxisTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
               <Tooltip formatter={(v) => formatWon(v)} />
               <Line type="monotone" dataKey="total" name="지출" stroke="var(--color-brand-fill)" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
@@ -565,7 +559,7 @@ export default function Dashboard() {
           <ComposedChart data={flowRows}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
             <XAxis dataKey={flowXKey} tickFormatter={flowTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
+            <YAxis tickFormatter={formatAxisTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
             <Tooltip formatter={(v) => formatWon(v)} labelFormatter={flowTick} />
             <Bar dataKey="expense" name="지출" fill="var(--color-loss-fill)" radius={[3, 3, 0, 0]} />
             <Line type="monotone" dataKey="income" name="수입" stroke="var(--color-brand-fill)" strokeWidth={2} dot={{ r: 3 }} />
@@ -613,7 +607,7 @@ export default function Dashboard() {
                 </linearGradient>
               </defs>
               <XAxis dataKey="date" tickFormatter={(v) => v.slice(5).replace('-', '/')} tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={4} />
-              <YAxis tickFormatter={shortFmt} tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={36} />
+              <YAxis tickFormatter={formatAxisTick} tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={36} />
               <Tooltip formatter={(v) => formatWon(v)} />
               <Area type="monotone" dataKey="expense" name="지출" stroke="var(--color-loss-fill)" fill="url(#dailyExpenseGrad)" strokeWidth={2} />
             </AreaChart>
@@ -628,7 +622,7 @@ export default function Dashboard() {
             <LineChart data={netWorthTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="month" tickFormatter={(v) => `${Number(v.slice(5, 7))}월`} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
+              <YAxis tickFormatter={formatAxisTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
               <Tooltip formatter={(v) => formatWon(v)} labelFormatter={(v) => `${Number(v.slice(5, 7))}월`} />
               <Line type="monotone" dataKey="net" name="누적 수지" stroke="var(--color-brand-fill)" strokeWidth={2} dot={false} />
             </LineChart>
@@ -646,7 +640,7 @@ export default function Dashboard() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
               <XAxis dataKey="month" tickFormatter={(v) => `${Number(v.slice(5, 7))}월`} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
+              <YAxis tickFormatter={formatAxisTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
               <Tooltip formatter={(v) => formatWon(v)} labelFormatter={(v) => `${Number(v.slice(5, 7))}월`} />
               <Area type="monotone" dataKey="debt" name="총 부채" stroke="var(--color-loss-fill)" fill="url(#debtGrad)" strokeWidth={2} />
             </AreaChart>
