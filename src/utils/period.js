@@ -1,4 +1,5 @@
 'use strict';
+const { pad2 } = require('./date');
 
 // 조회 기간을 한 가지 형태로 정규화한다(#272).
 //
@@ -15,10 +16,6 @@
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const YM = /^\d{4}-\d{2}$/;
 const Y = /^\d{4}$/;
-
-function pad2(n) {
-  return String(n).padStart(2, '0');
-}
 
 // 그 달의 마지막 날. Date 의 0번째 날이 전달 마지막 날이라는 성질을 쓴다.
 // 로컬 기준 연·월만 넘기므로 시간대 영향이 없다.
