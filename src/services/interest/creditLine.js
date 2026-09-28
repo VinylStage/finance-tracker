@@ -1,6 +1,6 @@
 'use strict';
 
-const { floorWon, addDays, daysBetween, daysInYear } = require('./money');
+const { floorWon, daysBetween, daysInYear } = require('./money');
 
 // 마이너스통장(한도대출) 이자(#286).
 //

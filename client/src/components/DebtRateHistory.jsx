@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { useConfirm } from './ConfirmProvider';
 
 // 부채 금리 이력(#329).
 //
@@ -27,7 +26,6 @@ export default function DebtRateHistory({ debtId, onChanged }) {
   const [form, setForm] = useState({ annual_rate: '', effective_from: '', memo: '' });
   const [saveError, setSaveError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const { alert } = useConfirm();
 
   const load = async () => {
     try {
