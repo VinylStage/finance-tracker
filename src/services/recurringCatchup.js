@@ -1,6 +1,7 @@
 'use strict';
 const { occurrencesBetween } = require('./recurrence');
 const { runAs } = require('../utils/auditContext');
+const { localYMD } = require('../utils/date');
 
 // 서버 기동 시점에 "마지막으로 처리한 날 이후 지금까지" 를 메운다(#279).
 //
@@ -15,11 +16,9 @@ const { runAs } = require('../utils/auditContext');
 // 생긴다. INSERT OR IGNORE 로 DB 가 판정하게 하고, 실제로 들어간 건에 대해서만
 // 거래를 만든다.
 
-function pad2(n) { return String(n).padStart(2, '0'); }
 
 function localToday() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return localYMD();
 }
 
 // 두 날짜 문자열 중 늦은 쪽 / 이른 쪽. 'YYYY-MM-DD' 는 사전순 비교가 곧 시간순이다.
