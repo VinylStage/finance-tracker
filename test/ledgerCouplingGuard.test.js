@@ -17,6 +17,9 @@ test('혜택 계산이 거래에서 읽는 값', () => {
   const actual = txFields(read('src/services/cardComparison.js'));
   const EXPECTED_COMPARISON = [
     'amount', 'card_product_id', 'category_id', 'date', 'id',
+    // `is_overseas`(#710) — 열 번째. 「해외 이용금액 2% 적립」 을 담을 자리가
+    // 없어 카드 한 장이 혜택 0건으로 남아 있었다. 원장에서 읽는 값이 하나 늘었다.
+    'is_overseas',
     'merchant', 'origin', 'payment_method_type', 'payment_style',
   ];
   assert.deepStrictEqual(actual, EXPECTED_COMPARISON,
@@ -79,7 +82,7 @@ function ledgerUnion(source, re) {
 
 test('원장에서 긁어 오는 컬럼 — 상수들을 합쳐서 본다', () => {
   const EXPECTED_COLS = [
-    'amount', 'card_product_id', 'category_id', 'date', 'id',
+    'amount', 'card_product_id', 'category_id', 'date', 'id', 'is_overseas',
     'merchant', 'origin', 'payment_method_id', 'payment_style',
   ];
   const cols = ledgerUnion(read('src/routes/cardStrategy.js'), /\bt\.([a-z_]+)/g);
