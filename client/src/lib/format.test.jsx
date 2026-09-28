@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { formatWon, formatNumber } from './format';
+import { formatWon, formatNumber, formatAxisTick } from './format';
 
 // #236 — 금액 표기 정본.
 //
@@ -54,6 +54,28 @@ describe('formatNumber', () => {
   });
 });
 
+describe('formatAxisTick', () => {
+  it('1만 미만은 자릿수만 구분한다', () => {
+    expect(formatAxisTick(9999)).toBe('9,999');
+    expect(formatAxisTick(0)).toBe('0');
+  });
+
+  it('정확히 1만부터 만 단위로 줄인다', () => {
+    expect(formatAxisTick(10000)).toBe('1만');
+    expect(formatAxisTick(-10000)).toBe('-1만');
+  });
+
+  it('만 단위는 반올림한다', () => {
+    expect(formatAxisTick(124999)).toBe('12만');
+    expect(formatAxisTick(125000)).toBe('13만');
+  });
+
+  it('null · undefined 는 0 으로 본다', () => {
+    expect(formatAxisTick(null)).toBe('0');
+    expect(formatAxisTick(undefined)).toBe('0');
+  });
+});
+
 describe('중복이 다시 생기지 않는다', () => {
   const SRC = path.join(process.cwd(), 'src');
 
@@ -93,6 +115,15 @@ describe('중복이 다시 생기지 않는다', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('축 포매터 shortFmt 복사본이 늘지 않는다', () => {
+    // #730 에서 lib/format.js 의 formatAxisTick 으로 옮겼다. Comparison 은 카드
+    // 도메인(M8 트랙) 소유라 그쪽이 옮길 때까지 남는다(#738).
+    const offenders = files
+      .filter((f) => /function shortFmt\s*\(/.test(f.src))
+      .map((f) => f.rel);
+    expect(offenders).toEqual(['pages/Comparison.jsx']);
+  });
+
   it('lib/format.js 밖에서 ko-KR 로케일을 직접 쓰는 곳을 목록으로 고정한다', () => {
     // 전부 금지하지는 않는다 — 건 수('12건')나 축 라벨처럼 '원' 이 아닌 자리가
     // 정당하게 있다. 다만 **새로 늘어나면 드러나야** 한다. 늘었다면 그게
@@ -102,9 +133,7 @@ describe('중복이 다시 생기지 않는다', () => {
       'components/TransactionCalendar.jsx',
       'lib/format.js',
       'pages/Comparison.jsx',
-      'pages/Dashboard.jsx',
       'pages/Settings.jsx',
-      'pages/Simulator.jsx',
     ];
     const using = files
       .filter((f) => f.src.includes("toLocaleString('ko-KR')"))
