@@ -1,4 +1,5 @@
 'use strict';
+const { pad2 } = require('../utils/date');
 
 // 반복 규칙의 발생일을 계산한다(#278). DB 를 모르는 순수 함수다 — 호출부가
 // 규칙 행을 읽어 넘긴다.
@@ -8,12 +9,8 @@
 
 const FREQS = ['daily', 'monthly', 'yearly'];
 
-function pad(n) {
-  return String(n).padStart(2, '0');
-}
-
 function toYMD(y, m, d) {
-  return `${y}-${pad(m)}-${pad(d)}`;
+  return `${y}-${pad2(m)}-${pad2(d)}`;
 }
 
 // 그 달의 마지막 날. Date 의 0번째 날이 전달 마지막 날이라는 성질을 쓴다.

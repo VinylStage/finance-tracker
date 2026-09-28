@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { isRealDate } = require('../utils/period');
+const { localYMD } = require('../utils/date');
 const { asInt, numericBody } = require('../utils/validate');
 const {
   createDebtInterestDerived, deleteDebtDerived, derivedRowsForDebt,
@@ -77,7 +78,7 @@ router.post('/', numericBody(['balance', 'credit_limit', 'compounds', 'interest_
 
       setDebtRate(db, newId, {
         annual_rate: Number(annual_rate) || 0,
-        effective_from: rate_effective_from || todayYMD(),
+        effective_from: rate_effective_from || localYMD(),
         memo: '등록 시 금리',
       });
     })();
@@ -396,11 +397,5 @@ function validateAnnualRate(value) {
   return null;
 }
 
-// 로컬 기준 오늘. UTC 를 쓰면 자정~오전 9시에 하루가 밀린다(utils/date.js 와 같은 이유).
-function todayYMD() {
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 module.exports = router;
