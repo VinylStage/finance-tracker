@@ -49,3 +49,15 @@ export function formatWon(n) {
 export function formatNumber(n) {
   return Number(n || 0).toLocaleString(LOCALE);
 }
+
+/**
+ * 차트 축 눈금용 축약 — 1만 이상은 '12만', 그 아래는 '9,999'.
+ *
+ * Dashboard · Simulator · Comparison 에 글자 그대로 복사돼 있던 것을 옮겼다(#730).
+ * 축은 공간이 좁아 '원' 을 붙이지 않는다.
+ */
+export function formatAxisTick(n) {
+  const v = Number(n || 0);
+  if (Math.abs(v) >= 10000) return `${Math.round(v / 10000)}만`;
+  return v.toLocaleString(LOCALE);
+}
