@@ -31,6 +31,31 @@ function isUsableMonth(value) {
   return month >= 1 && month <= 12;
 }
 
+// 개월수와 금액의 범위. 2개월 미만은 기존 검사가 따로 막는다(일시불로 처리).
+//
+// 상한이 없으면 오타 하나로 회차가 그만큼 만들어진다 — months: 1000 이면
+// 거래 1,000건이 가계부에 들어간다(#675). 국내 카드 할부는 길어야 36개월이라
+// 120개월이면 넉넉하다. 막으려는 것은 긴 할부가 아니라 오타다.
+const MAX_INSTALLMENT_MONTHS = 120;
+
+function validateInstallmentNumbers(body) {
+  if (body.months !== undefined && body.months !== null && body.months !== '') {
+    const months = Number(body.months);
+    if (Number.isFinite(months) && months > MAX_INSTALLMENT_MONTHS) {
+      return `할부 개월수는 ${MAX_INSTALLMENT_MONTHS}개월까지 입력할 수 있습니다.`;
+    }
+  }
+  for (const [key, label] of [['total_amount', '총액'], ['monthly_amount', '월 납입액']]) {
+    const raw = body[key];
+    if (raw === undefined || raw === null || raw === '') continue;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return `${label}은 0보다 큰 금액으로 입력해 주세요.`;
+    }
+  }
+  return null;
+}
+
 // 프리뷰 관련 오류를 상태코드로 옮긴다(ADR 0008).
 //
 // 428 은 "먼저 확인을 거쳐라", 409 는 "확인한 내용이 이미 낡았다" 다. 둘을 같은
@@ -284,6 +309,8 @@ router.post('/', numericBody(['total_amount', 'months', 'monthly_amount', 'fee_p
     if (!isUsableMonth(start_billing_month)) {
       return res.status(400).json({ error: '첫 청구월은 YYYY-MM 형식이어야 합니다.' });
     }
+    const numberInvalid = validateInstallmentNumbers(req.body);
+    if (numberInvalid) return res.status(400).json({ error: numberInvalid });
     if (months < 2) {
       return res.status(400).json({ error: 'months must be >= 2 (2개월 미만은 일시불로 처리)' });
     }
@@ -334,6 +361,8 @@ router.put('/:id', (req, res) => {
     if (changes.start_billing_month !== undefined && !isUsableMonth(changes.start_billing_month)) {
       return res.status(400).json({ error: '첫 청구월은 YYYY-MM 형식이어야 합니다.' });
     }
+    const numberInvalid = validateInstallmentNumbers(changes);
+    if (numberInvalid) return res.status(400).json({ error: numberInvalid });
 
     if (changesSchedule(existing, changes)) {
       const applied = applyInstallmentDerived(db, Number(req.params.id), {
