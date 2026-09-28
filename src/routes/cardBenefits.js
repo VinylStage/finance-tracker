@@ -189,9 +189,31 @@ router.get('/', (req, res) => {
   }
 });
 
+// `rule_json` 을 **문자열 그대로** 보낸 요청도 검증한다(#710).
+//
+// `validate()` 는 구조화된 `body.rule` 만 봤다. 그런데 `normalize()` 가
+// `body.rule_json` 도 받아 주므로, 문자열로 보내면 **검증을 통째로 건너뛰었다.**
+// `validateRule` 을 둔 이유가 «모르는 유형이 저장되면 계산이 조용히 0원이 되고
+// 사용자는 왜 안 잡히는지 알 수 없다» 인데, 그 문이 열려 있었다.
+//
+// **요청이 보낸 것만 본다.** `PUT` 은 `{...existing, ...body}` 를 검증하는데,
+// 거기서 이미 저장된 값까지 다시 검증하면 예전에 들어간 줄을 고칠 수 없게 된다 —
+// 고치러 온 사람을 막는 꼴이다.
+function rawRuleError(raw) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  if (typeof raw !== 'string') return '혜택 규칙 형식이 올바르지 않습니다.';
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return '혜택 규칙 형식이 올바르지 않습니다.';
+  }
+  return validateRule(parsed);
+}
+
 router.post('/', numericBody(['card_product_id', 'category_id', 'monthly_cap', 'min_amount', 'max_amount', 'card_threshold_tier_id']), (req, res) => {
   try {
-    const err = validate(req.body);
+    const err = validate(req.body) || rawRuleError(req.body.rule_json);
     if (err) return res.status(400).json({ error: err });
 
     const b = normalize(req.body);
@@ -216,7 +238,7 @@ router.put('/:id', numericBody(['card_product_id', 'category_id', 'monthly_cap',
     // 보내지 않은 필드는 기존 값을 잇는다. 일부만 보내는 호출부가 안 보낸 값을
     // 기본값으로 덮으면 사용자가 적어 둔 한도나 최소 결제액이 조용히 사라진다.
     const merged = { ...existing, ...req.body };
-    const err = validate(merged);
+    const err = validate(merged) || rawRuleError(req.body.rule_json);
     if (err) return res.status(400).json({ error: err });
 
     const b = normalize(merged);
