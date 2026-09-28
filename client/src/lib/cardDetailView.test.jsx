@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { benefitTargetLabel, benefitValueLabel, tierStatusLine } from './cardDetailView';
+import { benefitTargetLabel, benefitValueLabel, tierStatusLine, unmatchedSummary } from './cardDetailView';
 
 describe('benefitTargetLabel', () => {
   it('A-1. 분류만 주어진 경우', () => {
@@ -178,5 +178,42 @@ describe('tierStatusLine', () => {
       });
       expect(result.headline).not.toMatch(/%/);
     });
+  });
+});
+
+describe('unmatchedSummary', () => {
+  const base = (over = {}) => ({
+    merchants: [{ merchant: '씨유◯◯점', count: 3, amount: 27190 }],
+    distinctCount: 1,
+    count: 3,
+    amount: 27190,
+    ...over,
+  });
+
+  it('D-1. 없으면 아무 말도 하지 않는다 — 빈 상자를 그리지 않는다', () => {
+    expect(unmatchedSummary(null)).toBe(null);
+    expect(unmatchedSummary(undefined)).toBe(null);
+    expect(unmatchedSummary({ merchants: [], distinctCount: 0, count: 0, amount: 0 })).toBe(null);
+  });
+
+  it('D-2. 곳 수·건수·금액을 한 줄로 적는다', () => {
+    const r = unmatchedSummary(base());
+    expect(r.headline).toBe('혜택이 붙지 않은 가맹점 1곳 · 3건 27,190원');
+  });
+
+  it('D-3. «혜택이 없다» 고 단정하지 않는다 — 표기가 갈려 못 찾았을 수 있다', () => {
+    const r = unmatchedSummary(base());
+    // 이 문구가 사라지면 화면이 다시 «없다» 고 단정하게 된다. #688 의 사고가
+    // 정확히 그것이었다 — 있는 혜택을 없다고 말했다.
+    expect(r.detail).toMatch(/표기가 달라|이름과 영수증 표기/);
+    expect(r.detail).not.toMatch(/혜택이 없습니다|혜택이 없어요/);
+  });
+
+  it('D-4. 목록이 잘렸을 때만 «외 N곳» 을 말한다', () => {
+    expect(unmatchedSummary(base({ distinctCount: 19 })).more).toBe('외 18곳');
+  });
+
+  it('D-5. 안 잘렸으면 «외 N곳» 을 말하지 않는다', () => {
+    expect(unmatchedSummary(base()).more).toBe(null);
   });
 });
