@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import RetentionNotice from '../components/RetentionNotice';
 import { useLoader } from '../hooks/useLoader';
