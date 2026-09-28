@@ -4,14 +4,8 @@ import {
 } from 'recharts';
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
-import { formatWon } from '../lib/format';
+import { formatWon, formatAxisTick } from '../lib/format';
 
-
-function shortFmt(n) {
-  const v = Number(n || 0);
-  if (Math.abs(v) >= 10000) return `${Math.round(v / 10000)}만`;
-  return v.toLocaleString('ko-KR');
-}
 
 export default function Simulator() {
   const [startingBalance, setStartingBalance] = useState(0);
@@ -114,7 +108,7 @@ export default function Simulator() {
               <LineChart data={projection}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} interval={Math.ceil(projection.length / 12)} />
-                <YAxis tickFormatter={shortFmt} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
+                <YAxis tickFormatter={formatAxisTick} tick={{ fontSize: 11, fill: 'var(--color-caption)' }} axisLine={false} tickLine={false} width={40} />
                 <Tooltip formatter={(v) => formatWon(v)} />
                 <Line type="monotone" dataKey="balance" name="예상잔액" stroke="var(--color-brand-fill)" strokeWidth={2} dot={false} />
               </LineChart>
