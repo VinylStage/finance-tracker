@@ -390,15 +390,6 @@ export default function Dashboard() {
 
   const { rows: flowRows, xKey: flowXKey, tick: flowTick } = periodConfig(period, data);
 
-  // 히트맵은 이번 달만 그린다. thisMonth 는 'YYYY-MM' 문자열이다.
-  const [heatYear, heatMonth] = (data.thisMonth || '').split('-').map(Number);
-
-  // dailyTrend 는 최근 30일이라 이번 달 밖의 날짜도 섞여 있다. 날짜 문자열을 그대로
-  // 키로 쓰면 컴포넌트가 이번 달 것만 골라 읽는다.
-  const heatDailyTotals = Object.fromEntries(
-    (data.dailyTrend || []).map((d) => [d.date, Number(d.expense) || 0])
-  );
-
   // 기준선은 이번 달 예산 합계에서 나온다. 예산이 없으면 컴포넌트가 일평균으로 폴백한다.
   const heatBudgetTotal = (data.budgets || []).reduce(
     (sum, b) => sum + (Number(b.monthly_budget) || 0),
