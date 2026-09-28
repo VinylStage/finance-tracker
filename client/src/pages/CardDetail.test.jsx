@@ -47,6 +47,9 @@ const card = (over = {}) => ({
   // 응답 표면을 그대로 흉내낸다 — 빼 두면 나중에 그릴 때 픽스처부터 틀린다.
   monthlyLines: [],
   monthlyTotal: 0,
+  // 「혜택이 모르는 가맹점」 진단(#688). 기본값은 «없음» 이라 이 칸이 화면을
+  // 건드리지 않는다 — 그 동작 자체를 CardDetailUnmatched.test.jsx 가 따로 본다.
+  unmatched: { merchants: [], distinctCount: 0, count: 0, amount: 0 },
   ...over,
   // over 뒤에 둔다. 앞에 두면 over.threshold 가 병합 결과를 통째로 덮어써서
   // 호출자가 준 칸 말고는 전부 사라진다.
