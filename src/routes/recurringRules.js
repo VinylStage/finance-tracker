@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
 const { isRealDate } = require('../utils/period');
+const { pad2 } = require('../utils/date');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
 const {
@@ -12,7 +13,6 @@ const {
 } = require('../services/recurringCatchup');
 const { detectRecurringCandidates } = require('../services/recurrenceDetect');
 
-function pad2(n) { return String(n).padStart(2, '0'); }
 function thisYearMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
@@ -35,12 +35,6 @@ function isRealMonth(s) {
 // 그 달의 마지막 날까지 본다(#670).
 function isYMD(s) { return typeof s === 'string' && isRealDate(s); }
 
-function today() {
-  // 로컬 기준이다. UTC 로 하면 KST 자정~9시 사이에 하루 어긋난다(FND-20).
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
 // #278 이 컬럼을 넣었지만 쓰기 경로가 없었다 — 화면에서 만든 규칙은 전부
 // monthly/1 에 starts_on 이 비어 있었다. 여기서 받아야 #280 의 편집 화면이 성립한다.
 //
@@ -59,7 +53,7 @@ function normalizeRuleBody(body, existing = null) {
 
   const freq = body.freq || existing?.freq || 'monthly';
   const rawStart = carry('starts_on', null);
-  const startsOn = rawStart == null ? (existing?.starts_on || today()) : rawStart;
+  const startsOn = rawStart == null ? (existing?.starts_on || localToday()) : rawStart;
 
   // daily 는 day_of_month 를 안 쓴다(발생일은 starts_on + interval 로 정해진다).
   // 그래도 컬럼이 NOT NULL 이라 값은 있어야 하므로 시작일의 일자를 넣는다.
