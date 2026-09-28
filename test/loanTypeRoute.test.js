@@ -75,6 +75,24 @@ describe('A. 등록', () => {
     assert.strictEqual(rates.body.data[0].effective_from, '2026-02-01');
   });
 
+  test('A-5. 금리 시작일을 생략하면 로컬 기준 오늘로 채운다', async () => {
+    // 기대값을 서버 헬퍼(utils/date)로 만들면 같은 함수끼리 비교하게 된다. 따로 계산한다.
+    // UTC(toISOString) 로 만들면 KST 자정~9시에 하루 어긋난다(FND-20).
+    const ymd = (d) => [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+      .map((n, i) => (i === 0 ? String(n) : String(n).padStart(2, '0'))).join('-');
+    const before = ymd(new Date());
+    const res = await json('/api/debts', {
+      method: 'POST',
+      body: JSON.stringify({ name: '시작일생략', balance: 1000000, annual_rate: 4 }),
+    });
+    const after = ymd(new Date());
+    assert.strictEqual(res.status, 201, JSON.stringify(res.body));
+    const rates = await json(`/api/debts/${res.body.id}/rates`);
+    assert.strictEqual(rates.body.data.length, 1);
+    // 요청 도중 자정을 넘기는 경우만 두 값이 갈린다
+    assert.ok([before, after].includes(rates.body.data[0].effective_from), rates.body.data[0].effective_from);
+  });
+
   test('A-4. 기존 방식 등록도 그대로 된다 — general 로 남는다', async () => {
     const res = await json('/api/debts', {
       method: 'POST',

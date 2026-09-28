@@ -1,5 +1,6 @@
 'use strict';
 const { isRealDate } = require('../utils/period');
+const { localYMD } = require('../utils/date');
 
 // 부채 금리의 시점별 이력(#285).
 //
@@ -142,7 +143,7 @@ function setDebtRate(db, debtId, { annual_rate, effective_from, memo = null }) {
 
     // debts.annual_rate 는 **현재** 금리다. 과거 날짜로 이력을 끼워 넣는 경우에는
     // 건드리면 안 된다 — 오늘 적용되는 금리가 바뀐 게 아니기 때문이다.
-    const today = todayYMD();
+    const today = localYMD();
     const current = rateAt(db, debtId, today);
     if (current !== null) {
       db.prepare('UPDATE debts SET annual_rate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
@@ -154,12 +155,6 @@ function setDebtRate(db, debtId, { annual_rate, effective_from, memo = null }) {
   return result;
 }
 
-// 로컬 기준 오늘. utils/date.js 의 localYMD 와 같은 이유로 UTC 를 쓰지 않는다.
-function todayYMD() {
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 function listRates(db, debtId) {
   return db.prepare(`
