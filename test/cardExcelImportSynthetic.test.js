@@ -57,6 +57,8 @@ describe('A. 농협 — 합성 픽스처', () => {
       installment_months: null,
       cancelled: false,
       approval_number: '58906541',
+      // 카드사가 명세서에 남긴 해외 표시(#710). 이 국내 결제에는 없다.
+      is_overseas: false,
     }]);
   });
 
@@ -111,6 +113,8 @@ describe('E. 현대 — 합성 픽스처', () => {
       installment_months: null,
       cancelled: false,
       approval_number: null,
+      // 카드사가 명세서에 남긴 해외 표시(#710). 이 국내 결제에는 없다.
+      is_overseas: false,
     }]);
   });
 
@@ -120,7 +124,13 @@ describe('E. 현대 — 합성 픽스처', () => {
     assert.strictEqual(result[0].merchant, 'ANTHROPIC,USD:5.50');
     assert.strictEqual(result[0].amount, 8116);
     // USD 숫자를 금액으로 잘못 읽으면 명세서와 액수가 달라진다
+
+    // 그 조각을 **읽고 버리지 않는다**(#710). 예전에는 금액 자르는 위치로만
+    // 쓰고 「해외결제다」 를 저장하지 않아, 「해외 N% 적립」 혜택이 아예 표현될
+    // 수 없었다.
+    assert.strictEqual(result[0].is_overseas, true);
   });
+
 
   test('E-3. 뒤에 금액이 안 붙어 있으면 0 으로 읽는다', () => {
     const result = parseCardExcel('hyundai', hyundaiSheet(hyundaiRow({ merchantAmount: '연회비' })));
@@ -141,6 +151,24 @@ describe('E. 현대 — 합성 픽스처', () => {
 
     assert.strictEqual(result.length, 1);
     // 건너뛰지 않으면 `String(null)` 이 `'null'` 로 가맹점명에 저장된다
+  });
+
+  test('E-6. 말미 국가코드도 해외로 읽는다 — 카드사마다 표시 모양이 다르다', () => {
+    const result = parseCardExcel('hyundai', hyundaiSheet(hyundaiRow({
+      merchantAmount: 'ANTHROPIC              SAN FRANCISCO USA24,212',
+    })));
+
+    assert.strictEqual(result[0].is_overseas, true);
+    assert.strictEqual(result[0].amount, 24212);
+  });
+
+  test('E-7. 국내 결제는 해외로 읽지 않는다 — 이름만 영문인 것을 짐작하지 않는다', () => {
+    // `Adobe` · `Temu` 처럼 이름은 해외 서비스인데 카드사가 국내로 분류한
+    // 결제가 실DB 에 49건 있었다. 이름으로 짐작하면 없는 혜택을 있다고 말한다.
+    for (const name of ['Adobe', 'Temu', 'SSG_COM', 'Apple iCloud']) {
+      const r = parseCardExcel('hyundai', hyundaiSheet(hyundaiRow({ merchantAmount: `${name}1,000` })));
+      assert.strictEqual(r[0].is_overseas, false, `${name} 가 해외로 잡혔다`);
+    }
   });
 });
 
@@ -178,6 +206,8 @@ describe('B. 롯데 — 합성 픽스처', () => {
       installment_months: null,
       cancelled: false,
       approval_number: '11112222',
+      // 카드사가 명세서에 남긴 해외 표시(#710). 이 국내 결제에는 없다.
+      is_overseas: false,
     }]);
   });
 
@@ -243,6 +273,8 @@ describe('C. 삼성 — 합성 픽스처', () => {
       installment_months: null,
       cancelled: false,
       approval_number: '33334444',
+      // 카드사가 명세서에 남긴 해외 표시(#710). 이 국내 결제에는 없다.
+      is_overseas: false,
     }]);
   });
 
@@ -334,6 +366,8 @@ describe('D. 하나 — 합성 픽스처', () => {
       installment_months: null,
       cancelled: false,
       approval_number: '55556666',
+      // 카드사가 명세서에 남긴 해외 표시(#710). 이 국내 결제에는 없다.
+      is_overseas: false,
     }]);
   });
 
