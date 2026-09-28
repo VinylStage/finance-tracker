@@ -1826,6 +1826,55 @@
   수입은 카드 혜택 대상이 아니라 제외한다. `thresholdEstimated` 가 `true` 면 실적
   판정이 추정이라는 뜻이고, **차액도 추정이다** — 화면이 이어서 말해야 한다.
 
+## cardOverseas.js
+
+이미 들어와 있는 결제에 **해외 표시를 채운다**(#710 · ADR 0010).
+
+마이그레이션 034 가 `transactions.is_overseas` 를 만들면서 **백필하지 않았다** —
+추론으로 얻은 값을 사람 확인 없이 실거래에 박으면 되돌리기가 사람 몫이 된다.
+임포터는 새로 들어오는 결제에 표시를 달지만, 그 전에 들어온 것은 여기서 채운다.
+
+「해외결제인가」 는 **카드사가 분류한 것**이다. 명세서에 원 통화(`,USD:22.00`)나
+말미 국가코드(` USA`)가 찍혔다는 것이 그 분류의 신호다. **이름으로 짐작하지
+않는다** — 실측(실DB 580건)에서 이름만 해외 서비스인 결제가 49건 있었고 그중
+표시가 붙은 것은 18건이었다.
+
+### GET /api/card-overseas/backfill/preview
+무엇이 몇 건 바뀌는지 계산한다. **DB 를 바꾸지 않는다** — ADR 0008 의 프리뷰 단계다.
+
+받을 조건이 없어서 `GET` 이다(`cardProducts` 의 재매핑 프리뷰는 기간·가맹점·금액을
+본문으로 받아 `POST` 다). 「표시가 있는데 안 선 것」 이 대상 전부다.
+
+- **요청 파라미터**: 없음
+- **응답 스키마**:
+  ```json
+  {
+    "count": "number",
+    "amount": "number",
+    "byEvidence": { "currency": "number", "country": "number" },
+    "samples": [{ "id": "number", "date": "string", "merchant": "string",
+                  "amount": "number", "evidence": "'currency' | 'country'" }],
+    "preview_token": "string",
+    "undoable": true
+  }
+  ```
+- **비고**: `byEvidence` 와 `samples` 가 **근거**다. 건수만 내면 사용자가 확인할
+  수 없고, 그건 확인이 아니라 통보다. 이미 표시가 선 거래는 세지 않으므로 두 번
+  돌리면 두 번째는 0건이다.
+
+### POST /api/card-overseas/backfill
+확인한 뒤에만 쓴다. 프리뷰가 낸 지문을 요구한다.
+
+- **요청 파라미터**: `preview_token` (required)
+- **응답 스키마**: `{ "ok": true, "updated": "number", "remaining": "number" }`
+- **비고**:
+  - 지문이 없으면 **428** `{ "preview_required": true }`. 화면에서만 막고
+    엔드포인트가 열려 있으면 원칙이 반쪽이 된다(ADR 0008).
+  - 프리뷰 이후 대상이 달라졌으면 **409** `{ "preview_stale": true }`.
+  - **되돌리는 방향은 하지 않는다.** 표시가 없는데 `is_overseas` 가 선 거래는
+    사람이 손으로 세운 것일 수 있고, 기계가 내리면 사람 판단을 지운다.
+  - 감사 라벨 `해외결제 표시 채우기 N건` 으로 묶여 되돌리기가 된다(#298).
+
 ## exchange.js
 
 한국수출입은행(EXIM) 환율. 외화 자산을 원화로 환산해 보여주는 데 쓴다.
