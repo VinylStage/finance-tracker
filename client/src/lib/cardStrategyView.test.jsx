@@ -161,6 +161,24 @@ describe('D. 추천 근거', () => {
     expect(skipReasonText('something-new')).not.toContain('something-new');
     expect(skipReasonText(undefined)).toMatch(/[가-힣]/);
   });
+
+  it('D-6. 해외 조건은 방향까지 말한다 (#710)', () => {
+    expect(skipReasonText('overseas-only')).toContain('해외');
+    expect(skipReasonText('domestic-only')).toContain('국내');
+  });
+
+  it('D-7. 해외 사유가 «혜택이 없다» 로 읽히지 않는다 — #688 이 저지른 잘못', () => {
+    // 폴백(«적용 조건에 맞지 않아요»)으로 떨어지면 왜 안 맞는지가 사라지고,
+    // 사용자는 이 카드에 혜택이 없는 줄 안다. 그게 #688 의 사고였다.
+    for (const r of ['overseas-only', 'domestic-only']) {
+      expect(skipReasonText(r)).not.toContain('혜택이 없');
+      expect(skipReasonText(r)).not.toBe(skipReasonText('unknown-future-reason'));
+    }
+  });
+
+  it('D-8. 두 방향이 서로 다른 말을 한다 — 뭉치면 둘 중 하나엔 틀린 말이 된다', () => {
+    expect(skipReasonText('overseas-only')).not.toBe(skipReasonText('domestic-only'));
+  });
 });
 
 describe('E. 실적 표시는 색에만 기대지 않는다', () => {
@@ -230,7 +248,7 @@ describe('F. 문구 전수 검사', () => {
   collect(estimateReason({ benefit: 500, applied: { rate: 5, matched: 'merchant' }, capped: true }));
   collect(estimateReason({ benefit: 0, thresholdUnmet: true, applied: { rate: 20 } }));
   collect(estimateReason({ benefit: 0, applied: null, skipped: [] }));
-  for (const r of ['no-match', 'below-min-amount', 'lower-rate', 'unknown-future-reason']) {
+  for (const r of ['no-match', 'below-min-amount', 'lower-rate', 'overseas-only', 'domestic-only', 'unknown-future-reason']) {
     collect(skipReasonText(r));
   }
 
