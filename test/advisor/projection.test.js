@@ -90,3 +90,12 @@ test('반복 수입(recurringInflow) 유입 반영', () => {
   assert.strictEqual(r.timeline[1].inflow, 550000);
   assert.strictEqual(r.timeline[1].balance, 750000);
 });
+
+test('반복 규칙 endMonth 는 그 달까지 포함', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 0 }, horizonMonths: 2,
+    recurring: [{ amount: 100000, endMonth: '2026-10' }],
+  });
+  assert.strictEqual(r.timeline[0].outflow, 100000);
+  assert.strictEqual(r.timeline[1].outflow, 0);
+});

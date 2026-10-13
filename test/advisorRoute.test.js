@@ -31,6 +31,10 @@ before(async () => {
     tx.run('2026-10-01', cat('고정지출'), 300000, b, '상점');
     // A카드 할부: 11월 청구 시작, 월 100,000 × 2
     db.prepare("INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, payment_method_id, start_billing_month) VALUES ('2026-10-05', '할부상점', 200000, 2, 100000, ?, '2026-11')").run(a);
+    // 선결제 A카드의 10월 청구(10/14) 회차 — 이미 냈으므로 예정 유출이 아니다
+    db.prepare("INSERT INTO installments (purchase_date, merchant, total_amount, months, monthly_amount, payment_method_id, start_billing_month) VALUES ('2026-09-05', '지난할부', 70000, 1, 70000, ?, '2026-10')").run(a);
+    // 미결제 B카드의 할부 원거래 — 회차로 따로 잡히므로 일시불 청구에 넣으면 이중계산
+    db.prepare("INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant) VALUES ('2026-10-02', ?, 900000, ?, '할부', '할부원거래')").run(cat('고정지출'), b);
   } finally {
     db.close();
   }
@@ -56,8 +60,8 @@ test('장기 전망 — horizon 임의 확장 + 휴대폰 가정', async () => {
   const r = await (await fetch(`${BASE}/api/advisor/projection?asOf=2026-10-13&horizon=24&phone=1200000&phoneMonths=24&phoneStart=2026-11`)).json();
   assert.strictEqual(r.base.timeline.length, 24);
   assert.strictEqual(r.base.timeline[23].month, '2028-09');
-  // 10월: +2,000,000 −500,000 = +1,500,000 → 2,100,000
-  assert.strictEqual(r.base.timeline[0].balance, 2100000);
+  // 10월: +2,000,000 −500,000 −70,000(10월 청구 할부) = +1,430,000 → 2,030,000
+  assert.strictEqual(r.base.timeline[0].balance, 2030000);
   // 휴대폰 50,000/월이 11월부터 붙는다
   assert.strictEqual(r.withSim.timeline[1].outflow - r.base.timeline[1].outflow, 50000);
   const bad = await fetch(`${BASE}/api/advisor/projection?asOf=2026-10-13&horizon=0`);
@@ -75,4 +79,16 @@ test('여윳돈 — 미결제 카드 청구 + 할부 회차, 신용/즉시 구�
   // 600,000 → 10/25 +2,000,000 −300,000 = 2,300,000 → 11/01 −500,000 = 1,800,000 → 11/14 −100,000 = 1,700,000
   assert.strictEqual(r.capacityImmediate, 600000);
   assert.strictEqual(r.capacity, 1700000);
+});
+
+test('여윳돈 — 선결제 카드의 이미 낸 청구·할부 원거래는 빼지 않는다', async () => {
+  const r = await (await fetch(`${BASE}/api/advisor/headroom?asOf=2026-10-13&unpaid=${encodeURIComponent('테스트B카드')}`)).json();
+  const labels = r.scheduled.map((s) => `${s.date} ${s.label} ${s.amount}`);
+  assert.ok(!labels.some((l) => l.startsWith('2026-10-14')), '선결제 카드 10/14 회차는 제외');
+  assert.ok(!labels.some((l) => l.includes('900000')), '할부 원거래는 일시불 청구에서 제외');
+});
+
+test('여윳돈 — target 당일 예정분은 포함', async () => {
+  const r = await (await fetch(`${BASE}/api/advisor/headroom?asOf=2026-10-13&unpaid=${encodeURIComponent('테스트B카드')}&target=2026-11-14`)).json();
+  assert.ok(r.scheduled.some((s) => s.date === '2026-11-14'));
 });

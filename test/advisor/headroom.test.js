@@ -41,3 +41,24 @@ test('결제일 전에 바닥나면 capacity 는 음수(부족분)', () => {
   });
   assert.strictEqual(r.capacity, -200000);
 });
+
+test('청구일 전 바닥이면 capacity 는 이후 회복과 무관하게 부족분', () => {
+  const r = cycleHeadroom({
+    asOf: '2026-10-13', anchorAmount: 100000, target: '2026-10-20', spendDate: '2026-10-18',
+    incomes: [{ amount: 500000, day: 18, label: '수입' }],
+    scheduled: [{ date: '2026-10-15', amount: 300000, label: '청구' }],
+  });
+  assert.strictEqual(r.minBefore, -200000);
+  assert.strictEqual(r.minAfter, 300000);
+  assert.strictEqual(r.capacity, -200000);
+});
+
+test('청구일 당일 잔액도 청구 후 구간에 포함한다', () => {
+  const r = cycleHeadroom({
+    asOf: '2026-10-13', anchorAmount: 1000000, target: '2026-10-20', spendDate: '2026-10-18',
+    incomes: [{ amount: 500000, day: 19, label: '수입' }],
+    scheduled: [{ date: '2026-10-18', amount: 400000, label: '할부' }],
+  });
+  assert.strictEqual(r.minAfter, 600000);   // 10/18 당일(수입 전)
+  assert.strictEqual(r.capacity, 600000);
+});
