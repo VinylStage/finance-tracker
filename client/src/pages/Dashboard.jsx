@@ -29,6 +29,7 @@ import { monthRange as heatMonthRange, bucketToDaily } from '../lib/heatmapPerio
 import { bucketByDay } from '../lib/dailyBuckets';
 import CashFlowBars from '../components/CashFlowBars';
 import CashFlowSankey from '../components/CashFlowSankey';
+import AdvisorHeadroomCard from '../components/AdvisorHeadroomCard';
 import { formatWon, formatAxisTick } from '../lib/format';
 
 const PERIODS = ['일', '주', '월', '연'];
@@ -421,6 +422,10 @@ export default function Dashboard() {
           color={data.available >= 0 ? 'text-brand-text' : 'text-loss-text'}
         />
       </div>
+
+      {/* 이번 청구주기 여윳돈 — 위 「가용 현금」(이번달 수입−지출)과 다른 질문:
+          지금 통장 잔액에서 다음 월급까지 카드로 더 써도 되는 돈. */}
+      <AdvisorHeadroomCard />
 
       {/* 자동으로 생긴 것을 먼저 알리고, 그다음 확인이 필요한 것을 낸다.
           순서가 반대면 사용자가 "이건 왜 벌써 생겼지" 를 나중에 만난다. */}

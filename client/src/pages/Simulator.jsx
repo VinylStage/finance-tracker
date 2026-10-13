@@ -5,6 +5,7 @@ import {
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
 import { formatWon, formatAxisTick } from '../lib/format';
+import AdvisorProjectionChart from '../components/AdvisorProjectionChart';
 
 
 export default function Simulator() {
@@ -49,6 +50,9 @@ export default function Simulator() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-ink">예상잔액 시뮬레이터</h1>
+
+      {/* 실데이터 기반 전망(반복·할부·보유현금 앵커). 아래는 숫자를 직접 넣어 보는 손입력 시뮬레이터. */}
+      <AdvisorProjectionChart />
 
       {loading ? (
         <div className="text-caption text-center py-10">로딩 중...</div>
