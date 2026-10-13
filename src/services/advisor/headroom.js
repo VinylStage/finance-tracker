@@ -28,7 +28,10 @@ function inPeriod(item, ym) {
 // scheduled: [{ date:'YYYY-MM-DD', amount, label }] 확정 유출
 // spendDate: 새 카드사용분이 청구되는 날(예: 다음 14일). 주어지면 그날 이후
 //            최저잔액이 곧 "추가로 써도 되는 금액"이다.
-function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed = [], dailyOut = 0, scheduled = [], spendDate = null }) {
+function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed = [], dailyOut = 0, scheduled = [], spendDate = null, recordDaily = false }) {
+  // recordDaily: 매일 {date, inflow, outflow, balance, items} 를 남긴다(앵커일 포함).
+  // 2년이면 ~720행이라 여윳돈 API 처럼 짧은 구간에서는 끈다.
+  const days = recordDaily ? [{ date: asOf, inflow: 0, outflow: 0, balance: anchorAmount, items: ['앵커'] }] : null;
   let balance = anchorAmount;
   let minBalance = balance, minDate = asOf;
   let minBefore = balance;              // spendDate 이전 구간 최저
@@ -63,7 +66,9 @@ function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed 
     if (spendDate && cur < spendDate) minBefore = Math.min(minBefore, balance);
     if (spendDate && cur >= spendDate && balance < minAfter) { minAfter = balance; minAfterDate = cur; }
     if (items.length) timeline.push({ date: cur, inflow, outflow, balance, items });
+    if (days) days.push({ date: cur, inflow, outflow, balance, items });
   }
+  if (days) attachSpendable(days, incomes);
 
   // 여윳돈은 "그 돈이 언제 통장에서 빠지는가" 에 따라 둘이다.
   //   capacity          — 신용카드(spendDate 에 청구): 청구 전 잔액은 줄이지 않으므로
@@ -76,7 +81,21 @@ function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed 
     capacity = minBefore < 0 ? minBefore : after;
   }
   const capacityImmediate = minBalance;
-  return { endBalance: balance, minBalance, minDate, minBefore: spendDate ? minBefore : null, minAfter: spendDate ? minAfter : null, minAfterDate, capacity, capacityImmediate, timeline, months };
+  return { endBalance: balance, minBalance, minDate, minBefore: spendDate ? minBefore : null, minAfter: spendDate ? minAfter : null, minAfterDate, capacity, capacityImmediate, timeline, months, days };
+}
+
+// 일별 여유자금(spendable): 그날부터 다음 월급 전날까지의 최저잔액. 그날 바로
+// (현금·체크카드로) 써도 다음 월급 전까지 마이너스가 안 나는 금액이다.
+// 월급날 = 가장 큰 월 수입 규칙의 day. 뒤에서부터 훑으며 월급날 직전에서 끊는다.
+function attachSpendable(days, incomes) {
+  const main = incomes.length ? incomes.reduce((a, b) => (b.amount > a.amount ? b : a)) : null;
+  const isPayday = (iso) => !!main && dayOf(iso) === main.day && inPeriod(main, monthOf(iso));
+  let running = Infinity;
+  for (let i = days.length - 1; i >= 0; i--) {
+    const next = days[i + 1];
+    running = (next && isPayday(next.date)) ? days[i].balance : Math.min(days[i].balance, running);
+    days[i].spendable = running;
+  }
 }
 
 module.exports = { cycleHeadroom, addDays, dayOf };
