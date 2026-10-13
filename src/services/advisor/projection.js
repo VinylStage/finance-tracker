@@ -39,20 +39,22 @@ function daysInMonth(ym) {
 // installments: [{ monthlyAmount, startMonth:'YYYY-MM', months, label? }] — 기존 할부 잔여.
 // simulated: [{ kind:'installment', monthlyAmount, startMonth, months, label? }
 //           | { kind:'lumpsum', amount, month:'YYYY-MM', label? }] — 가정 지출(휴대폰 등).
-function projectCashflow({ anchor, horizonMonths, monthlyIncome = 0, recurring = [], installments = [], simulated = [] }) {
+function projectCashflow({ anchor, horizonMonths, monthlyIncome = 0, recurring = [], recurringInflow = [], installments = [], simulated = [] }) {
   if (!anchor || !anchor.month || typeof anchor.amount !== 'number') {
     throw new Error('anchor { month, amount } 가 필요합니다');
   }
   // 반복 고정비는 시점 인식: startMonth/endMonth 범위에서만 적용(예: 통신요금은
   // 11월 청구분부터 52,000). 유효시작일 개념으로 "월별로 금액이 바뀌는 규칙"을
   // (옛 규칙 종료 + 새 규칙 시작)으로 표현할 수 있다.
-  const recurOut = (ym) => recurring.reduce((s, r) => {
+  // 시점 인식 합산(유출/유입 공용). 일일 규칙은 그 달 일수로 환산.
+  const periodSum = (list, ym) => list.reduce((s, r) => {
     if (r.startMonth && ym < r.startMonth) return s;
     if (r.endMonth && ym > r.endMonth) return s;
-    // 일일 규칙(예: 주식 자동매수 3,000/일)은 그 달 일수로 환산한다.
     const amt = (r.dailyAmount != null) ? r.dailyAmount * daysInMonth(ym) : r.amount;
     return s + amt;
   }, 0);
+  const recurOut = (ym) => periodSum(recurring, ym);
+  const recurIn = (ym) => periodSum(recurringInflow, ym);
 
   const instOut = (list, ym) => list.reduce((s, it) => {
     if (it.kind && it.kind !== 'installment') return s;
@@ -68,7 +70,7 @@ function projectCashflow({ anchor, horizonMonths, monthlyIncome = 0, recurring =
 
   for (let i = 0; i < horizonMonths; i++) {
     const ym = monthAdd(anchor.month, i);
-    const inflow = monthlyIncome;
+    const inflow = monthlyIncome + recurIn(ym);
     const outflow = recurOut(ym) + instOut(installments, ym) + instOut(simulated, ym) + lumpOut(ym);
     balance += inflow - outflow;
     if (balance < minBalance) minBalance = balance;

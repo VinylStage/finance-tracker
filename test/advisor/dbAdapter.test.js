@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { loadInstallments, loadRecurringMonthly, latestAnchor } = require('../../src/services/advisor/dbAdapter');
+const { loadInstallments, loadRecurringRules, latestAnchor } = require('../../src/services/advisor/dbAdapter');
 
 // sql 문자열에 따라 캔드 결과를 돌려주는 최소 스텁.
 function stubDb(spec) {
@@ -23,16 +23,6 @@ test('loadInstallments 필드 매핑', () => {
   assert.deepStrictEqual(loadInstallments(db), [{ monthlyAmount: 100, startMonth: '2026-11', months: 3, label: 'X' }]);
 });
 
-test('loadRecurringMonthly: starts_on/ends_on → startMonth/endMonth 매핑(시점 인식)', () => {
-  const db = stubDb({ all: () => [
-    { amount: 9900, label: '상시구독', starts_on: null, ends_on: null },
-    { amount: 52000, label: '통신요금', starts_on: '2026-11-01', ends_on: null },
-  ] });
-  assert.deepStrictEqual(loadRecurringMonthly(db), [
-    { amount: 9900, label: '상시구독', startMonth: undefined, endMonth: undefined },
-    { amount: 52000, label: '통신요금', startMonth: '2026-11', endMonth: undefined },
-  ]);
-});
 
 test('latestAnchor 기준일 이전 최근', () => {
   const db = stubDb({ get: () => ({ as_of_date: '2026-10-13', amount: 2000000 }) });
@@ -41,12 +31,18 @@ test('latestAnchor 기준일 이전 최근', () => {
   assert.strictEqual(latestAnchor(empty, '2020-01-01'), null);
 });
 
-test('loadRecurringMonthly: freq=daily → dailyAmount', () => {
+
+test('loadRecurringRules: 수입/지출 분리 + daily + 기간', () => {
   const db = stubDb({ all: () => [
-    { amount: 100000, label: '월', freq: 'monthly', starts_on: null, ends_on: null },
-    { amount: 3000, label: '자동매수', freq: 'daily', starts_on: null, ends_on: null },
+    { amount: 100000, label: '월세', freq: 'monthly', starts_on: null, ends_on: null, majorType: '고정지출' },
+    { amount: 3000, label: '자동매수', freq: 'daily', starts_on: null, ends_on: null, majorType: '저축' },
+    { amount: 2460000, label: '월급', freq: 'monthly', starts_on: null, ends_on: null, majorType: '수입' },
+    { amount: 52000, label: '통신요금', freq: 'monthly', starts_on: '2026-11-01', ends_on: null, majorType: '고정지출' },
   ] });
-  const out = loadRecurringMonthly(db);
-  assert.deepStrictEqual(out[0], { label: '월', startMonth: undefined, endMonth: undefined, amount: 100000 });
-  assert.deepStrictEqual(out[1], { label: '자동매수', startMonth: undefined, endMonth: undefined, dailyAmount: 3000 });
+  const { expense, income } = loadRecurringRules(db);
+  assert.strictEqual(income.length, 1);
+  assert.strictEqual(income[0].amount, 2460000);
+  assert.strictEqual(expense.length, 3);
+  assert.deepStrictEqual(expense.find(e=>e.label==='자동매수'), { label:'자동매수', startMonth:undefined, endMonth:undefined, dailyAmount:3000 });
+  assert.strictEqual(expense.find(e=>e.label==='통신요금').startMonth, '2026-11');
 });

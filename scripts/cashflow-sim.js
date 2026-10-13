@@ -36,7 +36,7 @@ function main() {
   }
   cash = Number(cash);
 
-  const { installments, recurring } = loadProjectionInputs(db);
+  const { installments, recurring, recurringInflow } = loadProjectionInputs(db);
 
   const simulated = [];
   const phone = arg('phone', null);
@@ -45,10 +45,11 @@ function main() {
     simulated.push({ kind: 'installment', monthlyAmount: Math.round(Number(phone) / months), startMonth: arg('phone-start', asOfMonth), months, label: '휴대폰' });
   }
 
-  const base = projectCashflow({ anchor: { month: asOfMonth, amount: cash }, horizonMonths: horizon, monthlyIncome: income, recurring, installments, simulated: [] });
-  const withSim = projectCashflow({ anchor: { month: asOfMonth, amount: cash }, horizonMonths: horizon, monthlyIncome: income, recurring, installments, simulated });
+  const common = { anchor: { month: asOfMonth, amount: cash }, horizonMonths: horizon, monthlyIncome: income, recurring, recurringInflow, installments };
+  const base = projectCashflow({ ...common, simulated: [] });
+  const withSim = projectCashflow({ ...common, simulated });
 
-  console.log(`기준: ${asOfMonth} 보유현금 ${fmt(cash)} / 월유입 ${fmt(income)} / 할부 ${installments.length}건 / 반복 ${recurring.length}건`);
+  console.log(`기준: ${asOfMonth} 보유현금 ${fmt(cash)} / 월유입(플래그 ${fmt(income)} + 반복수입 ${recurringInflow.length}건) / 할부 ${installments.length} / 반복지출 ${recurring.length}`);
   console.log('월       | 유출(기본) | 잔액(기본) | 유출(+시뮬) | 잔액(+시뮬)');
   base.timeline.forEach((t, i) => {
     const s = withSim.timeline[i];

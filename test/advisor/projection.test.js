@@ -76,3 +76,17 @@ test('일일 규칙 월환산(그 달 일수)', () => {
   assert.strictEqual(r.timeline[0].outflow, 93000);  // 10월 31일 × 3,000
   assert.strictEqual(r.timeline[1].outflow, 90000);  // 11월 30일 × 3,000
 });
+
+test('반복 수입(recurringInflow) 유입 반영', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 100000 }, horizonMonths: 2, monthlyIncome: 0,
+    recurring: [{ amount: 200000 }],
+    recurringInflow: [{ amount: 500000 }, { amount: 50000, startMonth: '2026-11' }],
+  });
+  // 10월: +500k -200k = +300k → 400,000
+  assert.strictEqual(r.timeline[0].inflow, 500000);
+  assert.strictEqual(r.timeline[0].balance, 400000);
+  // 11월: +550k -200k = +350k → 750,000
+  assert.strictEqual(r.timeline[1].inflow, 550000);
+  assert.strictEqual(r.timeline[1].balance, 750000);
+});

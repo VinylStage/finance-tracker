@@ -13,24 +13,27 @@ function loadInstallments(db) {
   return rows.map((r) => ({ monthlyAmount: r.monthlyAmount, startMonth: r.startMonth, months: r.months, label: r.label }));
 }
 
-// 활성 반복규칙 → [{ amount | dailyAmount, startMonth?, endMonth?, label }].
-// 투영이 **시점 인식**으로 적용하므로(통신요금 11월부터 등) 단일 월로 미리 거르지
-// 않고 전부 넘긴다. starts_on/ends_on 은 'YYYY-MM' 로 축약.
-// freq='daily'(예: 주식 자동매수 3,000/일)는 dailyAmount 로 넘겨 투영이 그 달
-// 일수로 환산한다(월 환산 근사).
-function loadRecurringMonthly(db) {
+// 활성 반복규칙을 수입/지출로 갈라 반환.
+// → { expense: [...], income: [...] }, 각 항목은 { amount | dailyAmount, startMonth?, endMonth?, label }.
+// 수입은 카테고리 major_type='수입'(월급·경비정산 등). 투영은 **시점 인식**으로
+// 적용하므로 단일 월로 미리 거르지 않고 전부 넘긴다. freq='daily' 는 dailyAmount 로.
+function loadRecurringRules(db) {
   const rows = db.prepare(`
-    SELECT amount, merchant AS label, freq, starts_on, ends_on FROM recurring_rules
-    WHERE is_active = 1 AND interval = 1 AND freq IN ('monthly', 'daily')
+    SELECT r.amount, r.merchant AS label, r.freq, r.starts_on, r.ends_on, c.major_type AS majorType
+    FROM recurring_rules r JOIN categories c ON c.id = r.category_id
+    WHERE r.is_active = 1 AND r.interval = 1 AND r.freq IN ('monthly', 'daily')
   `).all();
-  return rows.map((r) => {
+  const expense = [], income = [];
+  for (const r of rows) {
     const base = {
       label: r.label,
       startMonth: r.starts_on ? r.starts_on.slice(0, 7) : undefined,
       endMonth: r.ends_on ? r.ends_on.slice(0, 7) : undefined,
     };
-    return r.freq === 'daily' ? { ...base, dailyAmount: r.amount } : { ...base, amount: r.amount };
-  });
+    const item = r.freq === 'daily' ? { ...base, dailyAmount: r.amount } : { ...base, amount: r.amount };
+    (r.majorType === '수입' ? income : expense).push(item);
+  }
+  return { expense, income };
 }
 
 // 기준일 이전 최근 앵커 → { month, amount } | null
@@ -43,10 +46,12 @@ function latestAnchor(db, asOfDate) {
 
 // projectCashflow 입력 묶음.
 function loadProjectionInputs(db) {
+  const { expense, income } = loadRecurringRules(db);
   return {
     installments: loadInstallments(db),
-    recurring: loadRecurringMonthly(db),
+    recurring: expense,
+    recurringInflow: income,
   };
 }
 
-module.exports = { loadInstallments, loadRecurringMonthly, latestAnchor, loadProjectionInputs };
+module.exports = { loadInstallments, loadRecurringRules, latestAnchor, loadProjectionInputs };
