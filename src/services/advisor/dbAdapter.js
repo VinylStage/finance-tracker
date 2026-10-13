@@ -13,16 +13,20 @@ function loadInstallments(db) {
   return rows.map((r) => ({ monthlyAmount: r.monthlyAmount, startMonth: r.startMonth, months: r.months, label: r.label }));
 }
 
-// 활성 월 반복규칙 → [{ amount, label }] (freq=monthly, interval=1, 현재 유효).
-function loadRecurringMonthly(db, asOfMonth) {
-  const firstDay = `${asOfMonth}-01`;
+// 활성 월 반복규칙 → [{ amount, startMonth?, endMonth?, label }].
+// 투영이 **시점 인식**으로 적용하므로(통신요금 11월부터 등) 단일 월로 미리 거르지
+// 않고 전부 넘긴다. starts_on/ends_on 은 'YYYY-MM' 로 축약해 startMonth/endMonth 로.
+function loadRecurringMonthly(db) {
   const rows = db.prepare(`
-    SELECT amount, merchant AS label FROM recurring_rules
+    SELECT amount, merchant AS label, starts_on, ends_on FROM recurring_rules
     WHERE is_active = 1 AND freq = 'monthly' AND interval = 1
-      AND (starts_on IS NULL OR starts_on <= ?)
-      AND (ends_on IS NULL OR ends_on >= ?)
-  `).all(`${asOfMonth}-31`, firstDay);
-  return rows.map((r) => ({ amount: r.amount, label: r.label }));
+  `).all();
+  return rows.map((r) => ({
+    amount: r.amount,
+    label: r.label,
+    startMonth: r.starts_on ? r.starts_on.slice(0, 7) : undefined,
+    endMonth: r.ends_on ? r.ends_on.slice(0, 7) : undefined,
+  }));
 }
 
 // 기준일 이전 최근 앵커 → { month, amount } | null
@@ -34,10 +38,10 @@ function latestAnchor(db, asOfDate) {
 }
 
 // projectCashflow 입력 묶음.
-function loadProjectionInputs(db, { asOfMonth }) {
+function loadProjectionInputs(db) {
   return {
     installments: loadInstallments(db),
-    recurring: loadRecurringMonthly(db, asOfMonth),
+    recurring: loadRecurringMonthly(db),
   };
 }
 

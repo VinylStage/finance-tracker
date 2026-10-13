@@ -23,12 +23,15 @@ test('loadInstallments 필드 매핑', () => {
   assert.deepStrictEqual(loadInstallments(db), [{ monthlyAmount: 100, startMonth: '2026-11', months: 3, label: 'X' }]);
 });
 
-test('loadRecurringMonthly 바인딩 인자(월 경계)', () => {
-  let captured;
-  const db = { prepare: (sql) => ({ all: (...a) => { captured = a; return [{ amount: 9900, label: '구독' }]; } }) };
-  const out = loadRecurringMonthly(db, '2026-10');
-  assert.deepStrictEqual(out, [{ amount: 9900, label: '구독' }]);
-  assert.deepStrictEqual(captured, ['2026-10-31', '2026-10-01']);
+test('loadRecurringMonthly: starts_on/ends_on → startMonth/endMonth 매핑(시점 인식)', () => {
+  const db = stubDb({ all: () => [
+    { amount: 9900, label: '상시구독', starts_on: null, ends_on: null },
+    { amount: 52000, label: '통신요금', starts_on: '2026-11-01', ends_on: null },
+  ] });
+  assert.deepStrictEqual(loadRecurringMonthly(db), [
+    { amount: 9900, label: '상시구독', startMonth: undefined, endMonth: undefined },
+    { amount: 52000, label: '통신요금', startMonth: '2026-11', endMonth: undefined },
+  ]);
 });
 
 test('latestAnchor 기준일 이전 최근', () => {

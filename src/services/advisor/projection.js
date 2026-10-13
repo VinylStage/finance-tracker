@@ -37,7 +37,14 @@ function projectCashflow({ anchor, horizonMonths, monthlyIncome = 0, recurring =
   if (!anchor || !anchor.month || typeof anchor.amount !== 'number') {
     throw new Error('anchor { month, amount } 가 필요합니다');
   }
-  const recurringSum = recurring.reduce((s, r) => s + r.amount, 0);
+  // 반복 고정비는 시점 인식: startMonth/endMonth 범위에서만 적용(예: 통신요금은
+  // 11월 청구분부터 52,000). 유효시작일 개념으로 "월별로 금액이 바뀌는 규칙"을
+  // (옛 규칙 종료 + 새 규칙 시작)으로 표현할 수 있다.
+  const recurOut = (ym) => recurring.reduce((s, r) => {
+    if (r.startMonth && ym < r.startMonth) return s;
+    if (r.endMonth && ym > r.endMonth) return s;
+    return s + r.amount;
+  }, 0);
 
   const instOut = (list, ym) => list.reduce((s, it) => {
     if (it.kind && it.kind !== 'installment') return s;
@@ -54,7 +61,7 @@ function projectCashflow({ anchor, horizonMonths, monthlyIncome = 0, recurring =
   for (let i = 0; i < horizonMonths; i++) {
     const ym = monthAdd(anchor.month, i);
     const inflow = monthlyIncome;
-    const outflow = recurringSum + instOut(installments, ym) + instOut(simulated, ym) + lumpOut(ym);
+    const outflow = recurOut(ym) + instOut(installments, ym) + instOut(simulated, ym) + lumpOut(ym);
     balance += inflow - outflow;
     if (balance < minBalance) minBalance = balance;
     if (firstNegativeMonth === null && balance < 0) firstNegativeMonth = ym;

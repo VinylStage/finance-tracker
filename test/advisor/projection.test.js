@@ -52,3 +52,16 @@ test('lumpsum(일시 지출) 특정 월 반영', () => {
   assert.strictEqual(r.timeline[1].balance, -100000);
   assert.strictEqual(r.firstNegativeMonth, '2026-11');
 });
+
+test('시점 인식 반복(통신요금 11월부터)', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 1000000 }, horizonMonths: 3, monthlyIncome: 0,
+    recurring: [
+      { amount: 100000, label: '상시' },
+      { amount: 52000, startMonth: '2026-11', label: '통신요금' },
+    ],
+  });
+  assert.strictEqual(r.timeline[0].outflow, 100000); // 10월: 통신요금 미적용
+  assert.strictEqual(r.timeline[1].outflow, 152000); // 11월: +통신요금
+  assert.strictEqual(r.timeline[2].outflow, 152000);
+});

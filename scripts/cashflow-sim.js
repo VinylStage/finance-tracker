@@ -36,7 +36,7 @@ function main() {
   }
   cash = Number(cash);
 
-  const { installments, recurring } = loadProjectionInputs(db, { asOfMonth });
+  const { installments, recurring } = loadProjectionInputs(db);
 
   const simulated = [];
   const phone = arg('phone', null);
