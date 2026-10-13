@@ -44,7 +44,7 @@ function AnchorForm({ onSaved, initial }) {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border border-line rounded px-2 py-1 text-ink" />
       </label>
       <label className="flex flex-col text-caption text-xs">통장 잔액(원)
-        <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d-]/g, ''))} className="border border-line rounded px-2 py-1 text-ink w-36" placeholder="600000" />
+        <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d-]/g, ''))} className="border border-line rounded px-2 py-1 text-ink w-36" placeholder="예: 1000000" />
       </label>
       <button type="submit" className="px-3 py-1 rounded bg-brand-fill text-white">저장</button>
       {err && <span className="text-loss-text text-xs">{err}</span>}

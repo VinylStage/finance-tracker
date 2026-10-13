@@ -44,7 +44,7 @@ describe('AdvisorHeadroomCard', () => {
     mock({ headErr: e });
     post.mockResolvedValue({ id: 1 });
     render(<AdvisorHeadroomCard />);
-    const amount = await screen.findByPlaceholderText('600000');
+    const amount = await screen.findByPlaceholderText('예: 1000000');
     await userEvent.type(amount, '600000');
     mock();
     await userEvent.click(screen.getByRole('button', { name: '저장' }));
