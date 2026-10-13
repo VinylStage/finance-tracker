@@ -35,6 +35,8 @@ const TRANSFORMS = {
   // 날짜
   slash_ymd: (v) => { const s = cell([v], 0); return s ? s.split(' ')[0].replace(/\//g, '-') : null; },
   dot_ymd: (v) => { const s = cell([v], 0); return s ? s.replace(/\./g, '-') : null; },
+  // 날짜에 시각이 붙은 경우(예: "2026.10.08 05:00") 첫 토큰만.
+  dot_ymd_dt: (v) => { const s = cell([v], 0); return s ? s.split(' ')[0].replace(/\./g, '-') : null; },
   korean_ymd: (v) => {
     const s = cell([v], 0); if (!s) return null;
     const m = s.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
@@ -58,6 +60,8 @@ const PREDICATES = {
   raw_not_equals: (row, rule) => row[rule.col] !== rule.value,
   equals: (row, rule) => cell(row, rule.col) === rule.value,
   not_equals: (row, rule) => cell(row, rule.col) !== rule.value,
+  // 열 값이 특정 문자열을 포함하면 true(예: 신한 매입구분 '…취소…').
+  contains: (row, rule) => { const s = cell(row, rule.col); return !!s && s.includes(rule.value); },
 };
 
 // 행 규칙(루프 중단/스킵)을 순서대로 평가. 첫 트리거의 action 반환, 없으면 'keep'.
