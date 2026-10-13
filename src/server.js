@@ -50,6 +50,7 @@ app.use('/api/card-benefits', require('./routes/cardBenefits'));
 app.use('/api/card-strategy', require('./routes/cardStrategy'));
 app.use('/api/card-overseas', require('./routes/cardOverseas'));
 app.use('/api/data-integrity', require('./routes/dataIntegrity'));
+app.use('/api/advisor',      require('./routes/advisor'));
 
 // 감사로그 정리(#367). 기동 시 1회, **catch-up 보다 먼저** 돈다.
 //

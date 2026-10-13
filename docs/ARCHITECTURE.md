@@ -32,10 +32,11 @@ CSS 에서 사라진다.
 
 <!-- inventory:start -->
 
-### 백엔드 라우트 (24개 파일 / API 마운트 24개)
+### 백엔드 라우트 (25개 파일 / API 마운트 25개)
 
 | 마운트 | 파일 |
 |---|---|
+| `/api/advisor` | `advisor.js` |
 | `/api/audit` | `audit.js` |
 | `/api/card-benefits` | `cardBenefits.js` |
 | `/api/card-import` | `cardImport.js` |
@@ -73,9 +74,9 @@ CSS 에서 사라진다.
 
 `AnchorNav` · `BottomTabBar` · `CardBenefitCapsFields` · `CardBenefitConditionFields` · `CardBenefitSection` · `CardEstimateHint` · `CardInventorySection` · `CardOverseasSection` · `CardPolicySection` · `CardProductSection` · `CardRemapSection` · `CardTierSection` · `CashFlowBars` · `CashFlowSankey` · `CatchupNotice` · `CategoryBadge` · `CategorySpendSection` · `CommandPalette` · `ConfirmProvider` · `DataIntegritySection` · `DebtInterestProjection` · `DebtRateHistory` · `DerivedBadge` · `DerivedTransactions` · `DuplicateCandidates` · `EmptyState` · `ErrorBoundary` · `HeatmapCardPicker` · `HeatmapPeriodPicker` · `Icon` · `InstallmentBillingHint` · `InstallmentMonthsPicker` · `InstallmentRegenerate` · `LoadError` · `Modal` · `MonthCalendarGrid` · `PeriodFilter` · `ReactivateRuleDialog` · `RetentionNotice` · `SavingsGoalBar` · `SpendHeatmap` · `ThresholdExclusionSection` · `TransactionCalendar` · `TransactionForm` · `TransactionList` · `TrustPanel` · `UndoSnackbar` · `WelcomeFlow` · `WelcomeGate` · `YearHeatmap`
 
-### 마이그레이션 (34개)
+### 마이그레이션 (35개)
 
-최신: `034-transaction-is-overseas`
+최신: `035-cash-anchors`
 
 
 <!-- inventory:end -->

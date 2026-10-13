@@ -53,12 +53,18 @@ function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed 
     if (items.length) timeline.push({ date: cur, inflow, outflow, balance, items });
   }
 
+  // 여윳돈은 "그 돈이 언제 통장에서 빠지는가" 에 따라 둘이다.
+  //   capacity          — 신용카드(spendDate 에 청구): 청구 전 잔액은 줄이지 않으므로
+  //                        spendDate 이후 최저잔액이 한도. 단 그 전에 이미 바닥이면
+  //                        추가 여력은 없고 부족분(음수)을 그대로 보인다.
+  //   capacityImmediate — 체크카드·현금(지금 바로 빠짐): 전 구간 최저잔액.
   let capacity = null;
   if (spendDate) {
-    // 결제일 전에 이미 바닥나면 추가사용 여력은 없다(부족분은 음수로 보인다).
-    capacity = Math.min(minBefore, minAfter === Infinity ? balance : minAfter);
+    const after = minAfter === Infinity ? balance : minAfter;
+    capacity = minBefore < 0 ? minBefore : after;
   }
-  return { endBalance: balance, minBalance, minDate, minBefore: spendDate ? minBefore : null, minAfter: spendDate ? minAfter : null, minAfterDate, capacity, timeline };
+  const capacityImmediate = minBalance;
+  return { endBalance: balance, minBalance, minDate, minBefore: spendDate ? minBefore : null, minAfter: spendDate ? minAfter : null, minAfterDate, capacity, capacityImmediate, timeline };
 }
 
 module.exports = { cycleHeadroom, addDays, dayOf };

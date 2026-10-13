@@ -28,7 +28,10 @@ test('scheduled + 기간 고정비 + 수입 → 추가사용 가능액(capacity)
   // 10/25: 600000 +2000000 -1500000 = 1,100,000 / 11/10: -50,000 → 1,050,000 / 11/14: -100,000 → 950,000
   assert.strictEqual(r.minBefore, 600000);
   assert.strictEqual(r.minAfter, 950000);
-  assert.strictEqual(r.capacity, 600000);   // 앞 구간 최저가 더 낮으면 그게 한도
+  // 신용카드 사용분은 11/14 에 빠지므로 그 전 잔액을 줄이지 않는다 → 이후 최저가 한도
+  assert.strictEqual(r.capacity, 950000);
+  // 체크카드·현금은 지금 바로 빠진다 → 전 구간 최저
+  assert.strictEqual(r.capacityImmediate, 600000);
 });
 
 test('결제일 전에 바닥나면 capacity 는 음수(부족분)', () => {

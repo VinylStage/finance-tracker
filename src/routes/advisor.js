@@ -1,0 +1,115 @@
+'use strict';
+
+// 재무상담/지출전략 어드바이저 API (스펙 B).
+//
+//   GET  /api/advisor/projection  장기 월별 현금흐름 전망(보유현금 앵커 기준)
+//   GET  /api/advisor/headroom    이번 청구주기 여윳돈(다음 결제일까지 일 단위)
+//   GET  /api/advisor/anchor      기준일 이전 최근 보유현금 앵커
+//   POST /api/advisor/anchor      보유현금 앵커 입력(현재시점 리셋)
+//
+// 계산은 순수 모듈(projection·headroom)이 하고, 이 라우트는 DB 읽기·입력 검증만 한다.
+// 거래 원장은 건드리지 않는다 — 쓰기는 cash_anchors 한 테이블뿐이다.
+
+const express = require('express');
+const router = express.Router();
+const db = require('../db/init');
+const { serverError } = require('../utils/errors');
+const { localYMD } = require('../utils/date');
+const { projectCashflow } = require('../services/advisor/projection');
+const { loadProjectionInputs, latestAnchor } = require('../services/advisor/dbAdapter');
+const { cycleHeadroom } = require('../services/advisor/headroom');
+const { loadHeadroomInputs } = require('../services/advisor/headroomInputs');
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const YM = /^\d{4}-\d{2}$/;
+const isDate = (v) => YMD.test(v) && !Number.isNaN(new Date(v).getTime());
+
+function intParam(raw, { min, max, def }) {
+  if (raw === undefined || raw === '') return def;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max) return NaN;
+  return n;
+}
+
+// GET /api/advisor/projection?asOf=&horizon=&phone=&phoneMonths=&phoneStart=
+router.get('/projection', (req, res) => {
+  try {
+    const asOf = req.query.asOf || localYMD();
+    if (!isDate(asOf)) return res.status(400).json({ error: 'asOf 는 YYYY-MM-DD 형식이어야 합니다.' });
+    const horizon = intParam(req.query.horizon, { min: 1, max: 120, def: 24 });
+    if (Number.isNaN(horizon)) return res.status(400).json({ error: 'horizon 은 1~120 개월 정수입니다.' });
+
+    const anchor = latestAnchor(db, asOf);
+    if (!anchor) return res.status(409).json({ error: '보유현금 앵커가 없습니다. 먼저 기준일 보유현금을 입력해 주세요.' });
+
+    const simulated = [];
+    if (req.query.phone !== undefined && req.query.phone !== '') {
+      const price = intParam(req.query.phone, { min: 1, max: 100000000, def: null });
+      const months = intParam(req.query.phoneMonths, { min: 1, max: 60, def: 24 });
+      const start = req.query.phoneStart || anchor.month;
+      if (Number.isNaN(price) || Number.isNaN(months) || !YM.test(start)) {
+        return res.status(400).json({ error: '휴대폰 가정은 phone(원)·phoneMonths(1~60)·phoneStart(YYYY-MM) 로 주세요.' });
+      }
+      simulated.push({ kind: 'installment', monthlyAmount: Math.round(price / months), startMonth: start, months, label: '휴대폰' });
+    }
+
+    const inputs = loadProjectionInputs(db);
+    const common = { anchor, horizonMonths: horizon, monthlyIncome: 0, ...inputs };
+    const base = projectCashflow({ ...common, simulated: [] });
+    const withSim = simulated.length ? projectCashflow({ ...common, simulated }) : null;
+    res.json({ anchor, horizon, simulated, base, withSim });
+  } catch (e) {
+    serverError(res, e, 'advisor.projection');
+  }
+});
+
+// GET /api/advisor/headroom?asOf=&unpaid=삼성카드,현대카드&spendDate=&target=
+router.get('/headroom', (req, res) => {
+  try {
+    const asOf = req.query.asOf || localYMD();
+    if (!isDate(asOf)) return res.status(400).json({ error: 'asOf 는 YYYY-MM-DD 형식이어야 합니다.' });
+    for (const k of ['spendDate', 'target']) {
+      if (req.query[k] && !isDate(req.query[k])) return res.status(400).json({ error: `${k} 는 YYYY-MM-DD 형식이어야 합니다.` });
+    }
+    const unpaidCards = String(req.query.unpaid || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const inp = loadHeadroomInputs(db, { asOf, unpaidCards, spendDate: req.query.spendDate, target: req.query.target });
+    if (inp.error) return res.status(409).json({ error: inp.error });
+    if (!inp.spendDate) return res.status(409).json({ error: '카드 결제일/마감일이 설정된 카드가 없어 청구일을 정할 수 없습니다.' });
+    const r = cycleHeadroom(inp);
+    res.json({
+      asOf: inp.asOf, anchorAmount: inp.anchorAmount, spendDate: inp.spendDate, target: inp.target,
+      unpaidCards, scheduled: inp.scheduled, warnings: inp.warnings,
+      capacity: r.capacity, capacityImmediate: r.capacityImmediate,
+      minBefore: r.minBefore, minAfter: r.minAfter, minDate: r.minDate, timeline: r.timeline,
+    });
+  } catch (e) {
+    serverError(res, e, 'advisor.headroom');
+  }
+});
+
+router.get('/anchor', (req, res) => {
+  try {
+    const asOf = req.query.asOf || localYMD();
+    if (!isDate(asOf)) return res.status(400).json({ error: 'asOf 는 YYYY-MM-DD 형식이어야 합니다.' });
+    const row = db.prepare('SELECT id, as_of_date, amount, memo FROM cash_anchors WHERE as_of_date <= ? ORDER BY as_of_date DESC, id DESC LIMIT 1').get(asOf);
+    res.json(row || null);
+  } catch (e) {
+    serverError(res, e, 'advisor.anchor.get');
+  }
+});
+
+// POST /api/advisor/anchor { as_of_date, amount, memo? }
+router.post('/anchor', (req, res) => {
+  try {
+    const { as_of_date: date, amount, memo } = req.body || {};
+    if (!isDate(String(date || ''))) return res.status(400).json({ error: '기준일은 YYYY-MM-DD 형식이어야 합니다.' });
+    const n = Number(amount);
+    if (!Number.isInteger(n) || Math.abs(n) > 10000000000) return res.status(400).json({ error: '보유현금은 원 단위 정수로 입력해 주세요.' });
+    const id = db.prepare('INSERT INTO cash_anchors (as_of_date, amount, memo) VALUES (?, ?, ?)').run(date, n, memo ? String(memo).slice(0, 200) : null).lastInsertRowid;
+    res.status(201).json({ id, as_of_date: date, amount: n });
+  } catch (e) {
+    serverError(res, e, 'advisor.anchor.post');
+  }
+});
+
+module.exports = router;
