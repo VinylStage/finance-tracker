@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const { csrfGuard } = require('./utils/csrfGuard');
 const { securityHeaders } = require('./utils/securityHeaders');
+const { hostGuard } = require('./utils/hostGuard');
 const { auditContext, bindAuditDb } = require('./utils/auditContext');
 const db = require('./db/init');
 const { runCatchup, setLastCatchupSummary } = require('./services/recurringCatchup');
@@ -12,6 +13,9 @@ const app = express();
 
 app.disable('x-powered-by');
 app.use(securityHeaders);
+// Host 헤더 허용목록(감사 M4) — DNS 리바인딩 차단. 보안 헤더 바로 뒤, 본문 파싱
+// 전에 둔다(거부할 요청의 본문을 읽지 않는다).
+app.use(hostGuard);
 
 // 백업 복원(import)은 큰 JSON 본문을 받는다. 전역 파서가 먼저 실행되므로
 // 라우트별 limit 설정은 무효가 된다. 전역에서 한도를 올려 통일한다.
