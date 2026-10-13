@@ -56,14 +56,15 @@ test('앵커 입력 검증 + 저장', async () => {
   assert.strictEqual(got.amount, 600000);
 });
 
-test('장기 전망 — horizon 임의 확장 + 휴대폰 가정', async () => {
-  const r = await (await fetch(`${BASE}/api/advisor/projection?asOf=2026-10-13&horizon=24&phone=1200000&phoneMonths=24&phoneStart=2026-11`)).json();
+test('장기 전망 — horizon 임의 확장 + 범용 추가지출 시나리오(이름 자유)', async () => {
+  const r = await (await fetch(`${BASE}/api/advisor/projection?asOf=2026-10-13&horizon=24&simAmount=1200000&simMonths=24&simStart=2026-11&simLabel=${encodeURIComponent('노트북')}`)).json();
   assert.strictEqual(r.base.timeline.length, 24);
   assert.strictEqual(r.base.timeline[23].month, '2028-09');
   // 10월: +2,000,000 −500,000 −70,000(10월 청구 할부) = +1,430,000 → 2,030,000
   assert.strictEqual(r.base.timeline[0].balance, 2030000);
-  // 휴대폰 50,000/월이 11월부터 붙는다
+  // 시나리오 50,000/월이 11월부터 붙는다 + 이름이 반영된다
   assert.strictEqual(r.withSim.timeline[1].outflow - r.base.timeline[1].outflow, 50000);
+  assert.strictEqual(r.simulated[0].label, '노트북');
   const bad = await fetch(`${BASE}/api/advisor/projection?asOf=2026-10-13&horizon=0`);
   assert.strictEqual(bad.status, 400);
 });

@@ -1911,8 +1911,8 @@
 쓰기는 `cash_anchors` 한 표뿐이고 거래 원장은 건드리지 않는다.
 
 ### GET /api/advisor/projection
-- **Query**: `asOf`(YYYY-MM-DD, 기본 오늘) · `horizon`(1~120개월, 기본 24) · `phone`(원, 선택) · `phoneMonths`(1~60, 기본 24) · `phoneStart`(YYYY-MM, 기본 앵커월)
-- **동작**: 기준일 이전 최근 보유현금 앵커에서 출발해 월별로 전개. 반복 수입/지출(시점 인식, 일일 규칙은 그 달 일수로 환산)·할부 회차·가정 지출(휴대폰 할부)을 반영
+- **Query**: `asOf`(YYYY-MM-DD, 기본 오늘) · `horizon`(1~120개월, 기본 24) · `simAmount`(원, 선택) · `simMonths`(1~120, 기본 1) · `simStart`(YYYY-MM, 기본 앵커월) · `simLabel`(시나리오 이름, 기본 "추가 지출")
+- **동작**: 기준일 이전 최근 보유현금 앵커에서 출발해 월별로 전개. 반복 수입/지출(시점 인식, 일일 규칙은 그 달 일수로 환산)·할부 회차·추가 지출 시나리오(할부, 이름 자유)를 선택적으로 반영
 - **응답**: `{ anchor:{month,amount}, horizon, simulated[], base:{timeline[{month,inflow,outflow,net,balance}],minBalance,firstNegativeMonth}, withSim|null }`
 - **오류**: 400 형식 오류 · 409 앵커 없음
 
