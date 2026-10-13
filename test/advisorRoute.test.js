@@ -92,3 +92,14 @@ test('여윳돈 — target 당일 예정분은 포함', async () => {
   const r = await (await fetch(`${BASE}/api/advisor/headroom?asOf=2026-10-13&unpaid=${encodeURIComponent('테스트B카드')}&target=2026-11-14`)).json();
   assert.ok(r.scheduled.some((s) => s.date === '2026-11-14'));
 });
+
+test('베이스라인 입력 — through 월 말일까지(31일 달)', () => {
+  const { loadBaselineInputs } = require('../src/services/advisor/headroomInputs');
+  const db = new Database(server.dbPath, { readonly: true });
+  try {
+    const inp = loadBaselineInputs(db, { asOf: '2026-10-13', through: '2026-12' });
+    assert.strictEqual(inp.target, '2026-12-31');
+  } finally {
+    db.close();
+  }
+});

@@ -62,3 +62,26 @@ test('청구일 당일 잔액도 청구 후 구간에 포함한다', () => {
   assert.strictEqual(r.minAfter, 600000);   // 10/18 당일(수입 전)
   assert.strictEqual(r.capacity, 600000);
 });
+
+test('월별 집계: 기준월은 앵커 다음날부터만, 항목별 분해·월말잔액', () => {
+  const r = cycleHeadroom({
+    asOf: '2026-10-13', anchorAmount: 600000, target: '2026-11-30',
+    incomes: [{ amount: 2000000, day: 25 }, { amount: 100000, day: 10 }],
+    monthlyFixed: [{ amount: 500000, day: 1 }, { amount: 200000, day: 10 }],
+    dailyOut: 1000,
+    scheduled: [{ date: '2026-11-14', amount: 50000, label: '할부' }],
+  });
+  const [oct, nov] = r.months;
+  // 10월: 10/14~31(18일). 10/1·10/10 흐름은 이미 앵커에 반영 → 세지 않는다
+  assert.deepStrictEqual(
+    { month: oct.month, inflow: oct.inflow, fixed: oct.fixed, daily: oct.daily, net: oct.net, partial: oct.partial },
+    { month: '2026-10', inflow: 2000000, fixed: 0, daily: 18000, net: 1982000, partial: true },
+  );
+  assert.strictEqual(oct.endBalance, 2582000);
+  // 11월 전체: 수입 2,100,000 − 고정 700,000 − 할부 50,000 − 일일 30,000 = 1,320,000
+  assert.deepStrictEqual(
+    { inflow: nov.inflow, fixed: nov.fixed, scheduled: nov.scheduled, daily: nov.daily, net: nov.net, partial: nov.partial },
+    { inflow: 2100000, fixed: 700000, scheduled: 50000, daily: 30000, net: 1320000, partial: false },
+  );
+  assert.strictEqual(nov.endBalance, 2582000 + 1320000);
+});

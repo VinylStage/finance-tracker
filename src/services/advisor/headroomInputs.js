@@ -148,3 +148,13 @@ function loadHeadroomInputs(db, { asOf, unpaidCards = [], spendDate, target } = 
 }
 
 module.exports = { loadHeadroomInputs, paymentDate, nextIncomeDate };
+
+// 월별 여유자금 베이스라인 — 확정된 흐름만(가정 지출 없음). 앵커 다음날부터
+// through 월 말일까지 일 단위로 돌려 월별로 집계한다. 여윳돈과 같은 엔진·같은
+// 선결제 규칙을 쓰므로 두 화면 숫자가 어긋나지 않는다.
+function loadBaselineInputs(db, { asOf, through, unpaidCards = [] }) {
+  const target = paymentDate(through, 31); // through 월 말일
+  return loadHeadroomInputs(db, { asOf, unpaidCards, spendDate: target, target });
+}
+
+module.exports.loadBaselineInputs = loadBaselineInputs;

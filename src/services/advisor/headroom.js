@@ -34,6 +34,15 @@ function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed 
   let minBefore = balance;              // spendDate 이전 구간 최저
   let minAfter = Infinity, minAfterDate = null; // spendDate 이후 구간 최저
   const timeline = [];
+  // 월별 집계 — 월별 여유자금 베이스라인(순유입 = 수입 − 고정비 − 카드청구·할부 − 일일).
+  // 기준월은 앵커 다음날부터만 센다(앵커 잔액에 이미 반영된 흐름을 다시 세지 않는다).
+  const months = [];
+  // partial: 그 달을 1일부터 세지 않았다(기준월은 앵커 다음날부터).
+  const monthRow = (ym, day) => {
+    let m = months[months.length - 1];
+    if (!m || m.month !== ym) { m = { month: ym, inflow: 0, fixed: 0, scheduled: 0, daily: 0, outflow: 0, net: 0, endBalance: 0, partial: day !== 1 }; months.push(m); }
+    return m;
+  };
   const schedByDate = {};
   for (const s of scheduled) (schedByDate[s.date] = schedByDate[s.date] || []).push(s);
 
@@ -42,11 +51,14 @@ function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed 
     cur = addDays(cur, 1);
     const d = dayOf(cur), ym = monthOf(cur);
     const items = [];
+    const row = monthRow(ym, d);
     let inflow = 0, outflow = dailyOut;
+    row.daily += dailyOut;
     for (const inc of incomes) if (inc.day === d && inPeriod(inc, ym)) { inflow += inc.amount; items.push(`+${inc.label || '수입'}`); }
-    for (const f of monthlyFixed) if (f.day === d && inPeriod(f, ym)) { outflow += f.amount; items.push(`-${f.label || '고정'}`); }
-    for (const s of (schedByDate[cur] || [])) { outflow += s.amount; items.push(`-${s.label}`); }
+    for (const f of monthlyFixed) if (f.day === d && inPeriod(f, ym)) { outflow += f.amount; row.fixed += f.amount; items.push(`-${f.label || '고정'}`); }
+    for (const s of (schedByDate[cur] || [])) { outflow += s.amount; row.scheduled += s.amount; items.push(`-${s.label}`); }
     balance += inflow - outflow;
+    row.inflow += inflow; row.outflow += outflow; row.net = row.inflow - row.outflow; row.endBalance = balance;
     if (balance < minBalance) { minBalance = balance; minDate = cur; }
     if (spendDate && cur < spendDate) minBefore = Math.min(minBefore, balance);
     if (spendDate && cur >= spendDate && balance < minAfter) { minAfter = balance; minAfterDate = cur; }
@@ -64,7 +76,7 @@ function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed 
     capacity = minBefore < 0 ? minBefore : after;
   }
   const capacityImmediate = minBalance;
-  return { endBalance: balance, minBalance, minDate, minBefore: spendDate ? minBefore : null, minAfter: spendDate ? minAfter : null, minAfterDate, capacity, capacityImmediate, timeline };
+  return { endBalance: balance, minBalance, minDate, minBefore: spendDate ? minBefore : null, minAfter: spendDate ? minAfter : null, minAfterDate, capacity, capacityImmediate, timeline, months };
 }
 
 module.exports = { cycleHeadroom, addDays, dayOf };
