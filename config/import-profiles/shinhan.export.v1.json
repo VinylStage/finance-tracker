@@ -1,0 +1,15 @@
+{
+  "format_id": "shinhan.export.v1", "issuer": "신한카드", "source_type": "usage_history",
+  "settlement_default": "confirmed",
+  "sheet": { "select": "by_index", "index": 0 },
+  "header": { "detect": "token_row", "tokens": ["거래일", "가맹점명", "승인번호"], "scan": 5 },
+  "columns": { "date": 0, "merchant": 3, "approval": 5, "amount": 6, "installment_flag": 8 },
+  "transforms": {
+    "date": { "fn": "dot_ymd_dt" },
+    "merchant": { "fn": "raw" },
+    "approval": { "fn": "str_or_null" },
+    "amount": { "fn": "amount_num" },
+    "installment_flag": { "fn": "raw_equals", "value": "할부" }
+  },
+  "cancelled": { "fn": "contains", "col": 7, "value": "취소" }
+}
