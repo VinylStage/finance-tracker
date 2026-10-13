@@ -43,10 +43,12 @@ function latestAnchorRow(db, asOf) {
   return db.prepare('SELECT as_of_date, amount FROM cash_anchors WHERE as_of_date <= ? ORDER BY as_of_date DESC, id DESC LIMIT 1').get(asOf);
 }
 
-function loadRules(db, asOf) {
+function loadRules(db, asOf, days = {}, warnings = []) {
   const rows = db.prepare(`
-    SELECT r.merchant AS label, r.amount, r.day_of_month AS day, r.freq, r.starts_on, r.ends_on, c.major_type AS majorType
+    SELECT r.merchant AS label, r.amount, r.day_of_month AS day, r.freq, r.starts_on, r.ends_on, c.major_type AS majorType,
+           pm.name AS card, pm.type AS cardType
     FROM recurring_rules r JOIN categories c ON c.id = r.category_id
+    LEFT JOIN payment_methods pm ON pm.id = r.payment_method_id
     WHERE r.is_active = 1 AND r.interval = 1 AND r.freq IN ('monthly', 'daily')
   `).all();
   const per = (r) => ({
@@ -55,11 +57,23 @@ function loadRules(db, asOf) {
     endMonth: r.ends_on ? r.ends_on.slice(0, 7) : undefined,
   });
   const incomes = rows.filter((r) => r.majorType === '수입' && r.freq === 'monthly').map(per);
-  const monthlyFixed = rows.filter((r) => r.majorType !== '수입' && r.freq === 'monthly').map(per);
+  // 카드로 결제되는 고정지출(예: 통신요금 자동납부)은 이용일이 아니라 그 카드
+  // 결제일에 현금이 빠진다 → 현금 고정비에서 빼서 cardFixed 로. 결제일 미설정
+  // 카드면 경고를 내고 현금으로 둔다(빠뜨리는 것보다 낫다).
+  const monthlyFixed = [], cardFixed = [];
+  for (const r of rows.filter((x) => x.majorType !== '수입' && x.freq === 'monthly')) {
+    if (r.card && days[r.card]) cardFixed.push({ ...per(r), card: r.card });
+    else {
+      if (r.card && ['신용', '체크'].includes(r.cardType)) {
+        warnings.push(`${r.card}: 결제일 미설정 — '${r.label}' 을 현금 유출로 계산`);
+      }
+      monthlyFixed.push(per(r));
+    }
+  }
   const dailyOut = rows
     .filter((r) => r.freq === 'daily' && r.majorType !== '수입' && (!r.ends_on || r.ends_on >= asOf))
     .reduce((s, r) => s + r.amount, 0);
-  return { incomes, monthlyFixed, dailyOut };
+  return { incomes, monthlyFixed, cardFixed, dailyOut };
 }
 
 // 다음 수입일(가장 큰 월 수입 기준) — from 이후 첫 발생일.
@@ -82,7 +96,7 @@ function loadHeadroomInputs(db, { asOf, unpaidCards = [], spendDate, target } = 
   // 계산은 앵커 시점부터 — 앵커 이후 흐름을 빠뜨리지 않는다.
   asOf = anchorRow.as_of_date;
   const days = cardDays(db);
-  const { incomes, monthlyFixed, dailyOut } = loadRules(db, asOf);
+  const { incomes, monthlyFixed, cardFixed, dailyOut } = loadRules(db, asOf, days, warnings);
 
   // 새 사용분이 청구되는 날: 선결제(=미결제 목록 밖) 카드 중 가장 이른 다음 결제일.
   if (!spendDate) {
@@ -137,6 +151,17 @@ function loadHeadroomInputs(db, { asOf, unpaidCards = [], spendDate, target } = 
     const cp = days[i.card];
     if (!cp) { warnings.push(`${i.card}: 결제일 미설정 — 할부 회차 일정 계산 불가`); continue; }
     for (let k = 0; k < i.months; k++) add(paymentDate(monthAddYM(i.sm, k), cp.billing_cycle_day), i.card, i.amt, '할부회차');
+  }
+  // 카드 결제 고정지출: 앵커 이후 이용분만(그 전 이용분은 미결제 카드면 거래내역으로,
+  // 선결제 카드면 이미 정산으로 잡혀 있다) — 이용일 → cardBilling 으로 결제일.
+  for (const f of cardFixed) {
+    const cp = days[f.card];
+    for (let ym = asOf.slice(0, 7); ym <= target.slice(0, 7); ym = monthAddYM(ym, 1)) {
+      if ((f.startMonth && ym < f.startMonth) || (f.endMonth && ym > f.endMonth)) continue;
+      const usage = paymentDate(ym, f.day);
+      if (usage <= asOf) continue;
+      add(paymentDate(billingMonthFor(usage, cp), cp.billing_cycle_day), f.card, f.amount, `고정청구(${f.label})`);
+    }
   }
   scheduled.sort((a, b) => (a.date < b.date ? -1 : 1));
 

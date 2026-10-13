@@ -85,3 +85,39 @@ test('월별 집계: 기준월은 앵커 다음날부터만, 항목별 분해·�
   );
   assert.strictEqual(nov.endBalance, 2582000 + 1320000);
 });
+
+test('일별 원자료 + 일별 여유자금(다음 월급 전날까지 최저잔액)', () => {
+  const r = cycleHeadroom({
+    asOf: '2026-10-13', anchorAmount: 1000000, target: '2026-11-05', recordDaily: true,
+    incomes: [{ amount: 2000000, day: 25, label: '월급' }],
+    monthlyFixed: [{ amount: 300000, day: 20 }, { amount: 3000000, day: 28 }],
+  });
+  const at = (d) => r.days.find((x) => x.date === d);
+  assert.strictEqual(r.days.length, 24);                 // 10/13(앵커)~11/05
+  assert.strictEqual(at('2026-10-13').balance, 1000000);
+  assert.strictEqual(at('2026-10-24').balance, 700000);
+  assert.strictEqual(at('2026-10-25').balance, 2700000);
+  assert.strictEqual(at('2026-10-28').balance, -300000);
+  // 월급 전 구간은 월급 뒤 큰 유출과 섞이지 않는다
+  assert.strictEqual(at('2026-10-13').spendable, 700000);
+  assert.strictEqual(at('2026-10-24').spendable, 700000);
+  // 월급날부터는 다음 월급 전까지(여기선 구간 끝) — 10/28 유출이 걸린다
+  assert.strictEqual(at('2026-10-25').spendable, -300000);
+  assert.strictEqual(r.days[r.days.length - 1].spendable, -300000);
+});
+
+test('recordDaily 를 끄면 days 는 null', () => {
+  const r = cycleHeadroom({ asOf: '2026-10-13', anchorAmount: 0, target: '2026-10-15' });
+  assert.strictEqual(r.days, null);
+});
+
+test('월급날은 가장 큰 수입 기준(작은 수입이 먼저 나열돼도)', () => {
+  const r = cycleHeadroom({
+    asOf: '2026-10-13', anchorAmount: 1000000, target: '2026-11-05', recordDaily: true,
+    incomes: [{ amount: 100000, day: 20, label: '정산' }, { amount: 2000000, day: 25, label: '월급' }],
+    monthlyFixed: [{ amount: 3000000, day: 28 }],
+  });
+  const at = (d) => r.days.find((x) => x.date === d);
+  // 10/20 정산은 월급날이 아니다 → 10/24 의 창은 10/24 하루(다음날이 월급), 10/28 유출과 무관
+  assert.strictEqual(at('2026-10-24').spendable, 1100000);
+});
