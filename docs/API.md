@@ -1904,3 +1904,29 @@
 - **비고**: 문서가 없으면 **404** 와 `{ "error": "가이드 문서를 찾을 수 없습니다." }`.
   경로는 `GUIDE_PATH` 환경변수로 바꿔 끼울 수 있다 — 404 경로를 테스트하려면 문서를
   치워야 하는데, 테스트가 중간에 죽으면 저장소 파일이 사라진 채 남기 때문이다.
+
+## advisor.js
+
+재무상담/지출전략 어드바이저(스펙 B). 계산은 `services/advisor/*` 순수 모듈, 라우트는 DB 읽기·검증만 한다.
+쓰기는 `cash_anchors` 한 표뿐이고 거래 원장은 건드리지 않는다.
+
+### GET /api/advisor/projection
+- **Query**: `asOf`(YYYY-MM-DD, 기본 오늘) · `horizon`(1~120개월, 기본 24) · `phone`(원, 선택) · `phoneMonths`(1~60, 기본 24) · `phoneStart`(YYYY-MM, 기본 앵커월)
+- **동작**: 기준일 이전 최근 보유현금 앵커에서 출발해 월별로 전개. 반복 수입/지출(시점 인식, 일일 규칙은 그 달 일수로 환산)·할부 회차·가정 지출(휴대폰 할부)을 반영
+- **응답**: `{ anchor:{month,amount}, horizon, simulated[], base:{timeline[{month,inflow,outflow,net,balance}],minBalance,firstNegativeMonth}, withSim|null }`
+- **오류**: 400 형식 오류 · 409 앵커 없음
+
+### GET /api/advisor/headroom
+- **Query**: `asOf` · `unpaid`(아직 결제 전인 카드사 이름, 쉼표 구분) · `spendDate`·`target`(선택, 기본은 자동)
+- **동작**: 앵커는 "결제 후" 잔액으로 본다. `unpaid` 카드만 앵커일까지의 사용분을 `cardBilling` 규칙(결제일·마감일)으로 청구일별 예정 유출로 잡고, 할부 회차는 결제일이 구간 안이면 잡는다(선결제 카드의 현재 청구서 이전 건은 제외). `spendDate` 기본값은 선결제 카드에 지금 사용하면 청구되는 가장 이른 날, `target` 기본값은 그 뒤 첫 월급 전날
+- **응답**: `capacity`(신용카드로 추가 사용 가능액 — spendDate 이후 최저잔액, 그 전에 바닥이면 음수 부족분) · `capacityImmediate`(체크카드·현금으로 즉시 쓸 수 있는 액 — 전 구간 최저잔액) · `scheduled[]` · `timeline[]` · `warnings[]`(결제일 미설정 카드 등)
+- **오류**: 400 형식 오류 · 409 앵커 없음/결제일 설정 카드 없음
+
+### GET /api/advisor/anchor
+- **Query**: `asOf`(기본 오늘)
+- **응답**: 기준일 이전 최근 앵커 `{id,as_of_date,amount,memo}` 또는 `null`
+
+### POST /api/advisor/anchor
+- **Body**: `{ as_of_date: 'YYYY-MM-DD', amount: 정수(원), memo? }`
+- **동작**: 보유현금 스냅샷을 추가한다(현재시점 리셋). 과거 거래는 지우지 않는다 — 투영의 출발점만 옮긴다
+- **응답**: 201 `{id, as_of_date, amount}` · 400 형식 오류

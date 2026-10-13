@@ -27,6 +27,7 @@
 | merchant_category_map | 가맹점명 → 카테고리 매핑 캐시 (#399) | id, merchant, kakao_category_group, kakao_category_name, category_id, source, confidence, looked_up_at |
 | recurrence_suggestion_dismissals | 반복 거래 제안에서 사용자가 거절한 가맹점 (#499). 세션이 아니라 DB 에 남긴다 — "이번엔 안 본다" 가 아니라 "이건 반복이 아니다" 라는 지속적 판단이라 기기를 바꿔도 유지돼야 한다 | id, merchant, dismissed_at |
 | card_threshold_tiers | 카드별 전월실적 구간과 그 구간의 요율 (#526). 구간 수가 카드마다 달라 컬럼이 아니라 행으로 둔다. `monthly_cap` 은 그 구간의 **카드 월 통합 한도**(#578) — 항목별 한도는 `card_benefits.rule_json` 의 `caps[]` 에 있고 이쪽은 카드 단위 정본이다. NULL 이면 통합 한도를 걸지 않는다 | id, card_product_id, min_spend, rate, label, monthly_cap, created_at |
+| cash_anchors | 기준일 보유현금 스냅샷(#764, 스펙 B). 현금흐름 투영의 출발점이며 거래가 아니라 원장·집계에 섞이지 않는다. 기준일 이전 최근 행을 쓴다 — 앵커 이전 이력을 다시 누적하지 않는 "현재시점 리셋" | id, as_of_date, amount, memo, created_at |
 
 ### 혜택 한도는 두 층이다 — 어느 값이 어느 층인지 (#578)
 

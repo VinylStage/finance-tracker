@@ -1,0 +1,101 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const { projectCashflow, monthAdd, monthDiff, daysInMonth } = require('../../src/services/advisor/projection');
+
+test('monthAdd / monthDiff 경계', () => {
+  assert.strictEqual(monthAdd('2026-10', 3), '2027-01');
+  assert.strictEqual(monthAdd('2026-01', -1), '2025-12');
+  assert.strictEqual(monthDiff('2027-01', '2026-10'), 3);
+});
+
+test('앵커에서만 전개(이전 이력 무시) + 반복/할부', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 1000000 },
+    horizonMonths: 4,
+    monthlyIncome: 500000,
+    recurring: [{ amount: 100000, label: '구독' }],
+    installments: [{ monthlyAmount: 200000, startMonth: '2026-10', months: 2, label: '기존할부' }],
+  });
+  // 10월: +500k -100k(구독) -200k(할부) = +200k → 1,200,000
+  assert.strictEqual(r.timeline[0].balance, 1200000);
+  // 11월: 할부 마지막 → 1,400,000
+  assert.strictEqual(r.timeline[1].balance, 1400000);
+  // 12월: 할부 끝(off=2, >=months) → +400k → 1,800,000
+  assert.strictEqual(r.timeline[2].outflow, 100000);
+  assert.strictEqual(r.timeline[2].balance, 1800000);
+  assert.strictEqual(r.firstNegativeMonth, null);
+});
+
+test('휴대폰 구입 시뮬(할부) → 월별 유출 + 적자 감지', () => {
+  const base = { anchor: { month: '2026-10', amount: 300000 }, horizonMonths: 6, monthlyIncome: 0, recurring: [{ amount: 50000 }] };
+  // 시뮬 없이: 매월 -50k → 6개월 후 0, 적자 안 남(마지막달 300k-300k=0)
+  const noSim = projectCashflow(base);
+  assert.strictEqual(noSim.firstNegativeMonth, null);
+  assert.strictEqual(noSim.minBalance, 0);
+  // 휴대폰 24개월 할부(월 40k) 2026-11 시작 추가 → 11월부터 -90k
+  const sim = projectCashflow({ ...base, simulated: [{ kind: 'installment', monthlyAmount: 40000, startMonth: '2026-11', months: 24, label: '휴대폰' }] });
+  // 10월: 300k-50k=250k / 11월:250-90=160 / 12월:70 / 1월:70-90=-20 → 적자
+  assert.strictEqual(sim.timeline[0].balance, 250000);
+  assert.strictEqual(sim.timeline[3].balance, -20000);
+  assert.strictEqual(sim.firstNegativeMonth, '2027-01');
+  assert.ok(sim.minBalance < 0);
+});
+
+test('lumpsum(일시 지출) 특정 월 반영', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 500000 }, horizonMonths: 3, monthlyIncome: 0,
+    simulated: [{ kind: 'lumpsum', amount: 600000, month: '2026-11', label: '보증금' }],
+  });
+  assert.strictEqual(r.timeline[1].outflow, 600000);
+  assert.strictEqual(r.timeline[1].balance, -100000);
+  assert.strictEqual(r.firstNegativeMonth, '2026-11');
+});
+
+test('시점 인식 반복(통신요금 11월부터)', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 1000000 }, horizonMonths: 3, monthlyIncome: 0,
+    recurring: [
+      { amount: 100000, label: '상시' },
+      { amount: 52000, startMonth: '2026-11', label: '통신요금' },
+    ],
+  });
+  assert.strictEqual(r.timeline[0].outflow, 100000); // 10월: 통신요금 미적용
+  assert.strictEqual(r.timeline[1].outflow, 152000); // 11월: +통신요금
+  assert.strictEqual(r.timeline[2].outflow, 152000);
+});
+
+test('일일 규칙 월환산(그 달 일수)', () => {
+  assert.strictEqual(daysInMonth('2026-10'), 31);
+  assert.strictEqual(daysInMonth('2026-11'), 30);
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 1000000 }, horizonMonths: 2, monthlyIncome: 0,
+    recurring: [{ dailyAmount: 3000, label: '자동매수' }],
+  });
+  assert.strictEqual(r.timeline[0].outflow, 93000);  // 10월 31일 × 3,000
+  assert.strictEqual(r.timeline[1].outflow, 90000);  // 11월 30일 × 3,000
+});
+
+test('반복 수입(recurringInflow) 유입 반영', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 100000 }, horizonMonths: 2, monthlyIncome: 0,
+    recurring: [{ amount: 200000 }],
+    recurringInflow: [{ amount: 500000 }, { amount: 50000, startMonth: '2026-11' }],
+  });
+  // 10월: +500k -200k = +300k → 400,000
+  assert.strictEqual(r.timeline[0].inflow, 500000);
+  assert.strictEqual(r.timeline[0].balance, 400000);
+  // 11월: +550k -200k = +350k → 750,000
+  assert.strictEqual(r.timeline[1].inflow, 550000);
+  assert.strictEqual(r.timeline[1].balance, 750000);
+});
+
+test('반복 규칙 endMonth 는 그 달까지 포함', () => {
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 0 }, horizonMonths: 2,
+    recurring: [{ amount: 100000, endMonth: '2026-10' }],
+  });
+  assert.strictEqual(r.timeline[0].outflow, 100000);
+  assert.strictEqual(r.timeline[1].outflow, 0);
+});
