@@ -1,52 +1,64 @@
 'use strict';
 
-// "이번 청구주기 가용 여유자금" — 다음 카드 결제일까지의 단기 현금 쿠션(스펙 B 핵심).
+// "이번 청구주기 가용 여유자금" — 지금부터 새로 긁는 카드값을 다음 결제일에 내고도
+// 다음 수입 전까지 통장이 버티는 최대 추가사용액(스펙 B 핵심).
 //
-// 장기 월별 투영(projection.js)과 달리, 오늘부터 가까운 결제일까지를 **일 단위**로
-// 끊어, 그 사이 유입(월급 25일·경비정산 10일)·고정유출(일자별)·일일 자동매수·
-// 카드 청구액을 반영해 "통장이 버티는가 / 추가로 더 써도 되는 여유가 얼마인가"를
-// 낸다.
-//
-// 카드 청구액(cardBills)은 외부 입력이다 — 카드사 앱의 이번 청구액 또는 청구주기
-// 마감일로부터 역산한 값. 없으면 "카드값 차감 전 가용현금"까지만 확정된다.
+// 장기 월별 투영(projection.js)과 달리 일 단위로 끊는다. 반영:
+//   - 앵커 현금(이미 결제된 카드값은 반영된 "결제 후" 잔액)
+//   - 유입(월급 25일·경비정산 10일)
+//   - 고정유출(일자·유효기간), 일일 자동매수
+//   - scheduled: 날짜가 정해진 확정 유출(아직 안 낸 삼성 청구, 다음달 할부 회차 등)
+// 이미 정산된 카드값을 다시 빼지 않는다 — 그건 앵커에 이미 들어 있다.
 
 function parseYMD(s) { const [y, m, d] = s.split('-').map(Number); return { y, m, d }; }
 function toISO(y, m, d) { return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`; }
 function addDays(iso, n) { const { y, m, d } = parseYMD(iso); const dt = new Date(Date.UTC(y, m - 1, d + n)); return toISO(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()); }
 function dayOf(iso) { return parseYMD(iso).d; }
+function monthOf(iso) { return iso.slice(0, 7); }
+
+function inPeriod(item, ym) {
+  if (item.startMonth && ym < item.startMonth) return false;
+  if (item.endMonth && ym > item.endMonth) return false;
+  return true;
+}
 
 // asOf 다음날부터 target(포함)까지 일 단위 전개.
-// anchorAmount: asOf 시점 보유현금.
-// incomes: [{ amount, day }]  매월 day 일 유입.
-// monthlyFixed: [{ amount, day }]  매월 day 일 고정유출.
-// dailyOut: 매일 유출(주식 자동매수 등).
-// cardBills: [{ label, date:'YYYY-MM-DD', amount }]  결제일에 빠지는 카드청구액.
-function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed = [], dailyOut = 0, cardBills = [] }) {
+// incomes / monthlyFixed: [{ amount, day, startMonth?, endMonth?, label? }]
+// dailyOut: 매일 유출 합
+// scheduled: [{ date:'YYYY-MM-DD', amount, label }] 확정 유출
+// spendDate: 새 카드사용분이 청구되는 날(예: 다음 14일). 주어지면 그날 이후
+//            최저잔액이 곧 "추가로 써도 되는 금액"이다.
+function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed = [], dailyOut = 0, scheduled = [], spendDate = null }) {
   let balance = anchorAmount;
-  let minBalance = balance;
-  let minDate = asOf;
-  const events = [];
-  const billByDate = {};
-  for (const b of cardBills) { billByDate[b.date] = (billByDate[b.date] || 0) + b.amount; }
+  let minBalance = balance, minDate = asOf;
+  let minBefore = balance;              // spendDate 이전 구간 최저
+  let minAfter = Infinity, minAfterDate = null; // spendDate 이후 구간 최저
+  const timeline = [];
+  const schedByDate = {};
+  for (const s of scheduled) (schedByDate[s.date] = schedByDate[s.date] || []).push(s);
 
   let cur = asOf;
-  // asOf 당일은 "지금 잔액"으로 보고, 다음날부터 흐름을 적용한다.
   while (cur !== target) {
     cur = addDays(cur, 1);
-    const d = dayOf(cur);
-    let inflow = 0, outflow = 0;
-    for (const inc of incomes) if (inc.day === d) inflow += inc.amount;
-    for (const f of monthlyFixed) if (f.day === d) outflow += f.amount;
-    outflow += dailyOut;
-    const bill = billByDate[cur] || 0;
-    outflow += bill;
+    const d = dayOf(cur), ym = monthOf(cur);
+    const items = [];
+    let inflow = 0, outflow = dailyOut;
+    for (const inc of incomes) if (inc.day === d && inPeriod(inc, ym)) { inflow += inc.amount; items.push(`+${inc.label || '수입'}`); }
+    for (const f of monthlyFixed) if (f.day === d && inPeriod(f, ym)) { outflow += f.amount; items.push(`-${f.label || '고정'}`); }
+    for (const s of (schedByDate[cur] || [])) { outflow += s.amount; items.push(`-${s.label}`); }
     balance += inflow - outflow;
     if (balance < minBalance) { minBalance = balance; minDate = cur; }
-    if (inflow || bill || monthlyFixed.some((f) => f.day === d)) {
-      events.push({ date: cur, inflow, outflow, bill, balance });
-    }
+    if (spendDate && cur < spendDate) minBefore = Math.min(minBefore, balance);
+    if (spendDate && cur >= spendDate && balance < minAfter) { minAfter = balance; minAfterDate = cur; }
+    if (items.length) timeline.push({ date: cur, inflow, outflow, balance, items });
   }
-  return { endBalance: balance, minBalance, minDate, events };
+
+  let capacity = null;
+  if (spendDate) {
+    // 결제일 전에 이미 바닥나면 추가사용 여력은 없다(부족분은 음수로 보인다).
+    capacity = Math.min(minBefore, minAfter === Infinity ? balance : minAfter);
+  }
+  return { endBalance: balance, minBalance, minDate, minBefore: spendDate ? minBefore : null, minAfter: spendDate ? minAfter : null, minAfterDate, capacity, timeline };
 }
 
 module.exports = { cycleHeadroom, addDays, dayOf };

@@ -1,24 +1,40 @@
 'use strict';
-const test=require('node:test');const assert=require('node:assert');
-const { cycleHeadroom, addDays, dayOf }=require('../../src/services/advisor/headroom');
-test('addDays/dayOf 경계', ()=>{
-  assert.strictEqual(addDays('2026-10-13',1),'2026-10-14');
-  assert.strictEqual(addDays('2026-10-31',1),'2026-11-01');
-  assert.strictEqual(dayOf('2026-10-25'),25);
+const test = require('node:test');
+const assert = require('node:assert');
+const { cycleHeadroom, addDays, dayOf } = require('../../src/services/advisor/headroom');
+
+test('addDays/dayOf 경계', () => {
+  assert.strictEqual(addDays('2026-10-13', 1), '2026-10-14');
+  assert.strictEqual(addDays('2026-10-31', 1), '2026-11-01');
+  assert.strictEqual(addDays('2026-12-31', 1), '2027-01-01');
+  assert.strictEqual(dayOf('2026-10-25'), 25);
 });
-test('결제일까지 쿠션 + 월급 유입 + 카드청구', ()=>{
-  const r=cycleHeadroom({
-    asOf:'2026-10-13', anchorAmount:600000, target:'2026-10-25',
-    incomes:[{amount:2460000,day:25}], monthlyFixed:[], dailyOut:3000,
-    cardBills:[{label:'기타카드',date:'2026-10-14',amount:400000}],
+
+test('선결제 반영 앵커: 이미 낸 카드값은 다시 빼지 않고 예정분만 뺀다', () => {
+  const r = cycleHeadroom({ asOf: '2026-10-13', anchorAmount: 600000, target: '2026-10-14', dailyOut: 3000 });
+  assert.strictEqual(r.endBalance, 597000);
+});
+
+test('scheduled + 기간 고정비 + 수입 → 추가사용 가능액(capacity)', () => {
+  const r = cycleHeadroom({
+    asOf: '2026-10-13', anchorAmount: 600000, target: '2026-11-24', spendDate: '2026-11-14',
+    incomes: [{ amount: 2000000, day: 25, label: '월급' }],
+    monthlyFixed: [
+      { amount: 100000, day: 10, label: '월세', endMonth: '2026-10' },   // 11월엔 없음
+      { amount: 50000, day: 10, label: '예외', startMonth: '2026-11', endMonth: '2026-11' },
+    ],
+    scheduled: [{ date: '2026-10-25', amount: 1500000, label: '삼성' }, { date: '2026-11-14', amount: 100000, label: '할부' }],
   });
-  // 10/14: -3000(daily) -400000(bill) → 197,000. 이후 매일 -3000, 10/25 +2,460,000
-  assert.ok(r.minBalance < 600000);
-  assert.strictEqual(r.minDate <= '2026-10-25', true);
-  // 10/25 월급 들어오면 endBalance 는 크게 +
-  assert.ok(r.endBalance > 2000000);
+  // 10/25: 600000 +2000000 -1500000 = 1,100,000 / 11/10: -50,000 → 1,050,000 / 11/14: -100,000 → 950,000
+  assert.strictEqual(r.minBefore, 600000);
+  assert.strictEqual(r.minAfter, 950000);
+  assert.strictEqual(r.capacity, 600000);   // 앞 구간 최저가 더 낮으면 그게 한도
 });
-test('카드청구액 0(미입력)이면 쿠션은 현금-일일만', ()=>{
-  const r=cycleHeadroom({asOf:'2026-10-13',anchorAmount:600000,target:'2026-10-14',dailyOut:3000});
-  assert.strictEqual(r.endBalance, 597000); // 하루치 -3000
+
+test('결제일 전에 바닥나면 capacity 는 음수(부족분)', () => {
+  const r = cycleHeadroom({
+    asOf: '2026-10-13', anchorAmount: 100000, target: '2026-10-20', spendDate: '2026-10-18',
+    scheduled: [{ date: '2026-10-15', amount: 300000, label: '청구' }],
+  });
+  assert.strictEqual(r.capacity, -200000);
 });
