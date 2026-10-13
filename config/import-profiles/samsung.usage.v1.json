@@ -1,0 +1,10 @@
+{
+  "format_id": "samsung.usage.v1", "issuer": "삼성카드", "source_type": "usage_history",
+  "settlement_default": "confirmed",
+  "sheet": { "select": "by_name", "name": "■ 국내이용내역" },
+  "rows": { "start": 1, "rules": [ { "when": "col_empty", "col": 2, "action": "skip" } ] },
+  "columns": { "date": 2, "merchant": 4, "amount": 5, "installment_flag": 6, "installment_months": 7, "approval": 8 },
+  "transforms": { "date": { "fn": "dot_ymd" }, "merchant": { "fn": "raw" }, "amount": { "fn": "amount_num" }, "installment_flag": { "fn": "raw_equals", "value": "할부" }, "installment_months": { "fn": "zero_or_num" }, "approval": { "fn": "str_or_null" } },
+  "cancelled": { "fn": "raw_not_equals", "col": 9, "value": "-" },
+  "post": [ { "fn": "offset_pair_cancel", "token": "(분할납부)" } ]
+}

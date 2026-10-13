@@ -1,0 +1,10 @@
+{
+  "format_id": "hyundai.statement.v1", "issuer": "현대카드", "source_type": "billing_statement",
+  "settlement_default": "confirmed",
+  "sheet": { "select": "by_index", "index": 0 },
+  "rows": { "start": 3, "rules": [ { "when": "col_not_match", "col": 0, "pattern": "(\\d{4})년\\s*(\\d{1,2})월\\s*(\\d{1,2})일", "action": "skip" }, { "when": "col_empty", "col": 2, "action": "skip" } ] },
+  "columns": { "date": 0, "installment_months": 3 },
+  "transforms": { "date": { "fn": "korean_ymd" }, "installment_months": { "fn": "slash_then_first_int" } },
+  "derive": [ { "fn": "merchant_amount_split", "src_col": 2 } ],
+  "is_installment_from_months": true
+}
