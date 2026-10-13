@@ -1,29 +1,9 @@
 {
-  "format_id": "nonghyup.usage.v1",
-  "issuer": "농협카드",
-  "source_type": "usage_history",
+  "format_id": "nonghyup.usage.v1", "issuer": "농협카드", "source_type": "usage_history",
   "settlement_default": "confirmed",
   "sheet": { "select": "by_index", "index": 0 },
-  "header": { "detect": "fixed", "start": 14 },
-  "rows": {
-    "start": 14,
-    "stop": { "when": "col_not_match", "col": 1, "pattern": "^\\d{4}/\\d{2}/\\d{2}", "action": "break" }
-  },
-  "columns": {
-    "date": 1,
-    "amount": 10,
-    "merchant": 14,
-    "installment_flag": 18,
-    "installment_months": 21,
-    "approval": 3
-  },
-  "transforms": {
-    "date": { "fn": "slash_ymd" },
-    "amount": { "fn": "amount_num" },
-    "merchant": { "fn": "raw" },
-    "installment_flag": { "fn": "raw_equals", "value": "할부" },
-    "installment_months": { "fn": "first_int" },
-    "approval": { "fn": "str_or_null" }
-  },
+  "rows": { "start": 14, "rules": [ { "when": "col_not_match", "col": 1, "pattern": "^\\d{4}/\\d{2}/\\d{2}", "action": "break" } ] },
+  "columns": { "date": 1, "amount": 10, "merchant": 14, "installment_flag": 18, "installment_months": 21, "approval": 3 },
+  "transforms": { "date": { "fn": "slash_ymd" }, "amount": { "fn": "amount_num" }, "merchant": { "fn": "raw" }, "installment_flag": { "fn": "raw_equals", "value": "할부" }, "installment_months": { "fn": "first_int" }, "approval": { "fn": "str_or_null" } },
   "cancelled": { "fn": "not_in", "col": 22, "values": [null, "0", "-"] }
 }

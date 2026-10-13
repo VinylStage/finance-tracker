@@ -1,0 +1,9 @@
+{
+  "format_id": "hana.usage.v1", "issuer": "하나카드", "source_type": "usage_history",
+  "settlement_default": "confirmed",
+  "sheet": { "select": "by_index", "index": 0 },
+  "rows": { "start": 4, "rules": [ { "when": "col_not_match", "col": 0, "pattern": "^\\d{4}\\.\\d{2}\\.\\d{2}$", "action": "skip" } ] },
+  "columns": { "date": 0, "merchant": 4, "amount": 5, "installment_flag": 7, "installment_months": 8, "approval": 3 },
+  "transforms": { "date": { "fn": "dot_ymd" }, "merchant": { "fn": "raw" }, "amount": { "fn": "amount_num" }, "installment_flag": { "fn": "raw_equals", "value": "할부" }, "installment_months": { "fn": "dash_or_first_int" }, "approval": { "fn": "str_or_null" } },
+  "cancelled": { "fn": "raw_equals", "col": 13, "value": "취소" }
+}
