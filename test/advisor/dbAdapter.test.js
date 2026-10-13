@@ -40,3 +40,13 @@ test('latestAnchor 기준일 이전 최근', () => {
   const empty = stubDb({ get: () => null });
   assert.strictEqual(latestAnchor(empty, '2020-01-01'), null);
 });
+
+test('loadRecurringMonthly: freq=daily → dailyAmount', () => {
+  const db = stubDb({ all: () => [
+    { amount: 100000, label: '월', freq: 'monthly', starts_on: null, ends_on: null },
+    { amount: 3000, label: '자동매수', freq: 'daily', starts_on: null, ends_on: null },
+  ] });
+  const out = loadRecurringMonthly(db);
+  assert.deepStrictEqual(out[0], { label: '월', startMonth: undefined, endMonth: undefined, amount: 100000 });
+  assert.deepStrictEqual(out[1], { label: '자동매수', startMonth: undefined, endMonth: undefined, dailyAmount: 3000 });
+});

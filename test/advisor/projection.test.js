@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { projectCashflow, monthAdd, monthDiff } = require('../../src/services/advisor/projection');
+const { projectCashflow, monthAdd, monthDiff, daysInMonth } = require('../../src/services/advisor/projection');
 
 test('monthAdd / monthDiff 경계', () => {
   assert.strictEqual(monthAdd('2026-10', 3), '2027-01');
@@ -64,4 +64,15 @@ test('시점 인식 반복(통신요금 11월부터)', () => {
   assert.strictEqual(r.timeline[0].outflow, 100000); // 10월: 통신요금 미적용
   assert.strictEqual(r.timeline[1].outflow, 152000); // 11월: +통신요금
   assert.strictEqual(r.timeline[2].outflow, 152000);
+});
+
+test('일일 규칙 월환산(그 달 일수)', () => {
+  assert.strictEqual(daysInMonth('2026-10'), 31);
+  assert.strictEqual(daysInMonth('2026-11'), 30);
+  const r = projectCashflow({
+    anchor: { month: '2026-10', amount: 1000000 }, horizonMonths: 2, monthlyIncome: 0,
+    recurring: [{ dailyAmount: 3000, label: '자동매수' }],
+  });
+  assert.strictEqual(r.timeline[0].outflow, 93000);  // 10월 31일 × 3,000
+  assert.strictEqual(r.timeline[1].outflow, 90000);  // 11월 30일 × 3,000
 });

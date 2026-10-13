@@ -13,20 +13,24 @@ function loadInstallments(db) {
   return rows.map((r) => ({ monthlyAmount: r.monthlyAmount, startMonth: r.startMonth, months: r.months, label: r.label }));
 }
 
-// 활성 월 반복규칙 → [{ amount, startMonth?, endMonth?, label }].
+// 활성 반복규칙 → [{ amount | dailyAmount, startMonth?, endMonth?, label }].
 // 투영이 **시점 인식**으로 적용하므로(통신요금 11월부터 등) 단일 월로 미리 거르지
-// 않고 전부 넘긴다. starts_on/ends_on 은 'YYYY-MM' 로 축약해 startMonth/endMonth 로.
+// 않고 전부 넘긴다. starts_on/ends_on 은 'YYYY-MM' 로 축약.
+// freq='daily'(예: 주식 자동매수 3,000/일)는 dailyAmount 로 넘겨 투영이 그 달
+// 일수로 환산한다(월 환산 근사).
 function loadRecurringMonthly(db) {
   const rows = db.prepare(`
-    SELECT amount, merchant AS label, starts_on, ends_on FROM recurring_rules
-    WHERE is_active = 1 AND freq = 'monthly' AND interval = 1
+    SELECT amount, merchant AS label, freq, starts_on, ends_on FROM recurring_rules
+    WHERE is_active = 1 AND interval = 1 AND freq IN ('monthly', 'daily')
   `).all();
-  return rows.map((r) => ({
-    amount: r.amount,
-    label: r.label,
-    startMonth: r.starts_on ? r.starts_on.slice(0, 7) : undefined,
-    endMonth: r.ends_on ? r.ends_on.slice(0, 7) : undefined,
-  }));
+  return rows.map((r) => {
+    const base = {
+      label: r.label,
+      startMonth: r.starts_on ? r.starts_on.slice(0, 7) : undefined,
+      endMonth: r.ends_on ? r.ends_on.slice(0, 7) : undefined,
+    };
+    return r.freq === 'daily' ? { ...base, dailyAmount: r.amount } : { ...base, amount: r.amount };
+  });
 }
 
 // 기준일 이전 최근 앵커 → { month, amount } | null

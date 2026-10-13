@@ -24,6 +24,12 @@ function monthDiff(a, b) {
   return (ay * 12 + am) - (by * 12 + bm);
 }
 
+// 그 달의 일수('YYYY-MM').
+function daysInMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
 // 월별 현금흐름 전개.
 //
 // anchor: { month:'YYYY-MM', amount }  — 기준 시점 보유현금.
@@ -43,7 +49,9 @@ function projectCashflow({ anchor, horizonMonths, monthlyIncome = 0, recurring =
   const recurOut = (ym) => recurring.reduce((s, r) => {
     if (r.startMonth && ym < r.startMonth) return s;
     if (r.endMonth && ym > r.endMonth) return s;
-    return s + r.amount;
+    // 일일 규칙(예: 주식 자동매수 3,000/일)은 그 달 일수로 환산한다.
+    const amt = (r.dailyAmount != null) ? r.dailyAmount * daysInMonth(ym) : r.amount;
+    return s + amt;
   }, 0);
 
   const instOut = (list, ym) => list.reduce((s, it) => {
@@ -70,4 +78,4 @@ function projectCashflow({ anchor, horizonMonths, monthlyIncome = 0, recurring =
   return { timeline, minBalance, firstNegativeMonth };
 }
 
-module.exports = { projectCashflow, monthAdd, monthDiff };
+module.exports = { projectCashflow, monthAdd, monthDiff, daysInMonth };
