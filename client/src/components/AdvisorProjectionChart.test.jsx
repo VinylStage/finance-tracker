@@ -10,7 +10,7 @@ import AdvisorProjectionChart from './AdvisorProjectionChart';
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../lib/api', () => ({ api: { get }, ApiError: class extends Error {} }));
 
-const tl = (n, start = 1000000) => Array.from({ length: n }, (_, i) => ({ month: `2026-${String(10 + i).padStart(2, '0')}`.replace(/2026-1[3-9]|2026-2\d/, (m) => m), inflow: 0, outflow: 0, net: 0, balance: start + i * 100000 }));
+const tl = (n, start = 1000000, net = 250000) => Array.from({ length: n }, (_, i) => ({ month: `2026-${String(10 + i).padStart(2, '0')}`.replace(/2026-1[3-9]|2026-2\d/, (m) => m), inflow: net, outflow: 0, net, balance: start + i * 100000 }));
 const RES = { anchor: { month: '2026-10', amount: 600000 }, horizon: 2, simulated: [], base: { timeline: tl(2), minBalance: 1000000, firstNegativeMonth: null }, withSim: null };
 
 beforeEach(() => get.mockReset());
@@ -36,6 +36,25 @@ describe('AdvisorProjectionChart', () => {
     await waitFor(() => expect(get).toHaveBeenLastCalledWith('/api/advisor/projection?horizon=36&phone=1500000&phoneMonths=24'));
     expect((await screen.findByTestId('projection-summary')).textContent).toContain('가정 포함');
     expect((screen.getByTestId('projection-summary')).textContent).toContain('2027-05');
+  });
+
+  it('그래프만이 아니라 월별 금액을 표로 함께 보인다(여유자금·잔액)', async () => {
+    get.mockResolvedValue(RES);
+    render(<AdvisorProjectionChart />);
+    const table = await screen.findByTestId('projection-table');
+    // 각 월의 여유자금(net)과 월말 잔액이 금액으로 노출된다
+    expect(table.textContent).toContain('250,000'); // net
+    expect(table.textContent).toContain('1,000,000'); // 10월 잔액
+    expect(table.textContent).toContain('1,100,000'); // 11월 잔액
+    expect(table.textContent).toContain('2026-11');
+  });
+
+  it('가정 포함 시 표에 가정 잔액 열이 더해진다', async () => {
+    get.mockResolvedValue({ ...RES, withSim: { timeline: tl(2, 800000), minBalance: 800000, firstNegativeMonth: null } });
+    render(<AdvisorProjectionChart />);
+    const table = await screen.findByTestId('projection-table');
+    expect(table.textContent).toContain('800,000');  // 가정 10월 잔액
+    expect(table.textContent).toContain('900,000');  // 가정 11월 잔액
   });
 
   it('예상 밖 응답(다른 페이지 모킹 등)이면 그리지 않는다', async () => {

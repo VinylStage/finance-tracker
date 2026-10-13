@@ -91,6 +91,35 @@ export default function AdvisorProjectionChart() {
         {last.month} 잔액 {formatWon(last.balance)} · 첫 적자월 {data.base.firstNegativeMonth || '없음'}
         {sim && <> · 가정 포함 {formatWon(sim.timeline[sim.timeline.length - 1].balance)} · 첫 적자월 {sim.firstNegativeMonth || '없음'}</>}
       </p>
+
+      {/* 그래프만으로는 금액을 알 수 없다 — 월별 구체 숫자를 표로 함께 보인다(필수 요구사항). */}
+      <div className="max-h-64 overflow-auto border border-line rounded-card">
+        <table className="w-full text-xs tabular-nums" data-testid="projection-table">
+          <thead className="sticky top-0 bg-surface">
+            <tr className="text-caption text-right">
+              <th className="px-2 py-1 text-left font-medium">월</th>
+              <th className="px-2 py-1 font-medium">여유자금</th>
+              <th className="px-2 py-1 font-medium">월말 잔액</th>
+              {sim && <th className="px-2 py-1 font-medium">가정 잔액</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {data.base.timeline.map((t, i) => {
+              const neg = t.balance < 0;
+              return (
+                <tr key={t.month} className="border-t border-line text-right">
+                  <td className="px-2 py-1 text-left text-caption">{t.month}</td>
+                  <td className={`px-2 py-1 ${t.net < 0 ? 'text-loss-text' : 'text-body'}`}>{formatWon(t.net)}</td>
+                  <td className={`px-2 py-1 ${neg ? 'text-loss-text font-semibold' : 'text-ink'}`}>{formatWon(t.balance)}</td>
+                  {sim && (
+                    <td className={`px-2 py-1 ${sim.timeline[i].balance < 0 ? 'text-loss-text font-semibold' : 'text-caption'}`}>{formatWon(sim.timeline[i].balance)}</td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
