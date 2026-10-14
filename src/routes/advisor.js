@@ -20,6 +20,7 @@ const { cycleHeadroom } = require('../services/advisor/headroom');
 const {
   loadHeadroomInputs, loadBaselineInputs, latestAnchorRow, monthAddYM, monthsToTimeline, simToScheduled,
 } = require('../services/advisor/headroomInputs');
+const { netWorthTimeline } = require('../services/advisor/netWorth');
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const YM = /^\d{4}-\d{2}$/;
@@ -73,7 +74,11 @@ router.get('/projection', (req, res) => {
       inp.scheduled = [...inp.scheduled, ...simToScheduled(simulated)];
       withSim = monthsToTimeline(cycleHeadroom(inp).months);
     }
-    res.json({ anchor, horizon, simulated, base, withSim });
+    // 순자산 축(#770): 현금흐름은 그대로 두고 적금누적·부채를 따로 얹는다.
+    const debts = db.prepare('SELECT balance FROM debts').all();
+    const savings = db.prepare('SELECT monthly_contribution, start_date, maturity_date, status FROM savings_products').all();
+    const netWorth = { timeline: netWorthTimeline(base.timeline, { debts, savings }) };
+    res.json({ anchor, horizon, simulated, base, withSim, netWorth });
   } catch (e) {
     serverError(res, e, 'advisor.projection');
   }
