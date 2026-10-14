@@ -7,7 +7,8 @@
 //   GET  /api/advisor/anchor      기준일 이전 최근 보유현금 앵커
 //   POST /api/advisor/anchor      보유현금 앵커 입력(현재시점 리셋)
 //
-// 계산은 순수 모듈(projection·headroom)이 하고, 이 라우트는 DB 읽기·입력 검증만 한다.
+// 계산은 순수 엔진(headroom)과 DB 어댑터(headroomInputs)가 하고, 이 라우트는 입력
+// 검증·조립만 한다. 전망·여윳돈 모두 같은 일별 엔진을 쓴다(숫자 일치, 감사 H1/H2).
 // 거래 원장은 건드리지 않는다 — 쓰기는 cash_anchors 한 테이블뿐이다.
 
 const express = require('express');
@@ -15,10 +16,10 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYMD } = require('../utils/date');
-const { projectCashflow } = require('../services/advisor/projection');
-const { loadProjectionInputs, latestAnchor } = require('../services/advisor/dbAdapter');
 const { cycleHeadroom } = require('../services/advisor/headroom');
-const { loadHeadroomInputs } = require('../services/advisor/headroomInputs');
+const {
+  loadHeadroomInputs, loadBaselineInputs, latestAnchorRow, monthAddYM, monthsToTimeline, simToScheduled,
+} = require('../services/advisor/headroomInputs');
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const YM = /^\d{4}-\d{2}$/;
@@ -31,7 +32,11 @@ function intParam(raw, { min, max, def }) {
   return n;
 }
 
-// GET /api/advisor/projection?asOf=&horizon=&phone=&phoneMonths=&phoneStart=
+// GET /api/advisor/projection?asOf=&horizon=&unpaid=&simAmount=&simMonths=&simStart=&simLabel=
+//
+// 장기 월별 전망. 계산은 '이번 주기 여윳돈' 과 같은 일별 엔진(loadBaselineInputs +
+// cycleHeadroom)을 써 월로 집계한다 — 두 화면의 숫자가 어긋나지 않게(감사 H1/H2
+// 통합). 기본은 추가 지출 없는 순수 베이스라인. simAmount 가 있을 때만 withSim 을 낸다.
 router.get('/projection', (req, res) => {
   try {
     const asOf = req.query.asOf || localYMD();
@@ -39,12 +44,11 @@ router.get('/projection', (req, res) => {
     const horizon = intParam(req.query.horizon, { min: 1, max: 120, def: 24 });
     if (Number.isNaN(horizon)) return res.status(400).json({ error: 'horizon 은 1~120 개월 정수입니다.' });
 
-    const anchor = latestAnchor(db, asOf);
-    if (!anchor) return res.status(409).json({ error: '보유현금 앵커가 없습니다. 먼저 기준일 보유현금을 입력해 주세요.' });
+    const anchorRow = latestAnchorRow(db, asOf);
+    if (!anchorRow) return res.status(409).json({ error: '보유현금 앵커가 없습니다. 먼저 기준일 보유현금을 입력해 주세요.' });
+    const anchor = { month: anchorRow.as_of_date.slice(0, 7), amount: anchorRow.amount };
 
-    // 범용 what-if: 추가 지출 시나리오(할부). 기본은 추가 지출 없는 순수 베이스라인.
-    // simAmount 가 있을 때만 두 번째 결과(withSim)를 낸다. 특정 용도(휴대폰 등)로
-    // 고정하지 않는다 — 이름은 사용자가 준다.
+    // 범용 what-if: 추가 지출 시나리오(할부). 이름은 사용자가 준다(특정 용도 고정 아님).
     const simulated = [];
     if (req.query.simAmount !== undefined && req.query.simAmount !== '') {
       const amount = intParam(req.query.simAmount, { min: 1, max: 100000000, def: null });
@@ -57,10 +61,18 @@ router.get('/projection', (req, res) => {
       simulated.push({ kind: 'installment', monthlyAmount: Math.round(amount / months), startMonth: start, months, label });
     }
 
-    const inputs = loadProjectionInputs(db);
-    const common = { anchor, horizonMonths: horizon, monthlyIncome: 0, ...inputs };
-    const base = projectCashflow({ ...common, simulated: [] });
-    const withSim = simulated.length ? projectCashflow({ ...common, simulated }) : null;
+    // 미결제 카드(여윳돈과 같은 의미): 지정 시 그 카드의 앵커 이전 사용분을 예정
+    // 청구로 반영. 기본은 비움(검증된 베이스라인과 동일).
+    const unpaidCards = String(req.query.unpaid || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const through = monthAddYM(anchor.month, horizon - 1);
+
+    const base = monthsToTimeline(cycleHeadroom(loadBaselineInputs(db, { asOf, through, unpaidCards })).months);
+    let withSim = null;
+    if (simulated.length) {
+      const inp = loadBaselineInputs(db, { asOf, through, unpaidCards });
+      inp.scheduled = [...inp.scheduled, ...simToScheduled(simulated)];
+      withSim = monthsToTimeline(cycleHeadroom(inp).months);
+    }
     res.json({ anchor, horizon, simulated, base, withSim });
   } catch (e) {
     serverError(res, e, 'advisor.projection');

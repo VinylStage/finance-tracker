@@ -60,8 +60,16 @@ test('장기 전망 — horizon 임의 확장 + 범용 추가지출 시나리오
   const r = await (await fetch(`${BASE}/api/advisor/projection?asOf=2026-10-13&horizon=24&simAmount=1200000&simMonths=24&simStart=2026-11&simLabel=${encodeURIComponent('노트북')}`)).json();
   assert.strictEqual(r.base.timeline.length, 24);
   assert.strictEqual(r.base.timeline[23].month, '2028-09');
-  // 10월: +2,000,000 −500,000 −70,000(10월 청구 할부) = +1,430,000 → 2,030,000
-  assert.strictEqual(r.base.timeline[0].balance, 2030000);
+  // H1 통합(일별 엔진): 앵커(10-13) '당일 이후'만 센다. 10월 창(10-14~10-31)에서
+  // 월세(10-01)는 이미 지났고, 10월 할부회차는 선결제분이라 제외 → 유입은 월급
+  // 2,000,000 뿐. 600,000 + 2,000,000 = 2,600,000.
+  // (옛 월별 엔진은 지난 월세 −500,000 과 이미 낸 10월 회차 −70,000 을 다시 빼
+  //  2,030,000 을 냈다 — 그 중복계산이 이 PR 에서 사라진다.)
+  assert.strictEqual(r.base.timeline[0].balance, 2600000);
+  assert.strictEqual(r.base.timeline[0].partial, true, '앵커월은 당일부터만 센다(부분월)');
+  // H1 정밀 고정: 앵커월 창에 지난 유출이 끼면 안 된다.
+  assert.strictEqual(r.base.timeline[0].outflow, 0, '10월 창(10-14~)엔 유출 없음(월세·완납회차 제외)');
+  assert.strictEqual(r.base.timeline[0].inflow, 2000000, '10월 창 유입은 월급뿐');
   // 시나리오 50,000/월이 11월부터 붙는다 + 이름이 반영된다
   assert.strictEqual(r.withSim.timeline[1].outflow - r.base.timeline[1].outflow, 50000);
   assert.strictEqual(r.simulated[0].label, '노트북');

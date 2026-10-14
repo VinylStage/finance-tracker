@@ -172,7 +172,7 @@ function loadHeadroomInputs(db, { asOf, unpaidCards = [], spendDate, target } = 
   };
 }
 
-module.exports = { loadHeadroomInputs, paymentDate, nextIncomeDate };
+module.exports = { loadHeadroomInputs, paymentDate, nextIncomeDate, latestAnchorRow, monthAddYM };
 
 // 월별 여유자금 베이스라인 — 확정된 흐름만(가정 지출 없음). 앵커 다음날부터
 // through 월 말일까지 일 단위로 돌려 월별로 집계한다. 여윳돈과 같은 엔진·같은
@@ -182,4 +182,47 @@ function loadBaselineInputs(db, { asOf, through, unpaidCards = [] }) {
   return loadHeadroomInputs(db, { asOf, unpaidCards, spendDate: target, target });
 }
 
+// 장기 전망(/projection)은 일별 베이스라인 엔진의 월 집계(cycleHeadroom().months)를
+// 그대로 쓴다 — 옛 월별 엔진(projectCashflow)은 앵커월의 이미 지난 흐름을 통째로
+// 다시 더했고(감사 H1, 실측 최대 113만원 차이) 완납 할부도 걸러내지 않았다(H2).
+// 일별 엔진은 앵커 "당일 이후"만, 완납 할부 제외, 카드고정비는 카드 결제일에 반영한다.
+//
+// months → 전망 타임라인. 월말잔액(endBalance)을 '잔액'으로 쓴다(화면의 월별 표와
+// 같은 값). minBalance·firstNegativeMonth 도 월말 기준으로 계산해 표와 어긋나지
+// 않게 한다(일중 저점은 '이번 주기 여윳돈' 카드의 몫이다).
+function monthsToTimeline(months) {
+  const timeline = months.map((m) => ({
+    month: m.month, inflow: m.inflow, outflow: m.outflow, net: m.net, balance: m.endBalance, partial: m.partial,
+  }));
+  let minBalance = timeline.length ? Infinity : 0;
+  let firstNegativeMonth = null;
+  for (const t of timeline) {
+    if (t.balance < minBalance) minBalance = t.balance;
+    if (firstNegativeMonth === null && t.balance < 0) firstNegativeMonth = t.month;
+  }
+  return { timeline, minBalance, firstNegativeMonth };
+}
+
+// what-if 추가 지출 시나리오 → 일별 엔진 scheduled(현금 유출). 월 단위 전망이라
+// 월말(말일)에 배치한다 — 월말 잔액에만 영향을 주면 되고, 그래야 앵커월에 넣어도
+// '이미 지난 날짜'로 밀려 빠지지 않는다. 할부는 회차마다, 일시불은 한 번.
+//
+// 지금은 전부 '현금·월말' 로만 반영한다. 현금/카드 구분과 카드 결제일 라우팅,
+// 다항목 혼합은 what-if 확장(별도 작업)에서 cardBilling 경로로 넓힌다 — 이 함수가
+// 그 확장 지점이다.
+function simToScheduled(simulated = []) {
+  const out = [];
+  for (const it of simulated) {
+    const label = it.label || '추가 지출';
+    if (it.kind === 'lumpsum') {
+      if (it.amount) out.push({ date: paymentDate(it.month, 31), amount: it.amount, label });
+    } else { // installment(기본)
+      for (let k = 0; k < it.months; k++) out.push({ date: paymentDate(monthAddYM(it.startMonth, k), 31), amount: it.monthlyAmount, label });
+    }
+  }
+  return out;
+}
+
 module.exports.loadBaselineInputs = loadBaselineInputs;
+module.exports.monthsToTimeline = monthsToTimeline;
+module.exports.simToScheduled = simToScheduled;
