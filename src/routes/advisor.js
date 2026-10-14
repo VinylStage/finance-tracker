@@ -42,15 +42,19 @@ router.get('/projection', (req, res) => {
     const anchor = latestAnchor(db, asOf);
     if (!anchor) return res.status(409).json({ error: '보유현금 앵커가 없습니다. 먼저 기준일 보유현금을 입력해 주세요.' });
 
+    // 범용 what-if: 추가 지출 시나리오(할부). 기본은 추가 지출 없는 순수 베이스라인.
+    // simAmount 가 있을 때만 두 번째 결과(withSim)를 낸다. 특정 용도(휴대폰 등)로
+    // 고정하지 않는다 — 이름은 사용자가 준다.
     const simulated = [];
-    if (req.query.phone !== undefined && req.query.phone !== '') {
-      const price = intParam(req.query.phone, { min: 1, max: 100000000, def: null });
-      const months = intParam(req.query.phoneMonths, { min: 1, max: 60, def: 24 });
-      const start = req.query.phoneStart || anchor.month;
-      if (Number.isNaN(price) || Number.isNaN(months) || !YM.test(start)) {
-        return res.status(400).json({ error: '휴대폰 가정은 phone(원)·phoneMonths(1~60)·phoneStart(YYYY-MM) 로 주세요.' });
+    if (req.query.simAmount !== undefined && req.query.simAmount !== '') {
+      const amount = intParam(req.query.simAmount, { min: 1, max: 100000000, def: null });
+      const months = intParam(req.query.simMonths, { min: 1, max: 120, def: 1 });
+      const start = req.query.simStart || anchor.month;
+      const label = (req.query.simLabel ? String(req.query.simLabel).slice(0, 40) : '추가 지출');
+      if (Number.isNaN(amount) || Number.isNaN(months) || !YM.test(start)) {
+        return res.status(400).json({ error: '추가 지출 시나리오는 simAmount(원)·simMonths(1~120)·simStart(YYYY-MM) 로 주세요.' });
       }
-      simulated.push({ kind: 'installment', monthlyAmount: Math.round(price / months), startMonth: start, months, label: '휴대폰' });
+      simulated.push({ kind: 'installment', monthlyAmount: Math.round(amount / months), startMonth: start, months, label });
     }
 
     const inputs = loadProjectionInputs(db);
