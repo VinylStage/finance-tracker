@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, numericBody } = require('../utils/validate');
+const { inactiveRefError } = require('../services/activeRefs');
 const { isRealDate } = require('../utils/period');
 const { pad2, localYearMonth } = require('../utils/date');
 const { serverError, errMsg } = require('../utils/errors');
@@ -316,7 +317,8 @@ router.get('/due', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const body = normalizeRuleBody(req.body);
-    const err = validateRuleBody(body);
+    // 비활성 분류·결제수단으로 새 규칙을 만들지 않는다(#677).
+    const err = validateRuleBody(body) || inactiveRefError(db, body);
     if (err) return res.status(400).json({ error: err });
     const c = ruleColumns(body);
     const result = db.prepare(`
@@ -339,7 +341,8 @@ router.put('/:id', numericBody(['is_active']), (req, res) => {
     if (!existing) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
 
     const body = normalizeRuleBody(req.body, existing);
-    const err = validateRuleBody(body);
+    // 비활성으로 «바꾸는» 것만 막는다(#677). 기존 규칙을 그대로 고치는 건 된다.
+    const err = validateRuleBody(body) || inactiveRefError(db, body, existing);
     if (err) return res.status(400).json({ error: err });
     const c = ruleColumns(body);
     const result = db.prepare(`

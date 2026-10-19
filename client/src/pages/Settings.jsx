@@ -310,7 +310,17 @@ function CategorySection({ categories, onChanged }) {
   const handleDeactivate = async (id) => {
     if (!await confirm('비활성화하시겠습니까?')) return;
     try {
-      await api.del(`/api/categories/${id}`);
+      // 이 분류를 쓰는 반복규칙이 있으면 함께 끌지 묻는다(#677). 안 끄면 그 규칙은
+      // 계속 거래를 만든다 — 조용히 죽이지도, 조용히 살려 두지도 않고 사용자가 고른다.
+      const usage = await api.get(`/api/categories/${id}/delete-preview`);
+      let stopRules = false;
+      if (usage && usage.active_rules > 0) {
+        stopRules = await confirm(
+          `이 분류를 쓰는 반복 규칙 ${usage.active_rules}건이 계속 거래를 만듭니다(지난 거래 ${usage.transactions}건은 그대로 남아요). 규칙도 함께 끌까요?`,
+          { confirmLabel: '규칙도 끄기', cancelLabel: '분류만 끄기' },
+        );
+      }
+      await api.del(`/api/categories/${id}${stopRules ? '?stopRules=1' : ''}`);
       onChanged();
     } catch (err) {
       await alert(err.message);
@@ -746,7 +756,17 @@ function PaymentMethodSection({ paymentMethods, onChanged }) {
   const handleDeactivate = async (id) => {
     if (!await confirm('비활성화하시겠습니까?')) return;
     try {
-      await api.del(`/api/payment-methods/${id}`);
+      // 이 결제수단를 쓰는 반복규칙이 있으면 함께 끌지 묻는다(#677). 안 끄면 그 규칙은
+      // 계속 거래를 만든다 — 조용히 죽이지도, 조용히 살려 두지도 않고 사용자가 고른다.
+      const usage = await api.get(`/api/payment-methods/${id}/delete-preview`);
+      let stopRules = false;
+      if (usage && usage.active_rules > 0) {
+        stopRules = await confirm(
+          `이 결제수단를 쓰는 반복 규칙 ${usage.active_rules}건이 계속 거래를 만듭니다(지난 거래 ${usage.transactions}건은 그대로 남아요). 규칙도 함께 끌까요?`,
+          { confirmLabel: '규칙도 끄기', cancelLabel: '결제수단만 끄기' },
+        );
+      }
+      await api.del(`/api/payment-methods/${id}${stopRules ? '?stopRules=1' : ''}`);
       onChanged();
     } catch (err) {
       await alert(err.message);
