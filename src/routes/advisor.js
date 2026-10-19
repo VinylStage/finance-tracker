@@ -16,15 +16,16 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYMD } = require('../utils/date');
+const { isRealDate } = require('../utils/period');
 const { cycleHeadroom } = require('../services/advisor/headroom');
 const {
   loadHeadroomInputs, loadBaselineInputs, latestAnchorRow, monthAddYM, monthsToTimeline, simToScheduled,
 } = require('../services/advisor/headroomInputs');
 const { netWorthTimeline } = require('../services/advisor/netWorth');
 
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const YM = /^\d{4}-\d{2}$/;
-const isDate = (v) => YMD.test(v) && !Number.isNaN(new Date(v).getTime());
+// new Date() 는 2026-02-30 을 3/2 로 넘겨 통과시키므로 쓰지 않는다(#781, #666 과 같은 원인).
+const isDate = (v) => isRealDate(String(v));
 
 function intParam(raw, { min, max, def }) {
   if (raw === undefined || raw === '') return def;
