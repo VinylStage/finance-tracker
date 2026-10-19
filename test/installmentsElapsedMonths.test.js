@@ -3,9 +3,9 @@ const assert = require('node:assert');
 const { startTestServer } = require('./helpers/testServer');
 
 // FND-20(감사): installments.js가 SQL의 strftime(...,'now')(UTC)로 현재 연/월을
-// 구해 remaining_months/billed_months를 계산했다. 이제는 JS(localYearMonth,
+// 구해 remaining_months/billed_months를 계산했다. 이제는 JS(localYearMonthParts,
 // 로컬 타임존 기준)에서 계산한 값을 SQL에 바인딩한다. 그 경계 자체는
-// test/date.test.js의 localYearMonth 유닛테스트가 확인하고, 여기서는 리팩터링
+// test/date.test.js의 localYearMonthParts 유닛테스트가 확인하고, 여기서는 리팩터링
 // 후에도 실제 HTTP+DB 경로에서 경과월 산술이 여전히 정확한지 확인한다.
 
 const PORT = 20587; // 다른 테스트와 충돌 안 나게 임의 포트 사용

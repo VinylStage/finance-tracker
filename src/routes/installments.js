@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
-const { localYearMonth, localYMD } = require('../utils/date');
+const { localYearMonthParts, localYMD } = require('../utils/date');
 const { installmentsDueForMonth } = require('../utils/aggregation');
 const { numericBody, asInt } = require('../utils/validate');
 const { INSTALLMENT_SCHEDULE_FIELDS } = require('../constants');
@@ -88,7 +88,7 @@ function changesSchedule(existing, body) {
 
 // FND-20(감사): 여기서 쓰던 strftime(...,'now')는 UTC라서 KST 자정~9시 사이엔
 // remaining_months/billed_months가 1개월 어긋났다. SQL이 직접 'now'를
-// 참조하지 않도록, 현재 연/월을 JS(localYearMonth)에서 계산해 바인딩한다.
+// 참조하지 않도록, 현재 연/월을 JS(localYearMonthParts)에서 계산해 바인딩한다.
 //
 // 이름 파라미터를 쓴다. 이 조각이 SELECT 안에 두 번 들어가는데 위치 파라미터면
 // 같은 값을 네 번 순서대로 넘겨야 하고, 조각이 하나 늘 때마다 그 순서가 어긋난다.
@@ -105,7 +105,7 @@ const MONTHS_ELAPSED = `
 router.get('/', (req, res) => {
   try {
     const { status } = req.query;
-    const [curYear, curMonth] = localYearMonth();
+    const [curYear, curMonth] = localYearMonthParts();
     const params = { curYear, curMonth, today: localYMD() };
     let sql = `
       SELECT i.*,
