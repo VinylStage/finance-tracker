@@ -10,66 +10,72 @@ const { asInt } = require('../utils/validate');
 const { isRealDate } = require('../utils/period');
 
 
+// 백업에 필드가 있으면(null 이어도) 그 값, 없으면(구버전) fallback.
+function fieldOr(tx, key, fallback) {
+  return tx[key] !== undefined ? tx[key] : fallback;
+}
+
+// 날짜·금액이 온전하면 정수 금액, 아니면 null(스킵).
+//
+// FND-06(감사): date 형식/amount 타입을 검증하지 않아 백업 파일을 통해
+// 문자열 금액이 그대로 들어올 수 있었다. 형식이 안 맞는 행은 (기존의
+// 필드 누락 행과 동일하게) 스킵하고 나머지는 정상 복원한다.
+//
+// 글자꼴만 보면 2026-13-45 · 0000-00-00 · 2026-02-30 이 그대로 들어온다(#670).
+// 라우트가 막는 값을 복원 경로가 우회하면 막은 의미가 없다 — 실제로 네 건을
+// 넣었더니 imported 4 · skipped 0 이었다.
+function importAmount(tx) {
+  if (!tx.date || tx.amount === undefined || tx.amount === null) return null;
+  if (!isRealDate(String(tx.date))) return null;
+  return asInt(tx.amount);
+}
+
+// category_id 가 현재 DB 에 없으면 category_name 으로 찾는다(O(1) 조회). 못 찾으면 undefined.
+function importCategoryId(tx, lookups) {
+  if (tx.category_id && lookups.categoryIds.has(tx.category_id)) return tx.category_id;
+  return lookups.categoryByName.get(tx.category_name);
+}
+
+// 신버전 백업은 필드가 null 이어도 존재한다.
+// 하나라도 undefined(필드 자체 부재)면 구버전 백업으로 보고 legacy 플래그를 세운다.
+const LEGACY_KEYS = ['payment_style', 'payment_method_id', 'approval_number', 'installment_id', 'created_at'];
+
+// 현재 DB에 존재하지 않는 FK 값은 NULL로 폴백(전체 롤백 방지)
+function existingFk(id, ids) {
+  return id !== null && !ids.has(id) ? null : id;
+}
+
+// 거래 출처(#268). 백업에 없으면(구버전) manual 로 둔다 — 잠금이 풀리는 쪽이
+// 아니라 사용자 소유로 보는 쪽이 안전하다.
+//
+// origin_ref_id 는 참조 무결성을 검사하지 않고 그대로 복원한다. 원본 테이블
+// (installments 등)도 같은 백업에 들어 있어 함께 복원되기 때문이다. 원본이
+// 없는 경우는 파생 거래 재생성(#269)이 정리한다.
+function importOrigin(tx) {
+  return {
+    origin: TRANSACTION_ORIGINS.includes(tx.origin) ? tx.origin : 'manual',
+    origin_ref_table: fieldOr(tx, 'origin_ref_table', null),
+    origin_ref_id: fieldOr(tx, 'origin_ref_id', null),
+  };
+}
+
 // FND-14(감사): POST /import 핸들러 하나에 입력검증·카테고리 폴백·레거시
 // 필드 판정·FK 폴백·트랜잭션 실행이 전부 들어있어 순환복잡도가 43까지
 // 올라갔다. 거래 1건을 검증·정규화하는 부분만 떼어낸다 — 유효하면 삽입할
 // 행 객체를, 스킵 대상이면 null을 반환한다. lookups는 카테고리/FK
 // 존재확인용 조회 테이블(모든 행이 공유, 한 번만 만들면 됨)이다.
+// #736 에서 단계별 함수로 다시 쪼갰다(복잡도 25).
 function resolveImportRow(tx, lookups) {
-  // Skip if required fields are missing
-  if (!tx.date || tx.amount === undefined || tx.amount === null) return null;
-
-  // FND-06(감사): date 형식/amount 타입을 검증하지 않아 백업 파일을 통해
-  // 문자열 금액이 그대로 들어올 수 있었다. 형식이 안 맞는 행은 (기존의
-  // 필드 누락 행과 동일하게) 스킵하고 나머지는 정상 복원한다.
-  //
-  // 글자꼴만 보면 2026-13-45 · 0000-00-00 · 2026-02-30 이 그대로 들어온다(#670).
-  // 라우트가 막는 값을 복원 경로가 우회하면 막은 의미가 없다 — 실제로 네 건을
-  // 넣었더니 imported 4 · skipped 0 이었다.
-  if (!isRealDate(String(tx.date))) return null;
-  const amount = asInt(tx.amount);
+  const amount = importAmount(tx);
   if (amount === null) return null;
 
-  // If category_id doesn't exist, try to find by category_name (O(1) 조회)
-  let categoryId = tx.category_id;
-  if (!categoryId || !lookups.categoryIds.has(categoryId)) {
-    const foundId = lookups.categoryByName.get(tx.category_name);
-    if (foundId === undefined) return null;
-    categoryId = foundId;
-  }
+  const categoryId = importCategoryId(tx, lookups);
+  if (categoryId === undefined) return null;
 
-  // Handle legacy fields — 신버전 백업은 필드가 null 이어도 존재한다.
-  // 하나라도 undefined(필드 자체 부재)면 구버전 백업으로 보고 legacy 플래그를 세운다.
-  const isLegacy = tx.payment_style === undefined || tx.payment_method_id === undefined ||
-    tx.approval_number === undefined || tx.installment_id === undefined ||
-    tx.created_at === undefined;
-
-  let payment_method_id = tx.payment_method_id !== undefined ? tx.payment_method_id : null;
-  const payment_style = tx.payment_style !== undefined ? tx.payment_style : '일시불';
-  const approval_number = tx.approval_number !== undefined ? tx.approval_number : null;
-  let installment_id = tx.installment_id !== undefined ? tx.installment_id : null;
-  const created_at = tx.created_at !== undefined ? tx.created_at : null;
-
-  // 현재 DB에 존재하지 않는 FK 값은 NULL로 폴백(전체 롤백 방지)
-  let fkFallback = false;
-  if (payment_method_id !== null && !lookups.paymentMethodIds.has(payment_method_id)) {
-    payment_method_id = null;
-    fkFallback = true;
-  }
-  if (installment_id !== null && !lookups.installmentIds.has(installment_id)) {
-    installment_id = null;
-    fkFallback = true;
-  }
-
-  // 거래 출처(#268). 백업에 없으면(구버전) manual 로 둔다 — 잠금이 풀리는 쪽이
-  // 아니라 사용자 소유로 보는 쪽이 안전하다.
-  //
-  // origin_ref_id 는 참조 무결성을 검사하지 않고 그대로 복원한다. 원본 테이블
-  // (installments 등)도 같은 백업에 들어 있어 함께 복원되기 때문이다. 원본이
-  // 없는 경우는 파생 거래 재생성(#269)이 정리한다.
-  const origin = TRANSACTION_ORIGINS.includes(tx.origin) ? tx.origin : 'manual';
-  const origin_ref_table = tx.origin_ref_table !== undefined ? tx.origin_ref_table : null;
-  const origin_ref_id = tx.origin_ref_id !== undefined ? tx.origin_ref_id : null;
+  const rawPaymentMethodId = fieldOr(tx, 'payment_method_id', null);
+  const rawInstallmentId = fieldOr(tx, 'installment_id', null);
+  const payment_method_id = existingFk(rawPaymentMethodId, lookups.paymentMethodIds);
+  const installment_id = existingFk(rawInstallmentId, lookups.installmentIds);
 
   // `settlement` · `account_id` · `billing_month` 는 읽지 않는다(#289 축 제거).
   //
@@ -78,9 +84,14 @@ function resolveImportRow(tx, lookups) {
   // 그 필드 없이도 온전하므로, 모르는 필드로 취급해 조용히 버린다.
   return {
     date: tx.date, merchant: tx.merchant, amount, categoryId, memo: tx.memo,
-    payment_method_id, payment_style, approval_number, installment_id, created_at,
-    origin, origin_ref_table, origin_ref_id,
-    isLegacy, fkFallback,
+    payment_method_id,
+    payment_style: fieldOr(tx, 'payment_style', '일시불'),
+    approval_number: fieldOr(tx, 'approval_number', null),
+    installment_id,
+    created_at: fieldOr(tx, 'created_at', null),
+    ...importOrigin(tx),
+    isLegacy: LEGACY_KEYS.some((k) => tx[k] === undefined),
+    fkFallback: payment_method_id !== rawPaymentMethodId || installment_id !== rawInstallmentId,
   };
 }
 
