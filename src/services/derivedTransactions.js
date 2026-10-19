@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const { computeSchedule } = require('./interest/installment');
 const { policyAt } = require('./cardPolicy');
 const { DERIVED_CATEGORIES } = require('../constants');
-const { localYearMonth } = require('../utils/date');
+const { localYearMonthParts } = require('../utils/date');
 
 // 파생 거래의 생성·재생성·삭제(#269).
 //
@@ -271,7 +271,7 @@ function planInstallmentDerived(db, installmentId, overrides = {}) {
 
   const beforeByMonth = totalsByMonth(before);
   const afterByMonth = totalsByMonth(after);
-  const [curY, curM] = localYearMonth();
+  const [curY, curM] = localYearMonthParts();
   const currentMonth = `${curY}-${String(curM).padStart(2, '0')}`;
 
   const months = [...new Set([...beforeByMonth.keys(), ...afterByMonth.keys()])].sort();
