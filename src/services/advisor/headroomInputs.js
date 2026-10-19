@@ -143,7 +143,8 @@ function loadHeadroomInputs(db, { asOf, unpaidCards = [], spendDate, target } = 
 
   // 할부 회차.
   const inst = db.prepare(`
-    SELECT i.monthly_amount AS amt, i.months, i.start_billing_month AS sm, pm.name AS card
+    -- 수수료(fee_per_month)도 회차에 얹는다(#772). 장부의 파생 회차(정책 없을 때 flatFee)와 같은 규칙이다.
+    SELECT i.monthly_amount + COALESCE(i.fee_per_month, 0) AS amt, i.months, i.start_billing_month AS sm, pm.name AS card
     FROM installments i JOIN payment_methods pm ON pm.id = i.payment_method_id
     WHERE i.paid_off_on IS NULL
   `).all();
