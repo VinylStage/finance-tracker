@@ -2,7 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { asInt, missingFields, escapeLike, toIdList } = require('../utils/validate');
+const { asInt, missingFields, escapeLike, toIdList, requireIdParam, listParam } = require('../utils/validate');
+// :id 형식은 한 곳에서 본다(#734).
+router.param('id', requireIdParam);
 const { serverError } = require('../utils/errors');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
 const { resolvePeriod, isRealDate } = require('../utils/period');
@@ -19,9 +21,12 @@ router.get('/', (req, res) => {
     const period = resolvePeriod(req.query);
     if (period.error) return res.status(400).json({ error: period.error });
 
-    // limit/offset 은 정수로 강제하고 범위를 제한한다(잘못된 값으로 인한 500·과도한 조회 방지)
-    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
-    const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+    // limit/offset 은 정수만 받고 범위를 제한한다(#734 — 12abc 를 12 로 읽지 않는다)
+    const lim = listParam(req.query.limit, { def: 100, min: 1, max: 500 });
+    const off = listParam(req.query.offset, { def: 0, min: 0 });
+    if (lim.error || off.error) return res.status(400).json({ error: 'limit·offset 은 정수여야 합니다.' });
+    const limit = lim.value;
+    const offset = off.value;
 
     // WHERE 절을 목록 쿼리와 카운트 쿼리가 공유한다(total 이 필터를 반영하도록)
     const { where, params: whereParams } = buildTransactionFilters(req.query);

@@ -76,7 +76,8 @@ test('이미 지운 분류를 다시 지워도 404 가 아니다', async () => {
   assert.strictEqual(secondDelete.status, 200);
 });
 
-test('글자로 된 id 를 지워도 404 다', async () => {
+// #734 결정: 형식이 틀린 id 는 400, 형식이 맞는데 없는 id 는 404 로 가른다.
+test('글자로 된 id 를 지우면 400 이다', async () => {
   const res = await req('DELETE', '/api/categories/abc');
-  assert.strictEqual(res.status, 404);
+  assert.strictEqual(res.status, 400);
 });

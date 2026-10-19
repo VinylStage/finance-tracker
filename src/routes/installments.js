@@ -5,7 +5,9 @@ const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYearMonth, localYMD } = require('../utils/date');
 const { installmentsDueForMonth } = require('../utils/aggregation');
-const { numericBody, asInt } = require('../utils/validate');
+const { numericBody, asInt, requireIdParam } = require('../utils/validate');
+// :id 형식은 한 곳에서 본다(#734).
+router.param('id', requireIdParam);
 const { INSTALLMENT_SCHEDULE_FIELDS } = require('../constants');
 const {
   planInstallmentDerived, applyInstallmentDerived, derivedRowsFor, deleteDerivedFor,
