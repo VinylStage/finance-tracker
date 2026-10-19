@@ -1913,7 +1913,8 @@
 ### GET /api/advisor/projection
 - **Query**: `asOf`(YYYY-MM-DD, 기본 오늘) · `horizon`(1~120개월, 기본 24) · `simAmount`(원, 선택) · `simMonths`(1~120, 기본 1) · `simStart`(YYYY-MM, 기본 앵커월) · `simLabel`(시나리오 이름, 기본 "추가 지출")
 - **동작**: 기준일 이전 최근 보유현금 앵커에서 출발해 월별로 전개. 반복 수입/지출(시점 인식, 일일 규칙은 그 달 일수로 환산)·할부 회차·추가 지출 시나리오(할부, 이름 자유)를 선택적으로 반영
-- **응답**: `{ anchor:{month,amount}, horizon, simulated[], base:{timeline[{month,inflow,outflow,net,balance}],minBalance,firstNegativeMonth}, withSim|null }`
+- **응답**: `{ anchor:{month,amount}, horizon, simulated[], base:{timeline[{month,inflow,outflow,net,balance}],minBalance,firstNegativeMonth}, withSim|null, netWorth:{timeline[{month,cash,savings,debt,netWorth}]} }`
+- **순자산(#770)**: `netWorth` 는 `base`(추가 지출 시나리오 없는 전망) 기준이다. `cash` = 그 달 `base.balance`, `savings` = `status='진행중'` 적금의 시작월~만기월 원금 누적(이자 미반영), `debt` = 현재 `debts.balance` 합(전망 기간 내내 상수, 원금 상환 미반영), `netWorth = cash + savings − debt`. 현금흐름(`base`·`withSim`)에는 영향이 없다
 - **오류**: 400 형식 오류 · 409 앵커 없음
 
 ### GET /api/advisor/headroom
