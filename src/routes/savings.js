@@ -5,6 +5,7 @@ const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYMD } = require('../utils/date');
 const { numericBody } = require('../utils/validate');
+const { isRealDate } = require('../utils/period');
 
 function monthsBetween(startDate, endDate) {
   const s = new Date(startDate);
@@ -12,10 +13,9 @@ function monthsBetween(startDate, endDate) {
   return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1);
 }
 
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
-
+// new Date() 는 2026-02-30 을 3/2 로 넘겨 통과시키므로 쓰지 않는다(#666).
 function isUsableDate(value) {
-  return YMD.test(String(value || '')) && !Number.isNaN(new Date(value).getTime());
+  return isRealDate(String(value || ''));
 }
 
 // 월 납입액과 기간의 범위. 안 보낸 값은 검사하지 않는다 — 수정은 일부 필드만 온다.

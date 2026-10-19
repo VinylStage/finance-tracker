@@ -17,10 +17,12 @@ const {
 const { estimateBilling, billingBasis } = require('../services/installmentBilling');
 const { resolvePolicy } = require('../services/cardPolicy');
 const { BILLING_END, STATUS_EXPR } = require('../services/installmentStatus');
+const { isRealDate } = require('../utils/period');
 
-// YYYY-MM-DD 이고 실제로 있는 날짜인가
+// YYYY-MM-DD 이고 실제로 있는 날짜인가. new Date() 는 2026-02-30 을 3/2 로 넘겨
+// 통과시키므로 쓰지 않는다(#666).
 function isUsableDate(value) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(new Date(value).getTime());
+  return isRealDate(String(value || ''));
 }
 
 // YYYY-MM 이고 달이 01~12 인가
