@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../lib/api';
 import { formatWon } from '../lib/format';
+import { useLoader } from '../hooks/useLoader';
 
 // 할부 입력 폼의 월별 청구액 자동계산(#316).
 //
@@ -28,49 +29,50 @@ import { formatWon } from '../lib/format';
 // 디바운스가 없으면 1,200,000 하나 치는 데 일곱 번 부른다.
 const DEBOUNCE_MS = 400;
 
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
 export default function InstallmentBillingHint({
   totalAmount, months, paymentMethodId, purchaseDate, startBillingMonth,
   categoryId, monthlyAmount, feePerMonth, onEstimate,
 }) {
   const [estimate, setEstimate] = useState(null);
   const [error, setError] = useState(null);
-  const timer = useRef(null);
 
   const total = Number(totalAmount);
   const m = Number(months);
   const ready = total > 0 && m >= 2 && !!startBillingMonth;
 
-  useEffect(() => {
-    if (!ready) {
-      setEstimate(null);
-      setError(null);
-      return undefined;
-    }
-    clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      try {
-        const res = await api.post('/api/installments/billing-estimate', {
-          total_amount: total,
-          months: m,
-          payment_method_id: paymentMethodId ? Number(paymentMethodId) : undefined,
-          purchase_date: purchaseDate || undefined,
-          start_billing_month: startBillingMonth,
-          // 카테고리 예외 정책까지 반영해야 저장 후 생성될 값과 일치한다(#316).
-          category_id: categoryId ? Number(categoryId) : undefined,
-        });
+  // 입력이 바뀔 때마다 다시 부른다. 늦게 온 옛 응답은 useLoader 가 버린다(#737).
+  // 디바운스는 기다리는 호출만 끊고 이미 나간 요청은 못 막는다 — 빠르게 두 번
+  // 바꾸면 첫 응답이 늦게 와서 화면과 폼 기본값(onEstimate)을 옛 값으로 덮었다.
+  useLoader(async (isCurrent) => {
+    if (!ready) return () => { setEstimate(null); setError(null); };
+    await wait(DEBOUNCE_MS);
+    if (!isCurrent()) return undefined;
+    try {
+      const res = await api.post('/api/installments/billing-estimate', {
+        total_amount: total,
+        months: m,
+        payment_method_id: paymentMethodId ? Number(paymentMethodId) : undefined,
+        purchase_date: purchaseDate || undefined,
+        start_billing_month: startBillingMonth,
+        // 카테고리 예외 정책까지 반영해야 저장 후 생성될 값과 일치한다(#316).
+        category_id: categoryId ? Number(categoryId) : undefined,
+      });
+      return () => {
         setError(null);
         setEstimate(res.data);
         onEstimate?.(res.data);
-      } catch (err) {
-        // 계산이 실패해도 입력은 계속할 수 있어야 한다. 기록이 계산에
-        // 종속되면 안 된다 — 정책을 아직 안 넣은 사용자가 정상적으로 존재한다.
+      };
+    } catch (err) {
+      // 계산이 실패해도 입력은 계속할 수 있어야 한다. 기록이 계산에
+      // 종속되면 안 된다 — 정책을 아직 안 넣은 사용자가 정상적으로 존재한다.
+      return () => {
         setEstimate(null);
         setError(err.message);
-      }
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(timer.current);
+      };
+    }
     // onEstimate 는 매 렌더 새 함수라 의존성에 넣으면 무한 루프가 된다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, total, m, paymentMethodId, purchaseDate, startBillingMonth, categoryId]);
 
   if (error) {
