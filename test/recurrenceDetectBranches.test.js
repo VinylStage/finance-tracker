@@ -76,3 +76,15 @@ test('가맹점명의 공백을 정리해 같은 곳으로 묶는다', () => {
   const result = detect([row('2026-01-10', { merchant: '넷플릭스  코리아' }), row('2026-02-10', { merchant: ' 넷플릭스 코리아' }), row('2026-03-10', { merchant: '넷플릭스 코리아 ' })]);
   assert.deepStrictEqual(result.map((c) => [c.merchant, c.occurrences]), [['넷플릭스 코리아', 3]]);
 });
+
+// 아래 한 건은 위임 산출이 아니라 사람이 더한 것이다. 쪼갠 뒤 돌연변이에서 «정리한 사본
+// 대신 원본 행을 묶어도» 위 12개가 다 통과했다 — 금액을 숫자로만 넣었기 때문이다.
+// 문자열 금액이 그대로 남으면 짝수 건 중앙값이 '10000'+'12000' 이어붙이기가 된다.
+test('문자열 금액도 숫자로 바꿔 계산한다', () => {
+  const result = detect([
+    row('2026-01-10', { amount: '10000' }), row('2026-02-10', { amount: '10000' }),
+    row('2026-03-10', { amount: '12000' }), row('2026-04-10', { amount: '12000' }),
+  ]);
+  assert.strictEqual(result[0].amount, 11000);
+  assert.strictEqual(result[0].amount_min, 10000);
+});

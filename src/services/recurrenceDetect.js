@@ -49,6 +49,85 @@ function normalizeMerchant(s) {
   return String(s ?? '').trim().replace(/\s+/g, ' ');
 }
 
+// 감지에 쓸 수 있는 행이면 정리한 사본을, 아니면 null.
+function usableRow(r, excluded) {
+  if (!r) return null;
+  const merchant = normalizeMerchant(r.merchant);
+  if (!merchant || excluded.has(merchant)) return null;
+  const date = String(r.date ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const amount = Number(r.amount);
+  if (!Number.isFinite(amount) || amount === 0) return null;
+  // 파생 거래는 계산 결과지 사용자의 소비 습관이 아니다. 이걸 패턴으로 보면
+  // "할부 이자를 반복 규칙으로 등록하시겠어요" 같은 제안이 나온다.
+  if (r.origin && r.origin !== 'manual') return null;
+  return { ...r, merchant, date, amount };
+}
+
+function groupByMerchant(rows, excluded) {
+  const groups = new Map();
+  for (const r of rows) {
+    const item = usableRow(r, excluded);
+    if (!item) continue;
+    if (!groups.has(item.merchant)) groups.set(item.merchant, []);
+    groups.get(item.merchant).push(item);
+  }
+  return groups;
+}
+
+// 편차는 "얼마나 흔들리나" 다. 최대 이탈로 잰다 — 평균 편차는 한 번 크게
+// 튄 것을 감춘다.
+function maxDeviation(nums, center) {
+  return Math.max(...nums.map((n) => Math.abs(n - center)));
+}
+
+// 한 가맹점의 거래 묶음을 후보 하나로 요약한다. 달 수가 모자라면 null.
+function summarize(merchant, items, { minMonths, amountTolerance, dayTolerance }) {
+  const months = new Set(items.map((i) => i.date.slice(0, 7)));
+  if (months.size < minMonths) return null;
+
+  const amounts = items.map((i) => i.amount);
+  const days = items.map((i) => Number(i.date.slice(8, 10)));
+  const amountMedian = median(amounts);
+  const dayMedian = median(days);
+  const amountSpread = amountMedian === 0 ? 0 : maxDeviation(amounts, amountMedian) / amountMedian;
+
+  return {
+    merchant,
+    occurrences: items.length,
+    months: months.size,
+    first_seen: items.reduce((a, b) => (a.date < b.date ? a : b)).date,
+    last_seen: items.reduce((a, b) => (a.date > b.date ? a : b)).date,
+    // 규칙 폼이 그대로 채울 값
+    amount: amountMedian,
+    day_of_month: dayMedian,
+    category_id: mode(items.map((i) => i.category_id)),
+    payment_method_id: mode(items.map((i) => i.payment_method_id)),
+    payment_style: mode(items.map((i) => i.payment_style)) || '일시불',
+    // 사용자가 판단할 근거. 숨기면 "왜 이 금액이지" 를 알 수 없다.
+    amount_varies: amountSpread > amountTolerance,
+    day_varies: maxDeviation(days, dayMedian) > dayTolerance,
+    amount_min: Math.min(...amounts),
+    amount_max: Math.max(...amounts),
+  };
+}
+
+// **흔들리지 않는 것을 먼저 올린다.**
+//
+// 반복 규칙은 고정 금액을 전제한다(`Settings` 안내문: "매달 금액이 완전히 고정된
+// 지출만 등록하세요"). 그런데 건수로만 정렬하면 자주 가는 쇼핑몰·교통충전이
+// 위를 차지한다 — 실거래 580건으로 돌려 보니 상위 8개 중 7개가 금액 변동이었다.
+//
+// 등록하면 안 되는 것을 위에 두면 사용자는 목록을 읽다 지치고, 그러면 정작
+// 등록해야 할 구독료가 아래에 묻힌다.
+const stability = (c) => (c.amount_varies ? 1 : 0) + (c.day_varies ? 1 : 0);
+
+function byStabilityThenFrequency(a, b) {
+  return stability(a) - stability(b)
+    || b.occurrences - a.occurrences
+    || b.last_seen.localeCompare(a.last_seen);
+}
+
 /**
  * 반복 후보를 찾는다.
  *
@@ -78,74 +157,12 @@ function detectRecurringCandidates(rows, opts = {}) {
     [...existingMerchants, ...dismissedMerchants].map(normalizeMerchant).filter(Boolean)
   );
 
-  const groups = new Map();
-  for (const r of rows) {
-    if (!r) continue;
-    const merchant = normalizeMerchant(r.merchant);
-    if (!merchant || excluded.has(merchant)) continue;
-    const date = String(r.date ?? '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    const amount = Number(r.amount);
-    if (!Number.isFinite(amount) || amount === 0) continue;
-    // 파생 거래는 계산 결과지 사용자의 소비 습관이 아니다. 이걸 패턴으로 보면
-    // "할부 이자를 반복 규칙으로 등록하시겠어요" 같은 제안이 나온다.
-    if (r.origin && r.origin !== 'manual') continue;
-
-    if (!groups.has(merchant)) groups.set(merchant, []);
-    groups.get(merchant).push({ ...r, merchant, date, amount });
-  }
-
   const out = [];
-  for (const [merchant, items] of groups) {
-    const months = new Set(items.map((i) => i.date.slice(0, 7)));
-    if (months.size < minMonths) continue;
-
-    const amounts = items.map((i) => i.amount);
-    const days = items.map((i) => Number(i.date.slice(8, 10)));
-    const amountMedian = median(amounts);
-    const dayMedian = median(days);
-
-    // 편차는 "얼마나 흔들리나" 다. 최대 이탈로 잰다 — 평균 편차는 한 번 크게
-    // 튄 것을 감춘다.
-    const amountSpread = amountMedian === 0
-      ? 0
-      : Math.max(...amounts.map((a) => Math.abs(a - amountMedian))) / amountMedian;
-    const daySpread = Math.max(...days.map((d) => Math.abs(d - dayMedian)));
-
-    out.push({
-      merchant,
-      occurrences: items.length,
-      months: months.size,
-      first_seen: items.reduce((a, b) => (a.date < b.date ? a : b)).date,
-      last_seen: items.reduce((a, b) => (a.date > b.date ? a : b)).date,
-      // 규칙 폼이 그대로 채울 값
-      amount: amountMedian,
-      day_of_month: dayMedian,
-      category_id: mode(items.map((i) => i.category_id)),
-      payment_method_id: mode(items.map((i) => i.payment_method_id)),
-      payment_style: mode(items.map((i) => i.payment_style)) || '일시불',
-      // 사용자가 판단할 근거. 숨기면 "왜 이 금액이지" 를 알 수 없다.
-      amount_varies: amountSpread > amountTolerance,
-      day_varies: daySpread > dayTolerance,
-      amount_min: Math.min(...amounts),
-      amount_max: Math.max(...amounts),
-    });
+  for (const [merchant, items] of groupByMerchant(rows, excluded)) {
+    const c = summarize(merchant, items, { minMonths, amountTolerance, dayTolerance });
+    if (c) out.push(c);
   }
-
-  // **흔들리지 않는 것을 먼저 올린다.**
-  //
-  // 반복 규칙은 고정 금액을 전제한다(`Settings` 안내문: "매달 금액이 완전히 고정된
-  // 지출만 등록하세요"). 그런데 건수로만 정렬하면 자주 가는 쇼핑몰·교통충전이
-  // 위를 차지한다 — 실거래 580건으로 돌려 보니 상위 8개 중 7개가 금액 변동이었다.
-  //
-  // 등록하면 안 되는 것을 위에 두면 사용자는 목록을 읽다 지치고, 그러면 정작
-  // 등록해야 할 구독료가 아래에 묻힌다.
-  const stability = (c) => (c.amount_varies ? 1 : 0) + (c.day_varies ? 1 : 0);
-  out.sort((a, b) =>
-    stability(a) - stability(b)
-    || b.occurrences - a.occurrences
-    || b.last_seen.localeCompare(a.last_seen));
-  return out;
+  return out.sort(byStabilityThenFrequency);
 }
 
 module.exports = {
