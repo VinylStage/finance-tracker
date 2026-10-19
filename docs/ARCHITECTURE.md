@@ -32,7 +32,7 @@ CSS 에서 사라진다.
 
 <!-- inventory:start -->
 
-### 백엔드 라우트 (25개 파일 / API 마운트 25개)
+### 백엔드 라우트 (24개 파일 / API 마운트 24개)
 
 | 마운트 | 파일 |
 |---|---|
@@ -50,7 +50,6 @@ CSS 에서 사라진다.
 | `/api/data` | `data.js` |
 | `/api/data-integrity` | `dataIntegrity.js` |
 | `/api/debts` | `debts.js` |
-| `/api/exchange` | `exchange.js` |
 | `/api/export` | `export.js` |
 | `/api/guide` | `guide.js` |
 | `/api/installments` | `installments.js` |
@@ -62,9 +61,9 @@ CSS 에서 사라진다.
 | `/api/stocks` | `stocks.js` |
 | `/api/transactions` | `transactions.js` |
 
-### 서비스 (27개)
+### 서비스 (23개)
 
-`auditRetention.js` · `benefitRules.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardOverseas.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `ecosService.js` · `eximService.js` · `installmentBilling.js` · `installmentDuplicates.js` · `installmentStatus.js` · `kakaoCategoryMap.js` · `kakaoLocal.js` · `kisService.js` · `recurrence.js` · `recurrenceDetect.js` · `recurringCatchup.js` · `transactionOrigin.js` · `undo.js`
+`auditRetention.js` · `benefitRules.js` · `cardBilling.js` · `cardComparison.js` · `cardExcelImport.js` · `cardOverseas.js` · `cardPolicy.js` · `cardRemap.js` · `cardStrategy.js` · `cardThreshold.js` · `csvImport.js` · `debtRate.js` · `debtRepayment.js` · `derivedTransactions.js` · `installmentBilling.js` · `installmentDuplicates.js` · `installmentStatus.js` · `kisService.js` · `recurrence.js` · `recurrenceDetect.js` · `recurringCatchup.js` · `transactionOrigin.js` · `undo.js`
 
 ### 프론트엔드 페이지 (13개)
 

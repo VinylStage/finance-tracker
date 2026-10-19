@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PRESETS, MAX_FUTURE_DAYS, rangeForPreset, rangeForMonth, validateRange,
-  parsePeriodQuery, toPeriodQuery, periodLabel, monthShorthand, CONTROL_PRESETS,
+  parsePeriodQuery, toPeriodQuery, monthShorthand, CONTROL_PRESETS,
 } from './periodFilter';
 
 // 전역 기간 필터(#272).
@@ -214,22 +214,6 @@ describe('E. URL 왕복', () => {
 
   it('E-11. 앞의 ? 가 있든 없든 읽는다', () => {
     expect(parsePeriodQuery('from=2026-03-05&to=2026-04-10', TODAY).from).toBe('2026-03-05');
-  });
-});
-
-describe('F. 라벨', () => {
-  it('F-1. 프리셋은 이름으로 보인다', () => {
-    expect(periodLabel({ preset: 'this-month', from: '2026-08-01', to: '2026-08-31' })).toBe('이번 달');
-  });
-
-  it('F-2. 직접 지정은 날짜 범위로 보인다', () => {
-    expect(periodLabel({ preset: 'custom', from: '2026-03-05', to: '2026-04-10' }))
-      .toBe('2026-03-05 ~ 2026-04-10');
-  });
-
-  it('F-3. 모르는 프리셋도 날짜로 떨어진다', () => {
-    expect(periodLabel({ preset: 'nope', from: '2026-03-05', to: '2026-04-10' }))
-      .toBe('2026-03-05 ~ 2026-04-10');
   });
 });
 

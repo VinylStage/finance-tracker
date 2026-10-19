@@ -40,8 +40,6 @@ export const PRESETS = [
   { key: 'custom', label: '직접 지정' },
 ];
 
-const PRESET_KEYS = new Set(PRESETS.map((p) => p.key));
-
 // 누르는 순간 범위가 정해지지 않고 **컨트롤이 열리는** 프리셋. `rangeForPreset`
 // 이 null 을 주는 것이 정상이다.
 //
@@ -206,20 +204,6 @@ export function toPeriodQuery({ from, to, includeDerived = true } = {}, today = 
 
   const s = params.toString();
   return s ? `?${s}` : '';
-}
-
-/** 화면에 쓸 기간 라벨. 프리셋이면 그 이름, 아니면 날짜 범위. */
-export function periodLabel({ preset, from, to }) {
-  // '월 선택' 은 이름이 아니라 **고른 달**을 보여줘야 한다. 버튼 이름을 그대로
-  // 쓰면 3월을 보고 있는데 화면에 '월 선택' 이라고 적힌다.
-  if (preset === 'month') {
-    const ym = monthShorthand({ from, to });
-    if (ym) return `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
-  }
-  if (preset && preset !== 'custom' && PRESET_KEYS.has(preset)) {
-    return PRESETS.find((p) => p.key === preset).label;
-  }
-  return `${from} ~ ${to}`;
 }
 
 /** 월 단축형으로 줄일 수 있으면 'YYYY-MM' 을 준다. 없으면 null. */

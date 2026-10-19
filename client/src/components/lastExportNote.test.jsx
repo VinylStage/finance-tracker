@@ -51,6 +51,7 @@ describe('데이터가 어디 있는지 알리는 안내', () => {
     // «전송 경로가 없다» 만 쓰면 외부 호출 자체가 없다는 오해를 준다.
     // 예외를 함께 적는 것이 이 화면의 규칙이다.
     expect(screen.getByText(/외부로 전송되는 경로는 없습니다/)).toBeTruthy();
-    expect(screen.getByText(/환율과 주가를 불러올 때만 외부 API/)).toBeTruthy();
+    // 환율 조회는 걷어냈고(#732) 남은 외부 호출은 주가 조회(기본 꺼짐)뿐이다.
+    expect(screen.getByText(/주가 조회\(기본 꺼짐\)를 켰을 때만 외부 API/)).toBeTruthy();
   });
 });

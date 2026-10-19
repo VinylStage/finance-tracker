@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { formatWon, formatNumber, formatAxisTick } from './format';
+import { formatWon, formatAxisTick } from './format';
 
 // #236 — 금액 표기 정본.
 //
@@ -44,13 +44,6 @@ describe('formatWon', () => {
   it('로케일을 명시한다 — 실행 환경을 따라가지 않는다', () => {
     // 생략하면 de-DE 같은 환경에서 1.234.567 로 나온다.
     expect(formatWon(1234567)).toBe('1,234,567원');
-  });
-});
-
-describe('formatNumber', () => {
-  it('단위 없이 자릿수만 구분한다', () => {
-    expect(formatNumber(1234567)).toBe('1,234,567');
-    expect(formatNumber(0)).toBe('0');
   });
 });
 
