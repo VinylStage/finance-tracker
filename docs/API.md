@@ -1634,6 +1634,15 @@
 - **비고**: 모르는 `mode` 나 형식이 어긋난 `startsOn` 은 400. 「프리뷰 → 확인 → 실행」
   에서 실행 쪽이고, 프리뷰는 위 엔드포인트다.
 
+### GET /api/recurring-rules/:id/delete-preview
+- **동작**: 규칙을 끄기 전에, 그 규칙이 따라잡기로 만든 거래(`origin='recurring'`, `origin_ref_table='recurring_rules'`)의 건수·합계를 준다(#681). 확인 버튼으로 만든 거래(origin=manual)는 사용자가 확정한 것이라 세지 않는다
+- **응답**: `{ rule_id, generated_count, generated_total }` · 404 없는 규칙
+
+### DELETE /api/recurring-rules/:id
+- **Query**: `withTransactions=1`(선택)
+- **동작**: 규칙을 지우지 않고 끈다(`is_active=0`). `withTransactions=1` 이면 그 규칙이 따라잡기로 만든 거래도 함께 지운다. `recurring_occurrences` 의 발생 기록은 남기고 연결만 끊는다
+- **응답**: `{ ok: true, deleted_transactions }` · 404 없는 규칙
+
 ### GET /api/recurring-rules/due
 이번 달(기본값) 아직 처리하지 않은 규칙 목록. 대시보드의 "이번 달 반복 거래 확인" 이
 쓴다.
