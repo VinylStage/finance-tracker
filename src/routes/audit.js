@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
+const { listParam } = require('../utils/validate');
 const { findUndoable, applyUndo } = require('../services/undo');
 const { getLastPurgeSummary } = require('../services/auditRetention');
 
@@ -56,8 +57,12 @@ router.post('/undo', (req, res) => {
 // 목록을 뒤덮기 때문이다.
 router.get('/log', (req, res) => {
   try {
-    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200);
-    const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+    // 정수만 받는다(#734 — 12abc 를 12 로 읽지 않는다)
+    const lim = listParam(req.query.limit, { def: 50, min: 1, max: 200 });
+    const off = listParam(req.query.offset, { def: 0, min: 0 });
+    if (lim.error || off.error) return res.status(400).json({ error: 'limit·offset 은 정수여야 합니다.' });
+    const limit = lim.value;
+    const offset = off.value;
     const actor = req.query.actor || 'user';
 
     const where = actor === 'all' ? '' : 'WHERE actor = ?';

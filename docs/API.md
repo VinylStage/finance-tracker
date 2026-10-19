@@ -1,5 +1,10 @@
 # API 문서
 
+## 공통 규칙
+
+- **경로의 `:id`** (#734): 비카드 라우터(categories · payment-methods · installments · revolving · debts · savings · recurring-rules · transactions)는 `:id`(debts 는 `:repaymentId` 도)가 1 이상의 정수가 아니면 **400** `{ "error": "id 는 1 이상의 정수여야 합니다." }`. 형식이 맞는데 없는 자원은 **404**. 카드 계열 라우터는 M8 소유라 아직 이 규칙 밖이다
+- **목록의 `limit` · `offset`** (`/api/transactions`, `/api/audit/log`): 정수가 아니면 **400** `{ "error": "limit·offset 은 정수여야 합니다." }`(예전에는 `12abc` 를 12 로 읽었다). 범위는 잘라 주고, `limit=0` 은 기본값이다
+
 ## cashflow.js
 
 ### GET /api/cashflow

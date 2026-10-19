@@ -4,7 +4,9 @@ const router = express.Router();
 const db = require('../db/init');
 const { serverError } = require('../utils/errors');
 const { localYMD } = require('../utils/date');
-const { numericBody } = require('../utils/validate');
+const { numericBody, requireIdParam } = require('../utils/validate');
+// :id 형식은 한 곳에서 본다(#734).
+router.param('id', requireIdParam);
 const { isRealDate } = require('../utils/period');
 
 function monthsBetween(startDate, endDate) {

@@ -60,5 +60,27 @@ function numericBody(fields) {
   };
 }
 
+// 경로의 :id 는 1 이상의 정수만 받는다(#734). 형식이 틀리면 400 이고, 형식이 맞는데
+// 없는 자원이면 지금처럼 각 라우트가 404 를 낸다 — 두 신호를 갈라야 클라이언트가 구분한다.
+// 예전에는 검증 없이 문자열을 SQL 에 바인딩해 같은 잘못된 입력에 라우트마다 400/404 가 갈렸다.
+function requireIdParam(req, res, next, value) {
+  const id = asInt(value);
+  if (id === null || id < 1) {
+    return res.status(400).json({ error: 'id 는 1 이상의 정수여야 합니다.' });
+  }
+  return next();
+}
+
+// 목록 쿼리의 limit·offset(#734). 안 보내면 기본값, 보냈는데 정수가 아니면 오류다 —
+// parseInt 는 12abc 를 12 로 읽어 잘못된 입력을 조용히 통과시켰다. 범위는 지금처럼 자른다.
+function listParam(raw, { def, min, max = Infinity }) {
+  if (raw === undefined || raw === '') return { value: def };
+  const n = asInt(raw);
+  if (n === null) return { error: true };
+  // 0 이 하한(양수)보다 작으면 예전처럼 기본값으로 본다 — parseInt(...) || 기본값 의 동작을 잇는다.
+  if (n === 0 && min > 0) return { value: def };
+  return { value: Math.min(Math.max(n, min), max) };
+}
+
 module.exports = {
-  toIdList, asInt, missingFields, escapeLike, numericBody };
+  toIdList, asInt, missingFields, escapeLike, numericBody, requireIdParam, listParam };

@@ -220,8 +220,9 @@ test('E-2. limit 이 범위를 벗어나면 잘라 준다', async () => {
   assert.strictEqual(huge.status, 200);
   assert.ok(huge.body.data.length <= 200, `limit 상한이 안 걸렸다: ${huge.body.data.length}`);
 
+  // 숫자가 아닌 값은 400 이다(#734 — 예전에는 기본값으로 삼켰다). 500 이 아니어야 한다는 취지는 같다.
   const bad = await api('GET', '/api/audit/log?limit=abc&offset=xyz');
-  assert.strictEqual(bad.status, 200, '숫자가 아닌 값에도 500 이 나면 안 된다');
+  assert.strictEqual(bad.status, 400, '숫자가 아닌 limit·offset 은 400 이어야 한다');
 });
 
 // PORT + 1 로 띄우면 다른 파일이 쓰는 포트와 겹친다. 실제로 20625 + 1·2 가

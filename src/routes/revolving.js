@@ -3,7 +3,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { serverError, errMsg } = require('../utils/errors');
-const { asInt } = require('../utils/validate');
+const { asInt, requireIdParam } = require('../utils/validate');
+// :id 형식은 한 곳에서 본다(#734).
+router.param('id', requireIdParam);
 const { syncRevolvingDerived, deleteDerivedFor, derivedRowsFor } = require('../services/derivedTransactions');
 
 // ─────────────────────────────────────────────────────────────────────────

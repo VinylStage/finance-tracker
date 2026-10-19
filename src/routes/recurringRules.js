@@ -2,7 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
-const { asInt, missingFields, numericBody } = require('../utils/validate');
+const { asInt, missingFields, numericBody, requireIdParam } = require('../utils/validate');
+// :id 형식은 한 곳에서 본다(#734).
+router.param('id', requireIdParam);
 const { isRealDate } = require('../utils/period');
 const { pad2, localYearMonth } = require('../utils/date');
 const { serverError, errMsg } = require('../utils/errors');
