@@ -6,7 +6,7 @@ const { asInt, missingFields, numericBody, requireIdParam } = require('../utils/
 // :id 형식은 한 곳에서 본다(#734).
 router.param('id', requireIdParam);
 const { isRealDate } = require('../utils/period');
-const { pad2 } = require('../utils/date');
+const { pad2, localYearMonth } = require('../utils/date');
 const { serverError, errMsg } = require('../utils/errors');
 const { PAYMENT_STYLES, RECURRING_FREQS } = require('../constants');
 const {
@@ -14,11 +14,6 @@ const {
   reactivationPreview, reactivateRule,
 } = require('../services/recurringCatchup');
 const { detectRecurringCandidates } = require('../services/recurrenceDetect');
-
-function thisYearMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
-}
 
 // day_of_month가 해당 월의 실제 일수를 넘으면(예: 31일 규칙 + 2월) 그 달의 마지막 날로 맞춘다.
 function resolveDate(yearMonth, dayOfMonth) {
@@ -300,7 +295,7 @@ router.get('/', (req, res) => {
 // GET /api/recurring-rules/due?month=YYYY-MM — 이번 달(기본값) 확인 대상 목록
 router.get('/due', (req, res) => {
   try {
-    const yearMonth = req.query.month || thisYearMonth();
+    const yearMonth = req.query.month || localYearMonth();
     if (!isRealMonth(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rows = db.prepare(`
       SELECT r.*, c.name AS category_name, p.name AS payment_method_name
@@ -378,7 +373,7 @@ router.delete('/:id', (req, res) => {
 // POST /api/recurring-rules/:id/confirm — body: { month? } — 실제 거래 생성 + 이번 달 처리 완료 기록
 router.post('/:id/confirm', (req, res) => {
   try {
-    const yearMonth = req.body.month || thisYearMonth();
+    const yearMonth = req.body.month || localYearMonth();
     if (!isRealMonth(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rule = db.prepare('SELECT * FROM recurring_rules WHERE id=? AND is_active=1').get(req.params.id);
     if (!rule) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
@@ -407,7 +402,7 @@ router.post('/:id/confirm', (req, res) => {
 // POST /api/recurring-rules/:id/skip — body: { month? } — 거래 생성 없이 이번 달 처리 완료로 기록
 router.post('/:id/skip', (req, res) => {
   try {
-    const yearMonth = req.body.month || thisYearMonth();
+    const yearMonth = req.body.month || localYearMonth();
     if (!isRealMonth(yearMonth)) return res.status(400).json({ error: '월 형식이 올바르지 않습니다. 2026-07 처럼 입력해 주세요.' });
     const rule = db.prepare('SELECT id FROM recurring_rules WHERE id=? AND is_active=1').get(req.params.id);
     if (!rule) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
