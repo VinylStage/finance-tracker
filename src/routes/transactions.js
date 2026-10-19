@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/init');
 const { asInt, missingFields, escapeLike, toIdList } = require('../utils/validate');
+const { inactiveRefError } = require('../services/activeRefs');
 const { serverError } = require('../utils/errors');
 const { buildTransactionFilters } = require('../utils/transactionFilters');
 const { resolvePeriod, isRealDate } = require('../utils/period');
@@ -417,7 +418,8 @@ function validateCardProduct(body) {
 // POST /api/transactions
 router.post('/', (req, res) => {
   try {
-    const err = validateTxBody(req.body) || validateCardProduct(req.body);
+    // 비활성 분류·결제수단으로 새 거래를 만들지 않는다(#677).
+    const err = validateTxBody(req.body) || validateCardProduct(req.body) || inactiveRefError(db, req.body);
     if (err) return res.status(400).json({ error: err });
     const {
       date, category_id, amount, payment_method_id, card_product_id, payment_style = '일시불', merchant, memo,
@@ -445,9 +447,12 @@ router.put('/:id', (req, res) => {
     if (err) return res.status(400).json({ error: err });
 
     // 파생 거래는 거래내역에서 고칠 수 없다(#268). 원본을 고쳐야 계산과 맞는다.
-    const target = db.prepare('SELECT id, origin, date, card_product_id FROM transactions WHERE id=?').get(req.params.id);
+    const target = db.prepare('SELECT id, origin, date, card_product_id, category_id, payment_method_id FROM transactions WHERE id=?').get(req.params.id);
     if (!target) return res.status(404).json({ error: '찾는 거래가 없습니다. 이미 삭제됐을 수 있어요.' });
     if (!isEditable(target)) return res.status(403).json({ error: lockedMessage(target) });
+    // 비활성 분류·결제수단으로 «바꾸는» 것만 막는다(#677). 옛 거래를 그대로 고치는 건 된다.
+    const refErr = inactiveRefError(db, req.body, target);
+    if (refErr) return res.status(400).json({ error: refErr });
 
     const {
       date, category_id, amount, payment_method_id, card_product_id, payment_style, merchant, memo,

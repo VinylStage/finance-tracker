@@ -91,14 +91,21 @@
   }
   ```
 
+### GET /api/categories/:id/delete-preview
+- **동작**: 끄기 전에 이 항목을 쓰는 활성 반복규칙 수(`active_rules`)와 거래 수(`transactions`)를 준다(#677)
+- **응답**: `{ id, active_rules, transactions }` · 404 없는 항목
+
 ### DELETE /api/categories/:id
 - **Description**: Deactivate a category by ID
+- **Query**: `stopRules=1`(선택) — 이 항목을 쓰는 활성 반복규칙(`category_id`)도 함께 끈다(#677). 안 주면 그 규칙은 계속 거래를 만든다
 - **Response Schema**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "stopped_rules": "number"
   }
   ```
+- **비활성 참조(#677)**: 꺼진 항목은 `POST /api/transactions` · `POST /api/recurring-rules` 에서 400 이다. 수정(PUT)은 그 값으로 **바꿀 때만** 400 이고, 옛 거래·규칙을 그대로 고치는 건 된다
 
 ## settings.js
 
@@ -181,14 +188,21 @@
   }
   ```
 
+### GET /api/payment-methods/:id/delete-preview
+- **동작**: 끄기 전에 이 항목을 쓰는 활성 반복규칙 수(`active_rules`)와 거래 수(`transactions`)를 준다(#677)
+- **응답**: `{ id, active_rules, transactions }` · 404 없는 항목
+
 ### DELETE /api/payment-methods/:id
 - **Description**: Deactivate a payment method by ID
+- **Query**: `stopRules=1`(선택) — 이 항목을 쓰는 활성 반복규칙(`payment_method_id`)도 함께 끈다(#677). 안 주면 그 규칙은 계속 거래를 만든다
 - **Response Schema**:
   ```json
   {
-    "ok": "boolean"
+    "ok": "boolean",
+    "stopped_rules": "number"
   }
   ```
+- **비활성 참조(#677)**: 꺼진 항목은 `POST /api/transactions` · `POST /api/recurring-rules` 에서 400 이다. 수정(PUT)은 그 값으로 **바꿀 때만** 400 이고, 옛 거래·규칙을 그대로 고치는 건 된다
 ## export.js
 
 ### GET /api/export/csv?from=YYYY-MM-DD&to=YYYY-MM-DD
