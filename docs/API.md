@@ -1704,9 +1704,10 @@
 - **요청 파라미터**: `preview` (query) — `true` 면 저장하지 않는다
 - **요청 본문**: `{ "cardCompany": "string", "csvText": "string" }`
 - **응답 스키마**
-  - 미리보기: `{ "cardCompany", "cardCompanyLabel", "count", "skipped", "invalid" }`
-  - 저장: `{ "imported", "skipped", "invalid", "errors": ["string"] }`
-- **비고**: `invalid` 는 파싱 단계에서 걸러진 행이다 — 저장 대상에서 아예 빠진다.
+  - 미리보기: `{ "cardCompany", "cardCompanyLabel", "count", "skipped", "invalid", "invalidRows" }`
+  - 저장: `{ "imported", "skipped", "invalid", "invalidRows", "errors": ["string"] }`
+  - `invalidRows`: `[{ "line": 3, "raw": "2026.13.45,가맹점,20000", "reason": "날짜를 읽을 수 없습니다" }]` — `line` 은 헤더를 1행으로 센 CSV 행 번호, `reason` 은 `날짜를` / `금액을` / `날짜와 금액을` 읽을 수 없습니다 중 하나(#689)
+- **비고**: `invalid` 는 파싱 단계에서 걸러진 행이다 — 저장 대상에서 아예 빠진다. `invalidRows.raw` 에는 가맹점명이 들어 있으므로 서버 로그에 남기지 않는다.
   `errors` 는 저장 중 실패한 행의 요약이며, **예외 원문을 담지 않는다**(#231).
   둘 중 하나라도 빠지면 400.
 

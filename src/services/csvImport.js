@@ -139,6 +139,15 @@ const CARD_CSV_SPECS = {
   shinhan: { date: '거래일자', merchant: '가맹점',   amount: '금액',     label: 'Shinhan' },
 };
 
+function invalidReason(date, amount) {
+  const badDate = date === null;
+  const badAmount = isNaN(amount);
+  if (badDate && badAmount) return '날짜와 금액을 읽을 수 없습니다';
+  if (badDate) return '날짜를 읽을 수 없습니다';
+  if (badAmount) return '금액을 읽을 수 없습니다';
+  return null;
+}
+
 /**
  * 스펙에 따라 카드사 CSV를 파싱한다. 날짜/금액 정규화와 오류 표시는 공통이다.
  * @param {string} csvText
@@ -171,6 +180,7 @@ function parseWithSpec(csvText, spec) {
     const parsedDate = normalizeDate(row[dateIndex]);
     const parsedAmount = parseAmount(row[amountIndex]);
 
+    const reason = invalidReason(parsedDate, parsedAmount);
     transactions.push({
       date: parsedDate,
       // 우리가 내보낸 CSV 를 다시 들여올 때 수식 방어 접두사를 벗긴다(#460).
@@ -182,7 +192,11 @@ function parseWithSpec(csvText, spec) {
       merchant: unguardFormula(row[merchantIndex] || ''),
       amount: parsedAmount,
       memo: '',
-      error: parsedDate === null || isNaN(parsedAmount) ? 'Invalid data' : null
+      error: reason ? 'Invalid data' : null,
+      // 제외되는 행에만 원본 위치·값·이유를 남겨 사용자가 찾아 고칠 수 있게 한다(#689).
+      // line 은 헤더를 1행으로 센 CSV 행 번호다(따옴표 안 줄바꿈은 한 행으로 친다).
+      // 정상 행에는 싣지 않는다 — 원본 값에 가맹점명이 들어 있다.
+      ...(reason ? { line: i + 1, raw: row.join(','), reason } : {}),
     });
   }
 
