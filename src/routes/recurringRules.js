@@ -108,16 +108,17 @@ function validateRuleBody(body) {
 }
 
 // 시작일 하한(#679). 오늘에서 10년 전보다 과거는 오타로 본다 — 「2016」 을 「1916」 으로
-// 치면 따라잡기가 거래 1,202건을 만든다. 요청에 starts_on 을 실어 보낼 때만 본다:
-// 수정에서 기존 값을 그대로 이으면 오래된 규칙도 그대로 고칠 수 있어야 한다.
+// 치면 따라잡기가 거래 1,202건을 만든다. **새로 정해지는 시작일만** 본다: 수정 화면은
+// 기존 시작일도 본문에 실어 보내므로, 기존 값과 같으면 오래된 규칙도 그대로 고칠 수 있어야 한다.
 const STARTS_ON_YEARS_BACK = 10;
 function earliestStartsOn(today = localToday()) {
   const y = Number(today.slice(0, 4)) - STARTS_ON_YEARS_BACK;
   const md = today.slice(5) === '02-29' ? '02-28' : today.slice(5);
   return `${y}-${md}`;
 }
-function startsOnFloorError(reqBody, body) {
+function startsOnFloorError(reqBody, body, existing = null) {
   if (!('starts_on' in (reqBody || {}))) return null;
+  if (existing && body.starts_on === existing.starts_on) return null;
   const floor = earliestStartsOn();
   return body.starts_on < floor ? `starts_on must not be earlier than ${floor} (${STARTS_ON_YEARS_BACK} years ago)` : null;
 }
@@ -359,7 +360,7 @@ router.put('/:id', numericBody(['is_active']), (req, res) => {
     if (!existing) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
 
     const body = normalizeRuleBody(req.body, existing);
-    const err = validateRuleBody(body) || startsOnFloorError(req.body, body);
+    const err = validateRuleBody(body) || startsOnFloorError(req.body, body, existing);
     if (err) return res.status(400).json({ error: err });
     const c = ruleColumns(body);
     const result = db.prepare(`
