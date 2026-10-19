@@ -50,7 +50,9 @@ function cycleHeadroom({ asOf, anchorAmount, target, incomes = [], monthlyFixed 
   for (const s of scheduled) (schedByDate[s.date] = schedByDate[s.date] || []).push(s);
 
   let cur = asOf;
-  while (cur !== target) {
+  // `<` 로 끝낸다(#781). `!==` 는 target 이 asOf 보다 과거이거나 없는 날짜일 때 영원히
+  // 같아지지 않아 요청 하나가 서버를 멈췄다. YYYY-MM-DD 는 사전순이 곧 날짜순이다.
+  while (cur < target) {
     cur = addDays(cur, 1);
     const d = dayOf(cur), ym = monthOf(cur);
     const items = [];
