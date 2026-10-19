@@ -5,6 +5,7 @@ import {
 import { api } from '../lib/api';
 import { useLoader } from '../hooks/useLoader';
 import { formatWon, formatAxisTick } from '../lib/format';
+import AdvisorNetWorthTable from './AdvisorNetWorthTable';
 
 // 데이터 기반 장기 현금흐름 전망 (스펙 B). 실제 반복 수입/지출·할부·보유현금
 // 앵커로 월별 잔액을 그린다. **기본은 추가 지출 없는 순수 베이스라인.**
@@ -139,6 +140,8 @@ export default function AdvisorProjectionChart() {
           </tbody>
         </table>
       </div>
+
+      {data.netWorth && <AdvisorNetWorthTable rows={data.netWorth.timeline} />}
     </section>
   );
 }
