@@ -25,6 +25,7 @@ import CardBenefitSection from '../components/CardBenefitSection';
 import CardTierSection from '../components/CardTierSection';
 import CardInventorySection from '../components/CardInventorySection';
 import DataIntegritySection from '../components/DataIntegritySection';
+import CsvInvalidRows from '../components/CsvInvalidRows';
 import { formatWon } from '../lib/format';
 
 const CATEGORY_TYPES = ['수입', '고정지출', '변동필수', '부채상환', '선택지출', '저축'];
@@ -1211,8 +1212,10 @@ function readFileAsText(file) {
 function CsvImportSection() {
   const [csvText, setCsvText] = useState(null);
   const [fileName, setFileName] = useState('');
-  const [preview, setPreview] = useState(null); // { count, skipped, invalid }
+  const [preview, setPreview] = useState(null); // { count, skipped, invalid, invalidRows }
   const [message, setMessage] = useState('');
+  // 임포트가 끝난 뒤에도 무엇이 빠졌는지 볼 수 있게 남긴다(#689).
+  const [doneInvalidRows, setDoneInvalidRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const handleFile = async (e) => {
@@ -1220,6 +1223,7 @@ function CsvImportSection() {
     if (!file) return;
     setPreview(null);
     setMessage('');
+    setDoneInvalidRows([]);
     setLoading(true);
     try {
       const text = await readFileAsText(file);
@@ -1245,6 +1249,7 @@ function CsvImportSection() {
       if (data.invalid) msg += `, 형식 오류 ${data.invalid}건 제외`;
       msg += ')';
       setMessage(msg);
+      setDoneInvalidRows(data.invalidRows || []);
       setPreview(null);
       setCsvText(null);
       setFileName('');
@@ -1269,6 +1274,7 @@ function CsvImportSection() {
         {loading && <span className="text-xs text-caption">처리 중…</span>}
         {message && <span className="text-xs text-caption">{message}</span>}
       </div>
+      <CsvInvalidRows rows={doneInvalidRows} />
       {preview && (
         <div className="mt-2 space-y-3">
           <div className="text-xs bg-surface-page border border-line rounded-control px-4 py-3 space-y-1">
@@ -1278,6 +1284,7 @@ function CsvImportSection() {
               {preview.invalid ? ` · 형식 오류(제외) ${preview.invalid}건` : ''}
             </div>
           </div>
+          <CsvInvalidRows rows={preview.invalidRows} />
           <div className="flex gap-2">
             <button onClick={handleImport} disabled={loading || (preview.count || 0) === 0} className="btn-primary text-sm px-4 py-2 rounded-control transition-colors disabled:opacity-50">
               신규 {(preview.count || 0).toLocaleString('ko-KR')}건 임포트
