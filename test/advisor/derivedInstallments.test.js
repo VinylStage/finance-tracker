@@ -30,6 +30,9 @@ before(async () => {
     const x = ins.run('2026-10-05', '파생있음', 200100, 2, 100000, 0, a, '2026-11', null).lastInsertRowid;
     der.run('2026-11-01', cat, 100100, a, '파생있음', x, x, 1, 2);
     der.run('2026-12-01', cat, 100000, a, '파생있음', x, x, 2, 2);
+    // 같은 할부에 연결된 임포트 구매 원거래(원금 전액). 파생 회차가 아니므로 회차로 세면 안 된다.
+    // 날짜를 일부러 창 안(11월)에 둔다 — 10월로 두면 창 필터가 먼저 걸러 origin 조건을 못 잰다.
+    db.prepare("INSERT INTO transactions (date, category_id, amount, payment_method_id, payment_style, merchant, installment_id, origin) VALUES ('2026-11-03', ?, 200100, ?, '할부', '파생있음', ?, 'import')").run(cat, a, x);
     // 파생 회차가 없는 할부: installments 로 계산(50,000 + 수수료 2,000).
     ins.run('2026-10-06', '파생없음', 100000, 2, 50000, 2000, b, '2026-11', null);
     // 완납 할부: 파생 회차가 있어도 빠져야 한다.
@@ -81,4 +84,12 @@ test('완납 할부는 파생 회차가 있어도 빠진다', () => {
 test('할부회차는 네 건뿐이다', () => {
   const sch = scheduled();
   assert.strictEqual(sch.filter((s) => /할부회차/.test(s.label)).length, 4);
+});
+
+test('할부에 연결된 임포트 구매 원거래는 회차로 세지 않는다', () => {
+  const sch = scheduled();
+  // 원거래(200,100, 11/03)를 회차로 세면 카드A 11/14 가 300,200 이 된다.
+  assert.strictEqual(find(sch, '2026-11-14').amount, 100100);
+  assert.strictEqual(sch.filter((s) => /할부회차/.test(s.label)).length, 4);
+  assert.strictEqual(sch.some((s) => s.amount === 200100 || s.amount === 300200), false);
 });
