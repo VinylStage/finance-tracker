@@ -1647,6 +1647,7 @@
 - `freq` (optional, default `monthly`): `daily` / `monthly` / `yearly`
 - `interval` (optional, default 1): 1 이상
 - `starts_on` (optional): `YYYY-MM-DD`. **생략하면 새 규칙은 오늘, 수정은 기존 값**
+  - **하한(#679)**: 오늘 기준 10년 전보다 과거면 400(`starts_on must not be earlier than <날짜> (10 years ago)`). 수정에서는 기존 값과 다를 때만 검사한다
 - `ends_on` (optional): `YYYY-MM-DD` 또는 null(무기한). `starts_on` 보다 빠르면 400
 - `month_of_year` (optional): 1~12. `freq='yearly'` 에서만 의미가 있다
 - `day_of_month`: `monthly`/`yearly` 면 required. `daily` 면 생략 가능하고 `starts_on` 의 일자로 채운다
