@@ -13,6 +13,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 //
 // loadFn 이 throw 하면(주로 ApiError) error 에 담고 loading 은 해제된다.
 // deps 가 바뀌면 자동으로 재조회한다. 이벤트 이후 갱신은 reload() 를 호출한다.
+//
+// ── 늦게 도착한 옛 응답의 데이터 반영 (#737)
+//
+// 아래 시퀀스 가드는 loading·error 만 지킨다. loadFn 안에서 바로 setState 하면
+// 그 반영은 가드보다 먼저 일어나서, deps 가 빠르게 바뀔 때 옛 응답이 새 데이터를
+// 덮는다. 막으려면 반영을 **함수로 돌려준다** — 그 요청이 아직 최신일 때만 부른다.
+//
+//   useLoader(async (isCurrent) => {
+//     const res = await api.get(...);
+//     return () => setRows(res.data);   // 최신일 때만 실행된다
+//   }, [filter]);
+//
+// isCurrent() 는 기다린 뒤(디바운스 등) 부를 필요가 남았는지 볼 때 쓴다.
+// 아무것도 돌려주지 않는 기존 loadFn 은 지금까지와 같다.
 export function useLoader(loadFn, deps = []) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -28,11 +42,13 @@ export function useLoader(loadFn, deps = []) {
 
   const reload = useCallback(async () => {
     const id = ++seq.current;
+    const isCurrent = () => id === seq.current;
     setLoading(true);
     setError(null);
     try {
-      await loadFn();
+      const apply = await loadFn(isCurrent);
       if (id !== seq.current) return;          // 더 최신 요청이 진행 중 → 이 결과는 버린다
+      if (typeof apply === 'function') apply();
       loadedOnce.current = true;
     } catch (err) {
       if (id !== seq.current) return;          // 오래된 실패가 최신 성공을 덮지 않도록
@@ -45,6 +61,8 @@ export function useLoader(loadFn, deps = []) {
   }, deps);
 
   useEffect(() => { reload(); }, [reload]);
+  // 언마운트 뒤에 끝난 요청은 아무것도 반영하지 않는다.
+  useEffect(() => () => { seq.current += 1; }, []);
 
   return { loading, error, reload };
 }
