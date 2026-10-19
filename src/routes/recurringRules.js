@@ -358,11 +358,54 @@ router.put('/:id', numericBody(['is_active']), (req, res) => {
 });
 
 // DELETE /api/recurring-rules/:id — 다른 관리 화면(카테고리/결제수단)과 동일하게 소프트 삭제
+// 규칙이 따라잡기로 만든 거래(#681). 확인 버튼으로 만든 거래(origin=manual)는 사용자가
+// 하나씩 확정한 것이라 넣지 않는다 — 지울지 묻는 대상은 «규칙이 알아서 만든 것» 뿐이다.
+function generatedTransactions(ruleId) {
+  return db.prepare(`
+    SELECT id, amount FROM transactions
+    WHERE origin = 'recurring' AND origin_ref_table = 'recurring_rules' AND origin_ref_id = ?
+  `).all(ruleId);
+}
+
+// GET /api/recurring-rules/:id/delete-preview — 끄기 전에 「만든 거래 N건도 지울까요」 를
+// 물을 수 있게 건수와 합계를 준다(#681, ADR 0008 프리뷰 → 확인).
+router.get('/:id/delete-preview', (req, res) => {
+  try {
+    const rule = db.prepare('SELECT id FROM recurring_rules WHERE id=?').get(req.params.id);
+    if (!rule) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
+    const rows = generatedTransactions(rule.id);
+    res.json({
+      rule_id: rule.id,
+      generated_count: rows.length,
+      generated_total: rows.reduce((sum, r) => sum + r.amount, 0),
+    });
+  } catch (e) {
+    serverError(res, e, 'recurringRules');
+  }
+});
+
+// DELETE /api/recurring-rules/:id?withTransactions=1
+//
+// 규칙은 지우지 않고 끈다(is_active=0). withTransactions 를 주면 그 규칙이 따라잡기로
+// 만든 거래도 함께 지운다(#681) — 예전에는 규칙을 꺼도 거래가 남았고 지울 길이 없었다.
+// recurring_occurrences 의 발생 기록은 남기고 연결만 끊는다(거래 단건 삭제와 같은 규칙).
 router.delete('/:id', (req, res) => {
   try {
-    const result = db.prepare('UPDATE recurring_rules SET is_active=0 WHERE id=?').run(req.params.id);
-    if (result.changes === 0) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
-    res.json({ ok: true });
+    const withTransactions = req.query.withTransactions === '1' || req.query.withTransactions === 'true';
+    const out = db.transaction(() => {
+      const result = db.prepare('UPDATE recurring_rules SET is_active=0 WHERE id=?').run(req.params.id);
+      if (result.changes === 0) return null;
+      if (!withTransactions) return { deleted: 0 };
+      const ids = generatedTransactions(Number(req.params.id)).map((r) => r.id);
+      if (ids.length) {
+        const ph = ids.map(() => '?').join(',');
+        db.prepare(`UPDATE recurring_occurrences SET transaction_id = NULL WHERE transaction_id IN (${ph})`).run(...ids);
+        db.prepare(`DELETE FROM transactions WHERE id IN (${ph})`).run(...ids);
+      }
+      return { deleted: ids.length };
+    })();
+    if (!out) return res.status(404).json({ error: '찾는 반복 거래 규칙이 없습니다. 이미 삭제됐을 수 있어요.' });
+    res.json({ ok: true, deleted_transactions: out.deleted });
   } catch (e) {
     serverError(res, e, 'recurringRules');
   }

@@ -529,7 +529,17 @@ function RecurringRuleSection({ rules, categories, paymentMethods, onChanged }) 
   const handleDeactivate = async (id) => {
     if (!await confirm('이 반복 규칙을 비활성화하시겠습니까? 이번 달 확인 목록에서 더 이상 나타나지 않습니다.')) return;
     try {
-      await api.del(`/api/recurring-rules/${id}`);
+      // 규칙이 알아서 만든 거래가 있으면 함께 지울지 묻는다(#681). 묻지 않고 남기면
+      // 규칙을 꺼도 거래가 남아 지울 길이 없었다.
+      const preview = await api.get(`/api/recurring-rules/${id}/delete-preview`);
+      let withTransactions = false;
+      if (preview && preview.generated_count > 0) {
+        withTransactions = await confirm(
+          `이 규칙이 만든 거래 ${preview.generated_count}건(합계 ${formatWon(preview.generated_total)})도 지울까요?`,
+          { tone: 'danger', confirmLabel: '거래도 지우기', cancelLabel: '규칙만 끄기' },
+        );
+      }
+      await api.del(`/api/recurring-rules/${id}${withTransactions ? '?withTransactions=1' : ''}`);
       onChanged();
     } catch (err) {
       await alert(err.message);
