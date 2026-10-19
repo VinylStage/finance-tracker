@@ -32,13 +32,15 @@ function importCsvTransactions(cardCompany, csvText, isPreview) {
   const parsed = parseCardCsv(cardCompany, csvText);
   const valid = parsed.filter(r => !r.error);
   const invalid = parsed.length - valid.length;
+  // 제외된 행의 위치·값·이유(#689). 가맹점명이 들어 있어 로그로 남기지 않는다.
+  const invalidRows = parsed.filter(r => r.error).map(r => ({ line: r.line, raw: r.raw, reason: r.reason }));
 
   if (isPreview) {
     let count = 0, skipped = 0;
     for (const row of valid) {
       if (findExisting(row)) skipped++; else count++;
     }
-    return { cardCompany, cardCompanyLabel: CARD_COMPANY_LABELS[cardCompany], count, skipped, invalid };
+    return { cardCompany, cardCompanyLabel: CARD_COMPANY_LABELS[cardCompany], count, skipped, invalid, invalidRows };
   }
 
   const paymentMethodRow = db.prepare(
@@ -67,7 +69,7 @@ function importCsvTransactions(cardCompany, csvText, isPreview) {
     }
   })();
 
-  return { imported, skipped, invalid, errors };
+  return { imported, skipped, invalid, invalidRows, errors };
 }
 
 /**
