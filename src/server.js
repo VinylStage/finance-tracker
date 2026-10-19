@@ -42,7 +42,6 @@ app.use('/api/recurring-rules', require('./routes/recurringRules'));
 app.use('/api/export',       require('./routes/export'));
 app.use('/api/data',         require('./routes/data'));
 app.use('/api/settings',     require('./routes/settings'));
-app.use('/api/exchange',     require('./routes/exchange'));
 app.use('/api/stocks',       require('./routes/stocks'));
 app.use('/api/csv-import',   require('./routes/csvImport'));
 app.use('/api/card-import',  require('./routes/cardImport'));
