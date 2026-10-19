@@ -15,6 +15,7 @@
 
 const { billingMonthFor } = require('../cardBilling');
 const { addDays } = require('./headroom');
+const { installmentBillings } = require('./installmentBillings');
 
 function monthAddYM(ym, n) {
   const [y, m] = ym.split('-').map(Number);
@@ -141,17 +142,26 @@ function loadHeadroomInputs(db, { asOf, unpaidCards = [], spendDate, target } = 
     for (const t of txs) add(paymentDate(billingMonthFor(t.date, cp), cp.billing_cycle_day), card, t.amount, '청구(일시불)');
   }
 
-  // 할부 회차.
+  // 할부 회차(#774). 장부의 파생 회차가 정본이다 — 카드사 정책 이자·끝수가 거래내역과
+  // 같아진다. 파생 회차가 없는 할부(파생 기능 이전 등록분)만 installments 에서 계산한다
+  // (monthly_amount + fee_per_month, #772). 완납 할부는 두 경로 모두 뺀다(H2).
+  const derived = db.prepare(`
+    SELECT t.installment_id, substr(t.date, 1, 7) AS ym, t.amount, pm.name AS card
+    FROM transactions t JOIN installments i ON i.id = t.installment_id
+    JOIN payment_methods pm ON pm.id = t.payment_method_id
+    WHERE t.origin = 'installment' AND i.paid_off_on IS NULL
+    ORDER BY t.date, t.id
+  `).all();
   const inst = db.prepare(`
-    -- 수수료(fee_per_month)도 회차에 얹는다(#772). 장부의 파생 회차(정책 없을 때 flatFee)와 같은 규칙이다.
-    SELECT i.monthly_amount + COALESCE(i.fee_per_month, 0) AS amt, i.months, i.start_billing_month AS sm, pm.name AS card
+    SELECT i.id, i.monthly_amount + COALESCE(i.fee_per_month, 0) AS amount, i.months,
+      i.start_billing_month AS start_month, pm.name AS card
     FROM installments i JOIN payment_methods pm ON pm.id = i.payment_method_id
     WHERE i.paid_off_on IS NULL
   `).all();
-  for (const i of inst) {
-    const cp = days[i.card];
-    if (!cp) { warnings.push(`${i.card}: 결제일 미설정 — 할부 회차 일정 계산 불가`); continue; }
-    for (let k = 0; k < i.months; k++) add(paymentDate(monthAddYM(i.sm, k), cp.billing_cycle_day), i.card, i.amt, '할부회차');
+  for (const b of installmentBillings({ derived, installments: inst })) {
+    const cp = days[b.card];
+    if (!cp) { warnings.push(`${b.card}: 결제일 미설정 — 할부 회차 일정 계산 불가`); continue; }
+    add(paymentDate(b.ym, cp.billing_cycle_day), b.card, b.amount, '할부회차');
   }
   // 카드 결제 고정지출: 앵커 이후 이용분만(그 전 이용분은 미결제 카드면 거래내역으로,
   // 선결제 카드면 이미 정산으로 잡혀 있다) — 이용일 → cardBilling 으로 결제일.
