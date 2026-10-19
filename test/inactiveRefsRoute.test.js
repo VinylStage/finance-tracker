@@ -105,3 +105,26 @@ test('꺼진 분류로 새 규칙을 만들면 400', async () => {
   assert.strictEqual(res.status, 400);
   assert.strictEqual(res.body.error, CAT_ERR);
 });
+
+// 분류 쪽 「분류만 끄기」 경로(변이: stopRules 없이도 규칙을 끄는 것)가 결제수단 테스트만으로는
+// 안 잡혀 보탰다. 다른 분류와 그 분류의 활성 규칙 하나로 따로 본다.
+test('분류만 끄면 그 분류의 규칙은 그대로 켜져 있다', async () => {
+  const db = new Database(server.dbPath);
+  let otherCat;
+  let ruleId;
+  try {
+    otherCat = db.prepare("INSERT INTO categories (major_type, name) VALUES ('선택지출', '다른분류')").run().lastInsertRowid;
+    ruleId = db.prepare("INSERT INTO recurring_rules (category_id, merchant, amount, day_of_month, freq, interval, starts_on, is_active) VALUES (?, '다른규칙', 1000, 1, 'monthly', 1, '2026-01-01', 1)").run(otherCat).lastInsertRowid;
+  } finally {
+    db.close();
+  }
+  const res = await call('DELETE', `/categories/${otherCat}`);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.stopped_rules, 0);
+  const check = new Database(server.dbPath, { readonly: true });
+  try {
+    assert.strictEqual(check.prepare('SELECT is_active FROM recurring_rules WHERE id = ?').get(ruleId).is_active, 1);
+  } finally {
+    check.close();
+  }
+});
