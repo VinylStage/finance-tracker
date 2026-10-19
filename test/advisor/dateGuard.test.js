@@ -7,7 +7,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const Database = require('better-sqlite3');
 const { startTestServer } = require('../helpers/testServer');
-const { cycleHeadroom } = require('../../src/services/advisor/headroom');
+const { spawnSync } = require('node:child_process');
 
 const PORT = 21781;
 const BASE = `http://127.0.0.1:${PORT}/api/advisor`;
@@ -25,10 +25,17 @@ before(async () => {
   }
 });
 
-after(() => { if (server) server.stop(); });
+after(() => {
+  if (!server) return;
+  server.stop();
+  // 무한루프에 갇힌 서버는 SIGTERM 핸들러를 못 돌려 살아남고, 그 자식 때문에 테스트
+  // 프로세스도 안 끝난다. 2초 뒤에도 살아 있으면 SIGKILL 로 끊는다.
+  setTimeout(() => { try { server.proc.kill('SIGKILL'); } catch { /* 이미 끝났다 */ } }, 2000).unref();
+});
 
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`);
+  // 무한루프가 돌아오면 서버가 영영 답하지 않는다 — 5초에 끊어 빨리 실패하게 한다.
+  const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(5000) });
   return { status: res.status, body: await res.json() };
 }
 
@@ -72,6 +79,10 @@ test('정상 요청은 그대로다', async () => {
 });
 
 test('엔진은 과거 target 에서 바로 끝난다', async () => {
-  const r = cycleHeadroom({ asOf: '2026-10-14', anchorAmount: 1, target: '2026-10-01' });
-  assert.strictEqual(r.endBalance, 1);
+  // 같은 프로세스에서 부르면 무한루프가 테스트 러너까지 멈춰 시간 초과도 못 건다.
+  // 자식 프로세스에서 5초 안에 끝나는지 본다.
+  const src = require.resolve('../../src/services/advisor/headroom');
+  const out = spawnSync(process.execPath, ['-e', `const { cycleHeadroom } = require(${JSON.stringify(src)}); process.stdout.write(String(cycleHeadroom({ asOf: '2026-10-14', anchorAmount: 1, target: '2026-10-01' }).endBalance));`], { timeout: 5000, encoding: 'utf8' });
+  assert.strictEqual(out.signal, null);
+  assert.strictEqual(out.stdout, '1');
 });
