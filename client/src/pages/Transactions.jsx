@@ -16,12 +16,12 @@ import UndoSnackbar from '../components/UndoSnackbar';
 import { formFromTransaction } from '../lib/recurringForm';
 import { putRecurringDraft } from '../lib/recurringDraft';
 import { formatWon } from '../lib/format';
+import { localYMD, localYearMonth } from '../lib/date';
 
 
-const today = new Date();
-const CURRENT_YEAR = String(today.getFullYear());
-const CURRENT_MONTH = `${CURRENT_YEAR}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-const CURRENT_DATE = `${CURRENT_MONTH}-${String(today.getDate()).padStart(2, '0')}`;
+// 오늘은 쓸 때마다 다시 구한다. 모듈 로드 때 한 번 구하면 탭을 연 채 자정을 넘긴 뒤
+// 전날·지난달을 오늘·이번 달로 본다(#733).
+const currentYear = () => localYearMonth().slice(0, 4);
 
 const EMPTY_FILTERS = { merchant: '', memo: '', minAmount: '', maxAmount: '', paymentMethodId: '' };
 const inp = 'w-full bg-surface border border-line-strong rounded-control px-3 py-2 text-sm text-ink focus:outline-none focus:border-brand-fill';
@@ -46,20 +46,20 @@ function readStore() {
 }
 
 function readViewParams() {
-  if (typeof window === 'undefined') return { view: 'list', month: CURRENT_MONTH };
+  if (typeof window === 'undefined') return { view: 'list', month: localYearMonth() };
   const q = new URLSearchParams(window.location.search);
   // URL 에 명시된 값이 세션 기억보다 우선한다 — 링크를 받아 연 사람이 그 링크대로 봐야 한다.
   if (q.has(VIEW_KEY)) {
     return {
       view: q.get(VIEW_KEY) === 'calendar' ? 'calendar' : 'list',
-      month: /^\d{4}-\d{2}$/.test(q.get(MONTH_KEY) || '') ? q.get(MONTH_KEY) : CURRENT_MONTH,
+      month: /^\d{4}-\d{2}$/.test(q.get(MONTH_KEY) || '') ? q.get(MONTH_KEY) : localYearMonth(),
     };
   }
   const saved = readStore();
   if (saved && saved.view === 'calendar' && /^\d{4}-\d{2}$/.test(saved.month || '')) {
     return { view: 'calendar', month: saved.month };
   }
-  return { view: 'list', month: CURRENT_MONTH };
+  return { view: 'list', month: localYearMonth() };
 }
 
 // 뒤로가기가 뷰 전환까지 되짚지 않도록 replaceState 를 쓴다. 뷰 토글은 탐색이
@@ -146,7 +146,7 @@ export default function Transactions() {
 
   useEffect(() => {
     if (!years.length) return;
-    setSelectedYear(prev => (prev && years.includes(prev) ? prev : (years.includes(CURRENT_YEAR) ? CURRENT_YEAR : years[0])));
+    setSelectedYear(prev => (prev && years.includes(prev) ? prev : (years.includes(currentYear()) ? currentYear() : years[0])));
   }, [years]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [selectedYear]);
@@ -177,8 +177,9 @@ export default function Transactions() {
       // 입력 등으로 같은 연도의 요약이 다시 갱신될 때마다 사용자가 펼친/접은
       // 상태가 도로 초기화되면 안 되므로.
       if (autoExpandYear !== selectedYear) {
-        const hasCurrentMonth = rows.some(g => g.month === CURRENT_MONTH);
-        setExpandedMonths(new Set(rows.length ? [hasCurrentMonth ? CURRENT_MONTH : rows[0].month] : []));
+        const thisMonth = localYearMonth();
+        const hasCurrentMonth = rows.some(g => g.month === thisMonth);
+        setExpandedMonths(new Set(rows.length ? [hasCurrentMonth ? thisMonth : rows[0].month] : []));
         setAutoExpandYear(selectedYear);
       }
     });
@@ -244,16 +245,16 @@ export default function Transactions() {
   //
   // 달력뷰에서 고른 날짜 > 목록뷰에서 펼친 달 > 오늘 순이다. 상태는 이 방향으로만
   // 흐른다 — 폼에서 날짜를 바꿔도 목록 펼침이나 달력 월은 움직이지 않는다.
-  const formDefaultDate = useMemo(
-    () => defaultTxDate({
-      // 달력뷰를 보고 있을 때만 선택 날짜가 의미를 갖는다. 목록뷰로 돌아온 뒤
-      // 남아 있는 선택이 기본값을 잡으면 사용자가 예측할 수 없다.
-      selectedDay: viewMode === 'calendar' ? selectedDay : null,
-      expandedMonths: [...expandedMonths],
-      today: CURRENT_DATE,
-    }),
-    [viewMode, selectedDay, expandedMonths]
-  );
+  //
+  // 메모하지 않는다(#733). 오늘이 의존값에 없어 메모하면 자정을 넘긴 뒤에도 전날이
+  // 남는다. 폼이 열릴 때 초기값으로 한 번만 읽히므로 매 렌더 계산해도 부작용이 없다.
+  const formDefaultDate = defaultTxDate({
+    // 달력뷰를 보고 있을 때만 선택 날짜가 의미를 갖는다. 목록뷰로 돌아온 뒤
+    // 남아 있는 선택이 기본값을 잡으면 사용자가 예측할 수 없다.
+    selectedDay: viewMode === 'calendar' ? selectedDay : null,
+    expandedMonths: [...expandedMonths],
+    today: localYMD(),
+  });
 
   const toggleMonth = (month) => {
     setExpandedMonths(prev => {
