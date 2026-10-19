@@ -44,74 +44,63 @@ function daysBetween(a, b) {
   return Math.round(ms / 86400000);
 }
 
-// occurrencesBetween(rule, from, to) → ['YYYY-MM-DD', ...]
-//
-// from·to 는 둘 다 포함이다. 규칙의 starts_on 이 없으면 from 부터로 본다.
-// ends_on 은 그날까지 포함한다 — "12월 31일까지" 가 12월 31일을 빼면 사용자
-// 기대와 어긋난다.
-function occurrencesBetween(rule, from, to) {
-  if (!rule || !FREQS.includes(rule.freq || 'monthly')) return [];
+// offset 이상인 interval 의 배수 중 가장 작은 것. 음수면 0 — 규칙이 아직 시작 전이다.
+// interval 이 2 이상일 때 조회 구간이 주기 중간에서 시작해도 기준점에 맞춘다.
+function firstAlignedStep(offset, interval) {
+  if (offset <= 0) return 0;
+  const rem = offset % interval;
+  return rem === 0 ? offset : offset + (interval - rem);
+}
 
-  const freq = rule.freq || 'monthly';
-  const interval = Number(rule.interval) > 0 ? Math.floor(Number(rule.interval)) : 1;
-
+// 실제로 훑을 구간 — 규칙 기간과 조회 구간의 교집합. 비면 null.
+function scanWindow(rule, from, to) {
   const rangeFrom = parseYMD(from);
   const rangeTo = parseYMD(to);
-  if (!rangeFrom || !rangeTo) return [];
+  if (!rangeFrom || !rangeTo) return null;
 
   const startsOn = parseYMD(rule.starts_on) || rangeFrom;
   const endsOn = parseYMD(rule.ends_on);
 
-  // 실제로 훑을 구간 — 규칙 기간과 조회 구간의 교집합.
   const lo = daysBetween(startsOn, rangeFrom) >= 0 ? rangeFrom : startsOn;
   const hi = endsOn && daysBetween(endsOn, rangeTo) > 0 ? endsOn : rangeTo;
-  if (daysBetween(lo, hi) < 0) return [];
+  if (daysBetween(lo, hi) < 0) return null;
+  return { startsOn, lo, hi };
+}
 
+// 기준점은 starts_on 이다. interval 이 2 면 starts_on 에서 짝수 일차만 발생한다.
+function dailyOccurrences({ startsOn, lo, hi }, interval) {
   const out = [];
-
-  if (freq === 'daily') {
-    // 기준점은 starts_on 이다. interval 이 2 면 starts_on 에서 짝수 일차만 발생한다.
-    const offset = daysBetween(startsOn, lo);
-    const first = offset % interval === 0 ? offset : offset + (interval - (offset % interval));
-    for (let n = first; ; n += interval) {
-      const d = new Date(startsOn.y, startsOn.m - 1, startsOn.d + n);
-      const cur = { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() };
-      if (daysBetween(cur, hi) < 0) break;
-      out.push(toYMD(cur.y, cur.m, cur.d));
-    }
-    return out;
+  for (let n = firstAlignedStep(daysBetween(startsOn, lo), interval); ; n += interval) {
+    const d = new Date(startsOn.y, startsOn.m - 1, startsOn.d + n);
+    const cur = { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() };
+    if (daysBetween(cur, hi) < 0) break;
+    out.push(toYMD(cur.y, cur.m, cur.d));
   }
+  return out;
+}
 
-  const dayOfMonth = Number(rule.day_of_month) > 0 ? Number(rule.day_of_month) : startsOn.d;
-
-  if (freq === 'monthly') {
-    // 기준 달은 starts_on 의 달이다.
-    const offset = monthsBetween(startsOn, { y: lo.y, m: lo.m, d: 1 });
-    const firstStep = offset <= 0
-      ? 0
-      : (offset % interval === 0 ? offset : offset + (interval - (offset % interval)));
-
-    for (let step = firstStep; ; step += interval) {
-      const base = new Date(startsOn.y, startsOn.m - 1 + step, 1);
-      const y = base.getFullYear();
-      const m = base.getMonth() + 1;
-      const cur = { y, m, d: clampDay(y, m, dayOfMonth) };
-      if (daysBetween(cur, hi) < 0) break;
-      if (daysBetween(lo, cur) >= 0) out.push(toYMD(cur.y, cur.m, cur.d));
-      // 무한루프 방지 — 구간을 크게 넘어서면 멈춘다.
-      if (step > offset + interval * 1200) break;
-    }
-    return out;
+// 기준 달은 starts_on 의 달이다.
+function monthlyOccurrences({ startsOn, lo, hi }, interval, dayOfMonth) {
+  const out = [];
+  const offset = monthsBetween(startsOn, { y: lo.y, m: lo.m, d: 1 });
+  for (let step = firstAlignedStep(offset, interval); ; step += interval) {
+    const base = new Date(startsOn.y, startsOn.m - 1 + step, 1);
+    const y = base.getFullYear();
+    const m = base.getMonth() + 1;
+    const cur = { y, m, d: clampDay(y, m, dayOfMonth) };
+    if (daysBetween(cur, hi) < 0) break;
+    if (daysBetween(lo, cur) >= 0) out.push(toYMD(cur.y, cur.m, cur.d));
+    // 무한루프 방지 — 구간을 크게 넘어서면 멈춘다.
+    if (step > offset + interval * 1200) break;
   }
+  return out;
+}
 
-  // yearly — month_of_year + day_of_month 조합. 2월 29일 연 반복도 말일 규칙을 탄다.
-  const monthOfYear = Number(rule.month_of_year) > 0 ? Number(rule.month_of_year) : startsOn.m;
+// month_of_year + day_of_month 조합. 2월 29일 연 반복도 말일 규칙을 탄다.
+function yearlyOccurrences({ startsOn, lo, hi }, interval, monthOfYear, dayOfMonth) {
+  const out = [];
   const yearOffset = lo.y - startsOn.y;
-  const firstYearStep = yearOffset <= 0
-    ? 0
-    : (yearOffset % interval === 0 ? yearOffset : yearOffset + (interval - (yearOffset % interval)));
-
-  for (let step = firstYearStep; ; step += interval) {
+  for (let step = firstAlignedStep(yearOffset, interval); ; step += interval) {
     const y = startsOn.y + step;
     const cur = { y, m: monthOfYear, d: clampDay(y, monthOfYear, dayOfMonth) };
     if (daysBetween(cur, hi) < 0) break;
@@ -119,6 +108,31 @@ function occurrencesBetween(rule, from, to) {
     if (step > yearOffset + interval * 200) break;
   }
   return out;
+}
+
+// 0·음수·빈 값은 기본값으로. 0 을 그대로 쓰면 interval 은 무한루프, 일·월은 없는 날이 된다.
+function positiveOr(value, fallback) {
+  return Number(value) > 0 ? Number(value) : fallback;
+}
+
+// occurrencesBetween(rule, from, to) → ['YYYY-MM-DD', ...]
+//
+// from·to 는 둘 다 포함이다. 규칙의 starts_on 이 없으면 from 부터로 본다.
+// ends_on 은 그날까지 포함한다 — "12월 31일까지" 가 12월 31일을 빼면 사용자
+// 기대와 어긋난다.
+function occurrencesBetween(rule, from, to) {
+  if (!rule || !FREQS.includes(rule.freq || 'monthly')) return [];
+  const freq = rule.freq || 'monthly';
+  const interval = Math.floor(positiveOr(rule.interval, 1));
+
+  const win = scanWindow(rule, from, to);
+  if (!win) return [];
+
+  if (freq === 'daily') return dailyOccurrences(win, interval);
+  const dayOfMonth = positiveOr(rule.day_of_month, win.startsOn.d);
+  if (freq === 'monthly') return monthlyOccurrences(win, interval, dayOfMonth);
+  const monthOfYear = positiveOr(rule.month_of_year, win.startsOn.m);
+  return yearlyOccurrences(win, interval, monthOfYear, dayOfMonth);
 }
 
 module.exports = { occurrencesBetween, clampDay, lastDayOf, FREQS };
